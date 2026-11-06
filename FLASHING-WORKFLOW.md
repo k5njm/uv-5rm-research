@@ -114,5 +114,5 @@ Once the radio reboots to its main screen:
    - Find `TXINH` (Transmit Inhibit) and set it to **`OFF`**.
 2. **Channel Management:**
    - Launch Google Chrome or Microsoft Edge on your Mac.
-   - Open `file:///Users/nick/repos/UV-5RM-Radio-Mod/UV-5RM_Channel_Uploader.html`.
+   - Open `firmware/UV-5RM_Channel_Uploader.html` in your browser.
    - Click **Connect Radio**, select your USB serial adapter, and configure your preferred frequency channels.

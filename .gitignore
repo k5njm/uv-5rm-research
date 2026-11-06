@@ -1,0 +1,45 @@
+# Build and binary artifacts
+target/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.elf
+*.bin
+*.hex
+*.d
+
+# Radio backups / dumps
+my-backup/
+*.img
+*.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Rust
+**/*.rs.bk
+Cargo.lock
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

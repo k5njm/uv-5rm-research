@@ -6,13 +6,13 @@ This document catalogs the upstream source repositories, hardware reverse-engine
 
 ## Reference Repositories
 
-| Repository | Author | Local Path | Description & Role |
+| Repository | Author | Upstream Link | Description & Role |
 |---|---|---|---|
-| **[Baofeng-UV-5RM-5RH-RE](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE)** | `amoxu` | [`~/repos/Baofeng-UV-5RM-5RH-RE`](file:///Users/nick/repos/Baofeng-UV-5RM-5RH-RE) | Canonical reverse-engineering documentation, teardown photos, MCU pinouts, KDH bootloader dumping, and `.BF` packaging crypto. |
-| **[bf-5rh-firmware-open](https://github.com/sophiel-meow/bf-5rh-firmware-open)** | `sophiel-meow` | [`~/repos/bf-5rh-firmware-open`](file:///Users/nick/repos/bf-5rh-firmware-open) | The upstream open-source bare-metal Rust OS base for the Baofeng UV-5RH/5RM platform (`thumbv7em-none-eabi`). |
-| **[bf-k61-firmware-aura](https://github.com/sophiel-meow/bf-k61-firmware-aura)** | `sophiel-meow` | [`~/repos/bf-k61-firmware-aura`](file:///Users/nick/repos/bf-k61-firmware-aura) | Next-generation "Aura" open firmware architecture for Baofeng radios, featuring modular apps, DSP filters, and satellite tracker. |
-| **[UV-5RM-Radio-Mod](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod)** | `jakegarrett13-afk` | [`~/repos/UV-5RM-Radio-Mod`](file:///Users/nick/repos/UV-5RM-Radio-Mod) | The fork that added the 1200 baud FSK `TEXT` messaging app, band sweep, foxhunt, repeater finder, and WebSerial tools. |
-| **[balloonatics](https://github.com/k5rwk/balloonatics)** | `k5rwk` | [`~/repos/balloonatics`](file:///Users/nick/repos/balloonatics) | Richardson Area Balloonatics ground station reference design (KA9Q-radio, HorusDemodLib, Wenet, Chasemapper). |
+| **[Baofeng-UV-5RM-5RH-RE](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE)** | `amoxu` | [amoxu/Baofeng-UV-5RM-5RH-RE](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE) | Canonical reverse-engineering documentation, teardown photos, MCU pinouts, KDH bootloader dumping, and `.BF` packaging crypto. |
+| **[bf-5rh-firmware-open](https://github.com/sophiel-meow/bf-5rh-firmware-open)** | `sophiel-meow` | [sophiel-meow/bf-5rh-firmware-open](https://github.com/sophiel-meow/bf-5rh-firmware-open) | The upstream open-source bare-metal Rust OS base for the Baofeng UV-5RH/5RM platform (`thumbv7em-none-eabi`). |
+| **[bf-k61-firmware-aura](https://github.com/sophiel-meow/bf-k61-firmware-aura)** | `sophiel-meow` | [sophiel-meow/bf-k61-firmware-aura](https://github.com/sophiel-meow/bf-k61-firmware-aura) | Next-generation "Aura" open firmware architecture for Baofeng radios, featuring modular apps, DSP filters, and satellite tracker. |
+| **[UV-5RM-Radio-Mod](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod)** | `jakegarrett13-afk` | [jakegarrett13-afk/UV-5RM-Radio-Mod](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod) | The fork that added the 1200 baud FSK `TEXT` messaging app, band sweep, foxhunt, repeater finder, and WebSerial tools. |
+| **[balloonatics](https://github.com/k5rwk/balloonatics)** | `k5rwk` | [k5rwk/balloonatics](https://github.com/k5rwk/balloonatics) | Richardson Area Balloonatics ground station reference design (KA9Q-radio, HorusDemodLib, Wenet, Chasemapper). |
 
 ---
 
