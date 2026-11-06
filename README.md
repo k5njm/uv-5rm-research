@@ -20,6 +20,7 @@ Comprehensive analysis, hardware specifications, host security audit, and flashi
 
 ## Quick Navigation
 
+- [Unique Firmware Features & Capabilities](FEATURES.md)
 - [Hardware Specs & Amazon Purchase Validation](HARDWARE.md)
 - [Host PC/Mac Security Audit](SECURITY-AUDIT.md)
 - [Firmware Architecture & Modem Internals](FIRMWARE-INTERNALS.md)
