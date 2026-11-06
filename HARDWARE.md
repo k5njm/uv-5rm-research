@@ -79,3 +79,21 @@ Based on hardware reverse engineering by `amoxu` (`Baofeng-UV-5RM-5RH-RE`) and `
 * **Audio:** Internal speaker driven by audio amp; FM broadcast radio IC (BK1088 or integrated).
 * **Keypad:** Matrix keypad with LED backlight.
 * **Flashlight:** High-brightness white LED top-mounted.
+
+---
+
+## 4. Variant Compatibility (Nov 2026 research)
+
+Sources: upstream [amoxu README](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE), issues [#3](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE/issues/3), [#6](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE/issues/6), [#18](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE/issues/18).
+
+| Variant | RF chip | Open firmware (`bf-5rh-firmware-open`) |
+|---|---|---|
+| `BK` / `FK` | BK4819 | Not the upstream target; amoxu's tools cover this one |
+| `L` | AT1846S | Not supported |
+| `NRF` (stock) | FD6818 | Driver "still being ported and validated" per upstream |
+| **`YP07`** | **FD6818B** (chip ID `0x4829`, BK4829-like) | **Current upstream target** (TX/RX, CTCSS/DCS, scan, FM verified by upstream author) |
+
+* Flashing BK/NRF firmware onto a YP07 boots, but RF RX/TX fail (upstream #18).
+* The "hold `8` at power-on" screen shows model code, `VER:` and `BF` (issue #3). The exact `5RHNRFB-YP07` string appears only in the mod README; it is not documented upstream. Record the exact text from your radio.
+* **The Amazon listing (ASIN `B0CWV6GFZT`) could not be fetched** (amazon.com is outside this session's network allow-list), and Amazon batches can differ. Whether it ships as YP07 is **unknown until the radio arrives and the `8`-key screen is read**.
+* FCC ID `2AJGM-5RM` lists many synonym models (UV-5RM Plus, UV-16M, K5PLUS, etc.), so the ID does not identify the PCB or RF chip.

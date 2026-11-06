@@ -8,7 +8,7 @@ decoder, built the core firmware, apps and host simulator (Rust 1.99.1), ran the
 
 | # | Finding | Status |
 |---|---|---|
-| 1 | amoxu repo ships factory images (BK, AT1846S, NRF_FD6818 V0.13/V0.14). "No stock firmware exists" was false. Stock images have a second region (~1.3 KB Thumb code, written to the system-bootloader area) that our `.BF` omits. | Docs fixed; revert path still to build/prove |
+| 1 | amoxu repo ships factory images (BK, AT1846S, NRF_FD6818 V0.13/V0.14), but these are for **other RF chips**. Upstream issue #18: YP07 = FD6818B (chip ID 0x4829), not register-compatible; stock BK/NRF boot on it with RX/TX broken. So there is still **no usable stock image for YP07**. (An earlier revision of this audit wrongly suggested NRF V0.14 as a revert target.) | Docs corrected |
 | 2 | `aprs`, `horus`, `rs41` fail to compile; no `.app`; `setup_balloon_radio.py` aborts before writing (safe). | Docs fixed; CI tracks as non-blocking |
 | 3 | APRS: wrong CRC, no HDLC/NRZI, dropped last byte, modem unproven, hardcoded third-party callsign and coordinates. | Open |
 | 4 | Horus/RS41: sync words, baud, scrambler and FEC do not match the real protocols (checked from memory; verify against `horusdemodlib`, `radiosonde_auto_rx`). | Open |
@@ -22,7 +22,7 @@ decoder, built the core firmware, apps and host simulator (Rust 1.99.1), ran the
 
 ## Roadmap (suggested order)
 
-1. **Revert path:** script wrapping stock NRF V0.14 (both regions), a SPI-backup restore tool, and a round-trip test on a sacrificial radio.
+1. **Recovery path:** there is no stock YP07 image, so recovery means (a) a SPI-flash backup *restore* tool, (b) keeping a known-good open-firmware `.BF` per release, proven to re-flash from bootloader mode, and (c) asking a YP07 owner (or the upstream author) to dump the stock firmware. Prove (b) on a sacrificial radio.
 2. **Reproducibility:** record the toolchain per release; rebuild `.BF` and apps in CI and compare hashes.
 3. **Existing features:** extend simulator coverage, add size-budget enforcement, resync with upstream `bf-5rh-firmware-open`.
 4. **HAB apps:** move protocol code to host-testable crates with golden vectors; prove the BK4819 modem can do AFSK/4FSK before any RF code; user-configurable callsign.

@@ -19,7 +19,7 @@ Comprehensive analysis, hardware specifications, host security audit, and flashi
 | **Required Firmware ID** | **`5RHNRFB-YP07`** (Must verify by holding **`8`** while powering on) |
 | **Host Code Safety** | **Verified**: no network calls in the HTML or Python tools (audited Nov 2026) |
 | **Firmware Quality** | Core firmware builds; shipped `.BF` is **not** byte-reproducible yet (toolchain was unpinned); core image has only ~88 bytes of flash headroom. Zero unit tests. See [AUDIT.md](AUDIT.md) |
-| **Reversibility** | **Unproven.** Factory images for the `NRF_FD6818` family exist in amoxu's repo and the bootloader is not overwritten, so a return to stock is plausible but **untested and unscripted**. Treat flashing as one-way until proven on a sacrificial radio |
+| **Reversibility** | **Effectively one-way for YP07.** The only public stock images (BK / NRF / AT1846S in amoxu's repo) target other RF chips; upstream reports they boot on a YP07 (FD6818B) but RX/TX fail. The official YP07 image has not been found. The bootloader is not overwritten, so you can always re-flash *something*, but a true factory restore is not available |
 | **CHIRP Compatibility** | **BROKEN** (CHIRP cannot read/write; use included WebSerial HTML tools) |
 
 ---
@@ -56,7 +56,7 @@ The Amazon purchase (ASIN `B0CWV6GFZT`, Baofeng 5RM 10W Tri-Band) is the correct
 ## Important Warnings
 
 > [!CAUTION]
-> **Treat flashing as permanent until revert is proven:** Factory images for the NRF/FD6818 family are in [amoxu's repo](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE/tree/main/factory_firmware), but the revert path is untested and this repo has no restore tooling. The stock images also carry a second (config/code) region that our `.BF` omits. First-boot also cleans stale factory records in SPI flash, so **take the backup first** and note that no restore script exists yet.
+> **Treat flashing as permanent:** The stock images in [amoxu's repo](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE/tree/main/factory_firmware) are for the BK4819, AT1846S and FD6818 boards. Upstream issue [#18](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE/issues/18) says the YP07 uses the **FD6818B**, which is not register-compatible, so they will not restore a working YP07. The official YP07 firmware has not been found. Dump nothing you can't restore: you cannot read the internal flash (read-protected). First-boot also cleans stale factory records in SPI flash, so **take the backup first** and note that no restore script exists yet.
 
 > [!WARNING]
 > **CHIRP will stop working:** The custom firmware replaces factory memory structures with a modular app overlay (`OVL1`) architecture. Standard CHIRP is incompatible; channel programming must be done via the included WebSerial HTML tools.
