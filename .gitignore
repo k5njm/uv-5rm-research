@@ -25,9 +25,8 @@ env/
 venv/
 .venv/
 
-# Rust
+# Rust (Cargo.lock IS committed for reproducible builds)
 **/*.rs.bk
-Cargo.lock
 
 # macOS
 .DS_Store

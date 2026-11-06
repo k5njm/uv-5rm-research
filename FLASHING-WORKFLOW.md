@@ -1,5 +1,10 @@
 # macOS Flashing & Setup Workflow
 
+> [!CAUTION]
+> Run `python3 -I firmware/tools/verify_release.py` first; it must print PASSED.
+> The `5RHNRFB-YP07` identification is taken from the upstream mod README and is unverified against stock images (stock firmware builds the string as `<prefix>NRF…`). The mod README separately says to refuse boards whose screen shows `…NRF`. If in any doubt about the exact string, do not flash.
+> There is **no restore tool** for the Step B backup and the revert-to-stock path is untested. Do the first flash on a radio you can afford to lose.
+
 Step-by-step instructions for backing up, flashing, and configuring the Baofeng UV-5RM from a Mac (`nm1p`).
 
 ---
@@ -89,7 +94,7 @@ Once the radio reboots to its main screen:
    ```bash
    python3 source-changes/setup_radio.py /dev/cu.usbserial-XXXX skull_logo.rgb565 64 apps
    ```
-   This will format the overlay slots and upload:
+   (This installs the apps present in `apps/`.) This will format the overlay slots and upload:
    - `settings.app`
    - `chanmgr.app`
    - `searchqt.app`

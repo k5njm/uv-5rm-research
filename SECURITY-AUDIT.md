@@ -60,4 +60,4 @@ The repository includes two single-page HTML applications:
 |---|---|---|
 | **Python Flashing Scripts** | **SAFE** | Local UART framing only. Requires only `pyserial`. |
 | **WebSerial HTML Pages** | **SAFE** | Offline local execution; no tracking, no external calls. |
-| **Compiled Binaries** | **AUDITED** | Firmware binary matches open-source Rust vector tables. |
+| **Compiled Binaries** | **PARTIAL** | Only structure is verified (`tools/verify_release.py`: header, vectors, ABI hash, CRCs). A rebuild with a current toolchain differs in ~15.7 KB, so the shipped `.BF` is not independently reproducible yet. |
