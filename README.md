@@ -22,6 +22,7 @@ Comprehensive analysis, hardware specifications, host security audit, and flashi
 
 - [Balloonatics HAB Tracking Suite (APRS, Horus, RS41)](HAB-TRACKING-APPS.md)
 - [Unique Firmware Features & Capabilities](FEATURES.md)
+- [Upstream Lineage & Hardware References](REFERENCES.md)
 - [Hardware Specs & Amazon Purchase Validation](HARDWARE.md)
 - [Host PC/Mac Security Audit](SECURITY-AUDIT.md)
 - [Firmware Architecture & Modem Internals](FIRMWARE-INTERNALS.md)
