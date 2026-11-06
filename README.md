@@ -2,6 +2,12 @@
 
 Comprehensive analysis, hardware specifications, host security audit, and flashing guide for the [UV-5RM-Radio-Mod](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod) custom firmware.
 
+> [!WARNING]
+> ### EXPERIMENTAL PROOF-OF-CONCEPT — UNTESTED ON PHYSICAL HARDWARE
+> The custom applications in this repository—including **APRS transceive (`aprs.app`)**, **Horus Binary v2 telemetry (`horus.app`)**, and **Vaisala RS41 radiosonde tracking (`rs41.app`)**—are currently **untested on live radios** pending delivery of physical test hardware. 
+> 
+> They are provided strictly as an open-source **proof of concept (PoC)** for community research, protocol analysis, and peer review. Code changes and RF register timings are experimental. **Flash, transmit, and test entirely at your own risk.**
+
 ---
 
 ## At a Glance
@@ -56,3 +62,17 @@ The Amazon purchase (ASIN `B0CWV6GFZT`, Baofeng 5RM 10W Tri-Band) is the correct
 
 > [!IMPORTANT]
 > **Auto-transmit behavior:** When the `TEXT` app is open, the radio will **automatically transmit an acknowledgement burst** in response to any incoming message on that frequency. Always operate on simplex frequencies where you are licensed and permitted to transmit digital data.
+
+---
+
+## Credits & Lineage
+
+This project stands on the shoulders of an incredible chain of open-source radio reverse-engineering:
+
+- **[amoxu](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE)** & **OK2MOP**: Discovered the Artery AT32F421 MCU, dumped the KDH bootloader, and cracked the `.BF` firmware encryption format.
+- **[sophiel-meow](https://github.com/sophiel-meow/bf-5rh-firmware-open)**: Created the bare-metal Rust OS base, peripheral drivers, and the `OVL1` dynamic 32 KB app overlay engine.
+- **[kamilsss655](https://github.com/kamilsss655/uv-k5-firmware-custom)** & the **UV-K5 Community** (OneOfEleven, DualTachyon, egzumer): Researched the BK4819 transceiver registers, RSSI fast-sampling, and FSK modem modes.
+- **[jakegarrett13-afk](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod)**: Built the UV-5RM mod, the `TEXT` FSK messaging engine, RDF/sweep apps, and WebSerial tools.
+- **[Project Horus](https://github.com/projecthorus)** & **[Balloonatics](https://github.com/k5rwk/balloonatics)**: The open Horus Binary telemetry protocols and ground station tracking stack.
+- **Bob Bruninga WB4APR (SK)**: Creator of the Automatic Packet Reporting System (APRS).
+

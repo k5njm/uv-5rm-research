@@ -2,6 +2,10 @@
 
 Custom High-Altitude Balloon (HAB) and Radiosonde tracking suite developed for the Baofeng UV-5RM custom firmware fork.
 
+> [!WARNING]
+> ### UNTESTED EXPERIMENTAL PROOF-OF-CONCEPT
+> These apps (`aprs.app`, `horus.app`, `rs41.app`) are **currently untested on physical hardware** while awaiting test radios to arrive. They are shared as an open-source proof-of-concept (PoC) for protocol research and community review. RF register settings, timings, and demodulation thresholds may require tuning upon live hardware testing.
+
 ---
 
 ## Suite Overview

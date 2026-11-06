@@ -1,6 +1,10 @@
 # Unique Firmware Features & Capabilities
 
-Comprehensive breakdown of the custom features, applications, and operating modes introduced by the [UV-5RM-Radio-Mod](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod) firmware.
+Comprehensive breakdown of the custom features, applications, and operating modes introduced by the [UV-5RM-Radio-Mod](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod) firmware and our HAB tracking extensions.
+
+> [!WARNING]
+> ### EXPERIMENTAL PROOF-OF-CONCEPT
+> New HAB and telemetry features (`aprs.app`, `horus.app`, `rs41.app`) are **currently untested on live hardware** while awaiting test radios to arrive. They are shared as open-source proof-of-concept implementations for peer review and community development.
 
 ---
 
