@@ -9,8 +9,9 @@ on a radio you can afford to lose.
 |---|---|---|
 | Overlay apps | Yes | Re-write over the programming port; load-time ABI hash + CRC32 reject bad apps (never brick) |
 | Boot logo | Yes | `set_boot_logo.py` saves the old logo first and verifies by readback |
-| Channel table | Yes, if backed up first | `radio_read.py` backup, then `restore_channels.py` (dry run by default, undo file, readback) |
-| VFO, settings, DTMF/ANI, FM | **No** (not restorable by these tools) | first boot erases those sectors; settings re-created from defaults |
+| Channels (1000), VFO, 20 DTMF contacts | Yes, if backed up first | `radio_read.py` backup, then `restore_backup.py` (dry run by default, undo image, per-record readback and rollback). Records are restored through the port and verified *through the port*; the port speaks logical records, not raw flash |
+| Settings (0x9000) | **No, by design** | the custom firmware keeps its own 168-byte record there; writing stock bytes could change it, for example clear the TX inhibit. Re-enter via SETTINGS |
+| DTMF/ANI header, rest of 0xA000-0xA2C0, FM list, 0xD000 scratch | **No** | the port has no write command for them (first boot erases the DTMF and FM sectors) |
 | Calibration (`0xF000-0xF260`) | Not touched by anything here | no write command exists; `dump_nor.py` records it **after** flashing. No pre-flash copy is possible with these tools |
 | Core firmware | Re-flashable with another open build | bootloader is not overwritten (UNVERIFIED) |
 | **Stock firmware** | **No** | no stock image exists for the YP07 (FD6818B); BK/NRF stock images do not restore RX/TX on it |
@@ -39,7 +40,7 @@ on a radio you can afford to lose.
 11. Settings: `TXINH` stays ON until you have a dummy load on the antenna port.
 
 **E. If something is wrong**
-- Channels lost: `restore_channels.py PORT my-backup/factory_memory.img --before my-backup/undo.bin` (dry run), add `--write`.
+- Channels, VFO or contacts lost: `restore_backup.py PORT my-backup/factory_memory.img --before my-backup/undo.img` (dry run; lists what it will skip and why), add `--write`. The undo image can itself be restored the same way.
 - App misbehaves: re-write the app slot; it cannot brick the radio.
 - Core misbehaves (no RX/TX, wrong screen): re-enter flash mode and flash the other variant or a previous CI build.
   If the radio will not enter flash mode, stop: that is the unrecoverable case this runbook cannot cover.
