@@ -25,7 +25,7 @@ plat() { [ -n "$PLATFORM" ] && echo "--platform $PLATFORM" || true; }
 
 image() {
   want="$(sed -n 's/^channel = "\(.*\)"/\1/p' "$ROOT/firmware/firmware-source/rust-toolchain.toml")"
-  docker build $(plat) --build-arg RUST_TOOLCHAIN="$want" -t "$IMAGE:$ARCH_TAG" -f "$ROOT/dev/Dockerfile" "$ROOT/dev"
+  docker build $(plat) --build-arg RUST_TOOLCHAIN="$want" --build-arg WITH_BROWSER="${WITH_BROWSER:-1}" -t "$IMAGE:$ARCH_TAG" -f "$ROOT/dev/Dockerfile" "$ROOT/dev"
 }
 
 # run CMD... inside the container; caches in named volumes, per architecture

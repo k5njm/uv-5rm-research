@@ -5,6 +5,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Pinned Rust toolchain (the version in firmware-source/rust-toolchain.toml, as in dev/Dockerfile)
+        # rustup picks a toolchain from the *current directory's* rust-toolchain.toml, and several steps run
+        # from other directories, so install the pinned one and make it the default for the whole job.
+        run: |
+          V=$(sed -n 's/^channel = "\(.*\)"/\1/p' firmware/firmware-source/rust-toolchain.toml)
+          rustup toolchain install "$V" --profile minimal -t thumbv7em-none-eabi
+          rustup default "$V"
+          rustc --version
       - name: Release gate (shipped .BF and .app files)
         run: python3 -I firmware/tools/verify_release.py
       - name: Boot logo / tune tools against a fake radio
@@ -112,3 +120,5 @@ jobs:
       - uses: docker/setup-qemu-action@v3
         with: { platforms: arm64 }
       - run: scripts/dev.sh repro
+        env:
+          WITH_BROWSER: "0"   # no Chromium layer under QEMU

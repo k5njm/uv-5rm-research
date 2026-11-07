@@ -26,5 +26,10 @@ Build and test in the container, not on the host: `scripts/dev.sh check` (OrbSta
 cache volumes per architecture). Core firmware is always built under linux/amd64 emulation (the CI environment): the BK4819 image built on native arm64 differs from x86 (AUDIT 18). `scripts/dev.sh repro` builds both and requires everything to match except that one known image.
 Hardware-facing steps (flashing, serial, webcam, injector) cannot run in a container and stay on the host.
 
+CI can be rehearsed locally before pushing (and when pushing is blocked): `scripts/ci-replay.sh verify|web` runs the workflow's own
+`run:` steps in a clean x86_64 Ubuntu container with a runner-like Rust (stable, no ARM target). It found nothing wrong after the
+toolchain fix; the one real CI failure so far (pinned toolchain not selected when a step runs outside `firmware-source/`) was
+found by the first GitHub run.
+
 ## Before a PR
 `scripts/dev.sh check` (release gate, unit tests, scenarios for every style, simulator suite, overlay builds, core firmware, HIL tests).

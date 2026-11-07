@@ -21,11 +21,16 @@ RUN bin="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/host: //p'
  && for t in objcopy nm size; do ln -sf "$bin/llvm-$t" /usr/local/bin/rust-$t; done \
  && rust-objcopy --version | head -1
 # Browser test of web/ (approved: Node + Playwright + headless Chromium). Pinned.
+# WITH_BROWSER=0 skips it (the cross-architecture repro job only compares builds and runs under QEMU, where
+# downloading and running Chromium is slow and unnecessary).
 ARG PLAYWRIGHT_VERSION=1.49.1
+ARG WITH_BROWSER=1
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers NODE_PATH=/usr/local/lib/node_modules
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm \
- && npm install -g playwright@${PLAYWRIGHT_VERSION} \
- && playwright install --with-deps chromium \
- && rm -rf /var/lib/apt/lists/* \
- && node --version && playwright --version
+RUN if [ "$WITH_BROWSER" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends nodejs npm \
+      && npm install -g playwright@${PLAYWRIGHT_VERSION} \
+      && playwright install --with-deps chromium \
+      && rm -rf /var/lib/apt/lists/* \
+      && node --version && playwright --version; \
+    else echo "browser layer skipped (WITH_BROWSER=0)"; fi
 WORKDIR /work
