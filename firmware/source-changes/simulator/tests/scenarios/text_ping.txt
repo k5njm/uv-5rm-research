@@ -1,0 +1,17 @@
+# TEXT: type a message with multi-tap, send a ping that nobody answers. Transmission happens only in the simulated radio.
+allow tx
+app textapp
+shot empty
+key 4
+key 4                     # 4,4 = H
+wait 1.2
+key 4
+key 4
+key 4                     # 4,4,4 = I
+wait 1.2
+shot typed_hi
+key star                  # numbered test ping
+wait 0.5
+shot ping_sent_waiting
+key exit                  # stop retrying
+shot stopped_not_confirmed

@@ -1,0 +1,16 @@
+# Fox Hunt: a steady signal, then the distance entry.
+master 146520000
+signal 146520000 100 -1 always
+app foxhunt
+wait 1
+shot measuring
+wait 4
+shot meter_steady
+key menu                  # set distance
+shot distance_entry
+key 1
+shot distance_digit
+key 0
+shot distance_1_0_mile
+key exit
+shot back_to_meter

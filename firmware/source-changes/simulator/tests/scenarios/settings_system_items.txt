@@ -1,0 +1,11 @@
+# Settings, system segment (handoff group 5 = SYSTEM, open its items): position entry, battery cal, versions.
+# MODEL CAVEAT: all-zero settings record in the simulator (see settings_menu_groups.txt); CHIPID reads 0.
+handoff 5 1
+app settings
+shot system_items
+key down
+shot lat_selected
+key menu                  # edit LAT
+shot lat_editing
+key exit
+shot lat_unchanged

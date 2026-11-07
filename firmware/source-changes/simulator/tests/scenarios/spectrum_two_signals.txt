@@ -1,0 +1,13 @@
+# Spectrum panadapter with a strong and a weaker signal, then the range moved.
+master 146520000
+signal 146520000 110 -1 always
+signal 146700000 90 -1 always
+app spectrum
+wait 2
+shot first_sweep
+wait 4
+shot waterfall_filled
+key menu
+shot rx_mode
+key up
+shot range_shifted_up

@@ -26,6 +26,23 @@ mod search2;
 mod textapp;
 #[path = "../../firmware-source/apps/hamtools/src/logic.rs"]
 mod hamtools;
+#[path = "../../firmware-source/apps/spectrum/src/main.rs"]
+mod spectrum;
+#[path = "../../firmware-source/apps/fm/src/main.rs"]
+mod fm;
+#[path = "../../firmware-source/apps/chanmgr/src/main.rs"]
+mod chanmgr;
+#[cfg(feature = "settings-menu")]
+pub const MY_SEG: u8 = 0;
+#[cfg(feature = "settings-radio")]
+pub const MY_SEG: u8 = 1;
+#[cfg(feature = "settings-system")]
+pub const MY_SEG: u8 = 2;
+#[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system"))]
+#[path = "../../firmware-source/apps/settings/common.rs"]
+mod settings;
+#[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system"))]
+const _: () = settings::assert_seg_features();
 mod scenario;
 
 mod flash_map {
@@ -235,7 +252,18 @@ extern "C" fn fill_rect(x: i16, y: i16, w: u16, h: u16, c: u16) {
         }
     }
 }
-extern "C" fn blit(_x: i16, _y: i16, _w: u16, _h: u16, _p: *const u16) {}
+/// Copies a w x h block of RGB565 pixels onto the screen (clipped), like the firmware's `blit`.
+extern "C" fn blit(x: i16, y: i16, w: u16, h: u16, p: *const u16) {
+    let px = unsafe { std::slice::from_raw_parts(p, w as usize * h as usize) };
+    for j in 0..h as i32 {
+        for i in 0..w as i32 {
+            let (xx, yy) = (x as i32 + i, y as i32 + j);
+            if xx >= 0 && yy >= 0 && xx < W as i32 && yy < H as i32 {
+                sim().fb[yy as usize * W + xx as usize] = px[(j * w as i32 + i) as usize];
+            }
+        }
+    }
+}
 extern "C" fn draw_text(x: i16, y: i16, t: *const u8, len: u16, fg: u16, bg: u16, font: u8) -> u16 {
     let bytes = unsafe { std::slice::from_raw_parts(t, len as usize) };
     let text = std::str::from_utf8(bytes).unwrap();
@@ -397,7 +425,71 @@ extern "C" fn chan_write(num: u16, buf: *const u8, len: u16) -> bool {
 extern "C" fn get_master_freq() -> u32 {
     sim().master
 }
-extern "C" fn draw_list_stub(_: *const u8, _: u16, _: *const ListRow, _: u16, _: u16, _: u16, _: u16, _: bool) {}
+/// The firmware's overlay `draw_list` (app/overlay.rs) over its real list renderer (ui/list.rs): the app
+/// hands in a window of rows, the firmware draws them. The boot logo flash reads as erased (black backdrop).
+struct BufferListSource {
+    rows: Vec<ListRow>,
+    window_start: usize,
+    total: usize,
+}
+
+impl BufferListSource {
+    fn window_row(&self, index: usize) -> Option<&ListRow> {
+        index.checked_sub(self.window_start).and_then(|i| self.rows.get(i))
+    }
+}
+
+fn cstr(b: &[u8]) -> &str {
+    let end = b.iter().position(|&c| c == 0).unwrap_or(b.len());
+    std::str::from_utf8(&b[..end]).unwrap_or("")
+}
+
+impl ui::list::ListSource for BufferListSource {
+    fn row_count(&mut self) -> usize {
+        self.total
+    }
+    fn read_flash(&mut self, _addr: u32, buf: &mut [u8]) {
+        buf.fill(0xFF);
+    }
+    fn label(&mut self, i: usize, w: &mut dyn core::fmt::Write) {
+        if let Some(r) = self.window_row(i) {
+            let _ = w.write_str(cstr(&r.label));
+        }
+    }
+    fn value(&mut self, i: usize, w: &mut dyn core::fmt::Write) -> bool {
+        match self.window_row(i) {
+            Some(r) if r.has_value => {
+                let _ = w.write_str(cstr(&r.value));
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+static mut LIST_CACHE: Option<ui::list::Cache> = None;
+
+extern "C" fn draw_list_real(
+    title: *const u8,
+    title_len: u16,
+    rows: *const ListRow,
+    row_count: u16,
+    window_start: u16,
+    selected: u16,
+    total: u16,
+    show_arrows: bool,
+) {
+    let title = if title.is_null() { "" } else { cstr(unsafe { std::slice::from_raw_parts(title, title_len as usize) }) };
+    let rows = if rows.is_null() { Vec::new() } else { unsafe { std::slice::from_raw_parts(rows, row_count as usize) }.to_vec() };
+    let mut src = BufferListSource { rows, window_start: window_start as usize, total: total as usize };
+    let cache = unsafe {
+        if LIST_CACHE.is_none() {
+            LIST_CACHE = Some(ui::list::Cache::new());
+        }
+        LIST_CACHE.as_mut().unwrap()
+    };
+    ui::list::draw_list(sim(), title, &mut src, selected as usize, show_arrows, cache);
+}
 const CTCSS: [u16; 50] = [
     670, 693, 719, 744, 770, 797, 825, 854, 885, 915, 948, 974, 1000, 1035, 1072, 1109, 1148, 1188, 1230, 1273,
     1318, 1365, 1413, 1462, 1514, 1567, 1598, 1622, 1655, 1679, 1713, 1738, 1773, 1799, 1835, 1862, 1899, 1928,
@@ -427,11 +519,20 @@ extern "C" fn sub_format(v: i32, out: *mut u8, _cap: u16) -> u16 {
     };
     copy_str(&s, out)
 }
-extern "C" fn handoff_w(_: *const u8, _: u16) -> bool {
-    false
+/// Firmware-owned scratch that survives a segment switch (64 bytes max), like the real handoff buffer.
+static mut HANDOFF: Vec<u8> = Vec::new();
+extern "C" fn handoff_w(b: *const u8, len: u16) -> bool {
+    if len as usize > 64 {
+        return false;
+    }
+    unsafe { HANDOFF = std::slice::from_raw_parts(b, len as usize).to_vec() };
+    true
 }
-extern "C" fn handoff_r(_: *mut u8, _: u16) -> u16 {
-    0
+extern "C" fn handoff_r(b: *mut u8, cap: u16) -> u16 {
+    let h = unsafe { &HANDOFF };
+    let n = h.len().min(cap as usize);
+    unsafe { std::ptr::copy_nonoverlapping(h.as_ptr(), b, n) };
+    n as u16
 }
 extern "C" fn set_bandwidth(w: bool) {
     sim().wide = w;
@@ -518,11 +619,37 @@ extern "C" fn tune_cand(hz: u32, _: bool) {
 extern "C" fn save_vfo(hz: u32, code: u16) {
     sim().vfo_saved = Some((hz, code));
 }
-extern "C" fn settings_read(_: *mut u8, _: u16) -> bool {
-    false
+/// Settings record (168 bytes) and side-key config (14 bytes). UNVERIFIED MODEL: starts all zero, which is
+/// good enough to lay out and navigate the screens but is not the firmware's real default record.
+static mut SETTINGS: [u8; 168] = [0; 168];
+static mut SIDE_CFG: [u8; 14] = [0; 14];
+extern "C" fn settings_read(b: *mut u8, len: u16) -> bool {
+    if len as usize != 168 {
+        return false;
+    }
+    unsafe { std::ptr::copy_nonoverlapping(SETTINGS.as_ptr(), b, 168) };
+    true
 }
-extern "C" fn settings_w(_: *const u8, _: u16) -> bool {
-    false
+extern "C" fn settings_w(b: *const u8, len: u16) -> bool {
+    if len as usize != 168 {
+        return false;
+    }
+    unsafe { std::ptr::copy_nonoverlapping(b, SETTINGS.as_mut_ptr(), 168) };
+    true
+}
+extern "C" fn side_read(b: *mut u8, len: u16) -> bool {
+    if len as usize != 14 {
+        return false;
+    }
+    unsafe { std::ptr::copy_nonoverlapping(SIDE_CFG.as_ptr(), b, 14) };
+    true
+}
+extern "C" fn side_write(b: *const u8, len: u16) -> bool {
+    if len as usize != 14 {
+        return false;
+    }
+    unsafe { std::ptr::copy_nonoverlapping(b, SIDE_CFG.as_mut_ptr(), 14) };
+    true
 }
 extern "C" fn factory() -> ! {
     panic!("factory reset called");
@@ -575,7 +702,7 @@ static API: Api = Api {
     app_fault,
     chan_write,
     get_master_freq,
-    draw_list: draw_list_stub,
+    draw_list: draw_list_real,
     subaudio_index_of_code: index_of,
     subaudio_code_of_index: code_of,
     subaudio_format: sub_format,
@@ -607,8 +734,8 @@ static API: Api = Api {
     settings_read,
     settings_preview: settings_w,
     settings_commit: settings_w,
-    side_cfg_read: settings_read,
-    side_cfg_write: settings_w,
+    side_cfg_read: side_read,
+    side_cfg_write: side_write,
     factory_reset: factory,
     battery_raw12_avg: batt,
     set_holds_rx: holds,

@@ -10,7 +10,19 @@ if [ -n "$STYLE" ]; then FEAT="--features style-$STYLE"; GOLD="tests/golden-$STY
 cargo build --release $FEAT >/dev/null
 BIN="${CARGO_TARGET_DIR:-target}/release/sim"
 fail=0
-for f in tests/scenarios/*.txt; do
+# Styles only change the apps that have them (hamtools); other apps are checked once, in the default style.
+# The settings app is three crates built with different features, so each of its segments is its own
+# simulator build (settings_menu_*, settings_radio_*, settings_system_*); the default build skips them.
+if [ -n "$STYLE" ]; then SCEN="tests/scenarios/hamtools_*.txt"; else SCEN=$(ls tests/scenarios/*.txt | grep -v '/settings_'); fi
+for f in $SCEN; do
   "$BIN" scenario "$f" --golden "$GOLD" --out "$OUT" "$@" || fail=1
 done
+if [ -z "$STYLE" ]; then
+  for seg in menu radio system; do
+    cargo build --release --features "settings-$seg" >/dev/null
+    for f in tests/scenarios/settings_${seg}_*.txt; do
+      "$BIN" scenario "$f" --golden "$GOLD" --out "$OUT" "$@" || fail=1
+    done
+  done
+fi
 exit $fail

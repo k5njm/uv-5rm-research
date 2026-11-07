@@ -1,0 +1,14 @@
+# Channel manager over three stored channels. Never presses Menu on DEL.
+chan 0 146520000 146520000 CALL-A
+chan 1 146940000 146340000 RPT-A
+chan 2 462562500 SIMPLEX-1
+app chanmgr
+shot list
+key down
+shot second_selected
+key menu                  # edit channel
+shot editor
+key up                    # wraps to the last row (DEL)
+shot wrapped_to_del
+key exit
+shot back_to_list

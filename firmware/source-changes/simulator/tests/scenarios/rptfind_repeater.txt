@@ -1,0 +1,19 @@
+# Repeater Finder: a repeater output with traffic, its input 600 kHz down carrying a 100.0 Hz tone.
+# With this simple on/off traffic the app is still checking after two minutes (17 sightings of the
+# input); the 'found' conclusion is covered by the simulator's own test_repeater (different traffic).
+master 146940000
+signal 146940000 120 20 duty 4 8
+signal 146340000 100 12 duty 2 8
+app rptfind
+wait 2
+shot checking
+wait 4
+shot waiting_for_traffic
+wait 125
+shot still_checking_after_2_min
+key menu                  # save to a channel
+shot save_prompt
+key 1
+shot save_digit
+key exit
+shot back

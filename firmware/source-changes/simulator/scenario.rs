@@ -5,6 +5,12 @@
 //!
 //! Steps (one per line, `#` starts a comment):
 //!   app NAME            fresh simulated radio, then Enter + Draw   (hamtools, foxhunt, ...)
+//!   master HZ           the radio's tuned frequency when the app starts (default 146520000)
+//!   signal HZ LEVEL TONE always | duty ON PERIOD   a transmitter on the air: raw RSSI LEVEL, CTCSS index TONE
+//!                       (-1 none), either always on or on for ON s of every PERIOD s of radio time
+//!   chan N RXHZ [TXHZ] [NAME]   a stored channel (blank TX = receive-only)
+//!                       master/signal/chan may appear before or after `app`; they are applied after the reset
+//!   handoff GROUP ACTION   preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
 //!   key K               single press. K = 0-9 star pound menu exit up down ab
 //!   hold K              long press
@@ -29,6 +35,12 @@ fn lookup(name: &str) -> Option<Entry> {
         "qtscan2" => qtscan2::entry,
         "search2" => search2::entry,
         "textapp" => textapp::entry,
+        "searchqt" => sq,
+        "spectrum" => |a, e| spectrum::app_entry(a, e),
+        "fm" => |a, e| fm::app_entry(a, e),
+        "chanmgr" => |a, e| chanmgr::app_entry(a, e),
+        #[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system"))]
+        "settings" => |a, e| settings::app_entry(a, e),
         _ => return None,
     })
 }
@@ -175,8 +187,28 @@ pub fn parse_args(args: &[String]) -> Result<Opts, String> {
     Ok(Opts { file: file.ok_or("usage: sim scenario FILE [--golden DIR] [--out DIR] [--update]")?, golden, out, update })
 }
 
+/// Radio conditions set up by the scenario; re-applied each time `app` resets the simulated radio.
+type Setup = Box<dyn Fn()>;
+
+fn bcd(deci_hz: u32) -> [u8; 4] {
+    let b = |v: u32| (((v % 100) / 10) << 4 | (v % 10)) as u8;
+    [b(deci_hz), b(deci_hz / 100), b(deci_hz / 10_000), b(deci_hz / 1_000_000)]
+}
+
+fn channel_record(rx: u32, tx: Option<u32>, name: &str) -> [u8; 32] {
+    let mut r = [0u8; 32];
+    r[0..4].copy_from_slice(&bcd(rx / 10));
+    r[4..8].copy_from_slice(&tx.map_or([0xFF; 4], |t| bcd(t / 10)));
+    for (i, c) in name.bytes().take(12).enumerate() {
+        r[20 + i] = c;
+    }
+    r
+}
+
 struct Run<'a> {
     o: &'a Opts,
+    master: u32,
+    setup: Vec<Setup>,
     name: String,
     app: Option<Entry>,
     step_ms: u32,
@@ -246,12 +278,59 @@ impl Run<'_> {
         match t.as_slice() {
             ["app", n] => {
                 let Some(e) = lookup(n) else { return self.check(false, &format!("unknown app {n}")) };
-                reset(146_520_000);
+                reset(self.master);
+                chip_reset();   // the simulated FSK modem (TEXT)
+                nor_clear();    // a blank SPI flash for apps that save data
                 unsafe { TONE_ON_CALLS = 0; }
+                for f in &self.setup {
+                    f();
+                }
                 self.app = Some(e);
                 e(&API, AppEvent::Enter);
                 e(&API, AppEvent::Draw);
             }
+            ["master", hz] => match hz.parse::<u32>() {
+                Ok(h) => self.master = h,
+                Err(_) => self.check(false, "master needs a frequency in Hz"),
+            },
+            ["signal", hz, level, tone, mode @ ..] => {
+                let (Ok(hz), Ok(level), Ok(tone)) = (hz.parse::<u32>(), level.parse::<u16>(), tone.parse::<i32>()) else {
+                    return self.check(false, "signal needs HZ LEVEL TONE");
+                };
+                let duty = match mode {
+                    ["always"] => None,
+                    ["duty", on, per] => match (on.parse::<u32>(), per.parse::<u32>()) {
+                        (Ok(on), Ok(per)) if per > 0 => Some((on, per)),
+                        _ => return self.check(false, "duty needs ON PERIOD seconds"),
+                    },
+                    _ => return self.check(false, "signal needs `always` or `duty ON PERIOD`"),
+                };
+                let f: Setup = Box::new(move || match duty {
+                    None => add(hz, level, tone, |_| true),
+                    Some((on, per)) => add(hz, level, tone, move |t| (t % (per * 10_000)) < on * 10_000),
+                });
+                if self.app.is_some() { f(); }
+                self.setup.push(f);
+            }
+            ["chan", n, rx, rest @ ..] => {
+                let (Ok(n), Ok(rx)) = (n.parse::<u16>(), rx.parse::<u32>()) else {
+                    return self.check(false, "chan needs N RXHZ");
+                };
+                let (tx, name) = match rest {
+                    [] => (None, ""),
+                    [t] if t.parse::<u32>().is_ok() => (t.parse().ok(), ""),
+                    [name] => (None, *name),
+                    [t, name, ..] => (t.parse().ok(), *name),
+                };
+                let name = name.to_string();
+                let f: Setup = Box::new(move || { sim().chans.insert(n, channel_record(rx, tx, &name)); });
+                if self.app.is_some() { f(); }
+                self.setup.push(f);
+            }
+            ["handoff", group, action] => match (group.parse::<u8>(), action.parse::<u8>()) {
+                (Ok(g), Ok(a)) => unsafe { HANDOFF = vec![0xA5, g, a] }, // start a later settings segment as Chain would
+                _ => self.check(false, "handoff needs GROUP ACTION numbers"),
+            },
             ["coords", "none"] => { unsafe { COORDS = None }; self.redraw() }
             ["coords", la, lo] => match (la.parse::<f64>(), lo.parse::<f64>()) {
                 (Ok(a), Ok(o)) => {
@@ -293,7 +372,7 @@ pub fn run_file(o: &Opts) -> u32 {
         std::process::exit(2)
     });
     println!("scenario {name}");
-    let mut r = Run { o, name, app: None, step_ms: 5, last_exit: false, rx_only: true, pass: 0, fail: 0 };
+    let mut r = Run { o, master: 146_520_000, setup: Vec::new(), name, app: None, step_ms: 5, last_exit: false, rx_only: true, pass: 0, fail: 0 };
     for (i, l) in text.lines().enumerate() {
         r.line(i + 1, l);
     }

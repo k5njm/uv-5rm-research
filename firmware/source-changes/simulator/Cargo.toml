@@ -13,6 +13,16 @@ path = "main.rs"
 style-d74 = []
 style-proxx = []
 style-ft5d = []
+# Settings app: one simulator build per segment (the real app is three crates with different features)
+g_radio = []
+g_audio = []
+g_disp = []
+g_keys = []
+g_ani = []
+g_system = []
+settings-menu = ["g_audio", "g_disp", "g_keys", "g_ani"]
+settings-radio = ["g_radio"]
+settings-system = ["g_system"]
 
 [dependencies]
 bf5rh-abi = { path = "../../firmware-source/abi" }

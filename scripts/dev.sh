@@ -6,6 +6,7 @@
 #   scenarios    [--update] classic + all styles apps       build every HAM TOOLS style with sizes
 #   firmware     build core firmware variants    hil-test   offline HIL pipeline tests
 #   hashes       [--update] compare/record sha256 of built images with firmware/expected-hashes.json
+#   manifest     write build-out/manifest.json describing the built images (web builder input)
 #   provenance   rebuild every shipped .app from source and compare bytes
 #   exec "CMD"   run any command in the container (cwd /work)
 #   gate         offline release gate (verify_release.py)
@@ -70,6 +71,7 @@ cmd_check() {
   step "simulator suite";        cmd_sim
   step "HAM TOOLS overlays";     cmd_apps
   step "core firmware";          cmd_firmware
+  step "size budgets on built images"; run "python3 -I firmware/tools/verify_release.py --no-committed --apps build-out --image build-out/fw-default.bin --image build-out/fw-bk4819.bin > /tmp/g.log || { cat /tmp/g.log; exit 1; }; tail -1 /tmp/g.log"
   step "shipped apps rebuild from source"; run "python3 firmware/tools/provenance.py --strict | tail -3"
   step "pinned image hashes";    cmd_hashes
   step "host tool tests (fake radio / bootloader)"; cmd_tools_test
@@ -100,6 +102,6 @@ case "${1:-}" in
   image) image ;; shell) docker image inspect "$IMAGE:$ARCH_TAG" >/dev/null 2>&1 || image
          docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "uv5rm-target-$ARCH_TAG":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
-  provenance) run "python3 firmware/tools/provenance.py $*" ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
+  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
   *) sed -n '2,10p' "$0"; exit 1 ;;
 esac

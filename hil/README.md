@@ -45,14 +45,19 @@ Dry run (no hardware): add `--dry-run` instead of the hardware arguments.
 
 ## What the webcam check can and cannot tell you
 Measured with the synthetic camera (perspective, glare, noise, blur) over every golden frame:
-* The correct screen scores **>= 0.857**; a screen from a *different tool* scores **<= 0.52**.
-  Default threshold 0.80 separates them.
+* Over all 73 golden frames of the nine shipped apps and HAM TOOLS: the correct screen scores **>= 0.857**; a screen
+  from a *different app* scores **<= 0.65** (the worst pairs are firmware list screens that share chrome, e.g. the
+  settings group list vs the channel list). Default threshold 0.80 separates them, with less margin than for
+  screens with different layouts.
 * Gross state changes are detected (the flashing "ID NOW" banner vs armed: 0.45).
 * Colour-only changes are borderline (stopwatch running vs stopped, green vs white digits: 0.91 vs 0.84).
 * **Small text changes are not detected** (e.g. `EVERY 10:00` vs `12:00`). This is a limit of the method,
   pinned by a test. Fine text is verified pixel-exactly in the simulator; the rig confirms the real radio
   shows the right screen in the right state. A macro lens, higher-resolution camera or OCR on a cropped
   region could extend this later.
-* `coords`, `step` and `expect backlight` steps are simulator-only and are reported, not silently skipped.
+* `coords`, `step`, `expect backlight` and the radio-condition steps `master`, `signal`, `chan`, `handoff` are simulator-only and are
+  reported, not silently skipped. On a real radio, arrange the equivalent by hand first (a signal generator or a second
+  radio on the right frequency, stored channels) or the golden will not match.
+* Scenarios containing `allow tx` (e.g. TEXT) are **refused** by the rig unless `--allow-tx` is passed; the dry-run test pins this.
 * Real-time scenarios run in real time (the 10-minute ID timer scenario takes 10 minutes on the rig).
 * Menu navigation to open an app is not automated (it varies by radio); use `--assume-open`.
