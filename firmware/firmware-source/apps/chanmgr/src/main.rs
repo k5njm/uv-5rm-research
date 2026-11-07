@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 use bf5rh_abi::{Api, AppEvent, AppResult, ListRow};
 
@@ -916,7 +916,7 @@ static mut STATE: State = State {
     phase: Phase::List(ChanList::blank()),
 };
 
-#[no_mangle]
+#[cfg_attr(target_os = "none", no_mangle)]
 pub extern "C" fn app_entry(api: &Api, ev: AppEvent) -> AppResult {
     unsafe {
         API_PTR = api as *const Api;
@@ -1252,6 +1252,7 @@ fn draw(api: &Api) -> AppResult {
     AppResult::Continue
 }
 
+#[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe {

@@ -1,8 +1,8 @@
 {
   "fw-bk4819.bin": "d72e1001c729f78e67f9437031be11953c6d14e728c873195a92222cbc498edf",
   "fw-default.bin": "99cb02ee7cef5cb07972b10c487dfe683118a658df66d6853f20004ec90e5232",
-  "hamtools-classic.app": "da3626b318e223b43ac1ae46116e25c56804072e88aaa343ada648e12d8b107d",
-  "hamtools-d74.app": "5b83f3aa262ec79a7ada183d5668a8895010218b930408c2092616ad9704783d",
-  "hamtools-ft5d.app": "c066ea56700b1b3778df419d3033f2bef1dcac9ae57c320c8fa6fb4de9db0367",
-  "hamtools-proxx.app": "dce74e4eba104f03b8dc5de68b239fd9f231827a9a4afef09405d27560354728"
+  "hamtools-classic.app": "f03fbacaf89cb823e281ec71fa472462bc95be2c9e45d58ecf671e502adbeb32",
+  "hamtools-d74.app": "8e9f027388bfa98fd7b2c159c15a891447a5234ff9e5c62e32af87c114c8c573",
+  "hamtools-ft5d.app": "0f15f71b5ff0a76a6913e46f1bad240733f63b7986ee778cbfa7d2bde14fb9f8",
+  "hamtools-proxx.app": "0f5cc75e4031513afe49204d681dd92f0f9a179696e02e92e5db0810eac2bdbc"
 }

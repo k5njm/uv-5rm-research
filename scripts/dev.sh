@@ -6,6 +6,8 @@
 #   scenarios    [--update] classic + all styles apps       build every HAM TOOLS style with sizes
 #   firmware     build core firmware variants    hil-test   offline HIL pipeline tests
 #   hashes       [--update] compare/record sha256 of built images with firmware/expected-hashes.json
+#   provenance   rebuild every shipped .app from source and compare bytes
+#   exec "CMD"   run any command in the container (cwd /work)
 #   gate         offline release gate (verify_release.py)
 #   tools-test   host tool tests against the fake radio / bootloader (firmware/tests)
 #   repro        build for arm64 AND amd64 and require identical hashes (cross-architecture reproducibility)
@@ -68,6 +70,7 @@ cmd_check() {
   step "simulator suite";        cmd_sim
   step "HAM TOOLS overlays";     cmd_apps
   step "core firmware";          cmd_firmware
+  step "shipped apps rebuild from source"; run "python3 firmware/tools/provenance.py --strict | tail -3"
   step "pinned image hashes";    cmd_hashes
   step "host tool tests (fake radio / bootloader)"; cmd_tools_test
   step "HIL pipeline (offline)"; cmd_hil_test
@@ -97,6 +100,6 @@ case "${1:-}" in
   image) image ;; shell) docker image inspect "$IMAGE:$ARCH_TAG" >/dev/null 2>&1 || image
          docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "uv5rm-target-$ARCH_TAG":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
-  hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
+  provenance) run "python3 firmware/tools/provenance.py $*" ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
   *) sed -n '2,10p' "$0"; exit 1 ;;
 esac

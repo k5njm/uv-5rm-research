@@ -126,7 +126,10 @@ def entry_address(elf: Path) -> int:
     for line in out.splitlines():
         parts = line.split()
         if len(parts) >= 3 and parts[-1] == "app_entry":
-            return int(parts[0], 16)
+            # GNU nm reports Thumb functions with bit 0 set, LLVM nm does not. Normalise to the GNU
+            # form the shipped packages use, so the package bytes do not depend on which nm ran.
+            # (The firmware ORs in the Thumb bit itself when it loads an app: overlay.rs.)
+            return int(parts[0], 16) | 1
     sys.exit(f"[ERR] {elf} missing app_entry")
 
 

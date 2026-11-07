@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 use bf5rh_abi::{Api, AppEvent, AppResult};
 
@@ -364,7 +364,7 @@ impl State {
     }
 }
 
-#[no_mangle]
+#[cfg_attr(target_os = "none", no_mangle)]
 pub extern "C" fn app_entry(api: &Api, ev: AppEvent) -> AppResult {
     unsafe {
         API_PTR = api as *const Api;
@@ -1015,6 +1015,7 @@ fn draw_status(api: &Api, st: &State) {
     text_line(api, LINE2_Y, &line2, GRAY);
 }
 
+#[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe {
