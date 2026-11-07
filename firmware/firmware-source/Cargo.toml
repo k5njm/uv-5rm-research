@@ -13,6 +13,9 @@ bench = false
 
 [features]
 default = []
+# 5RHBK board (BK4819 RF chip): Baofeng's BK init values instead of the
+# BK4829 tuning used on the 5RHNRFB/FD6818 board, plus a HICK clock fallback.
+bk4819 = []
 
 [dependencies]
 cortex-m = "0.7"

@@ -917,7 +917,11 @@ impl<'a> Radio<'a> {
         self.fd6818.set_scramble(syst, self.scramble_level);
         self.fd6818.apply_tx_mic_gain(syst);
         self.fd6818.tx_on(syst);
+        #[cfg(not(feature = "bk4819"))]
         self.fd6818.pa_enable(syst, self.cfg.power);
+        #[cfg(feature = "bk4819")]
+        self.fd6818
+            .pa_enable_at(syst, self.cfg.power, self.cfg.tx_freq_hz);
 
         self.fd6818
             .set_band_quiet(Self::band_of(self.cfg.tx_freq_hz) == Band::Uhf);

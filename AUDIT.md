@@ -13,7 +13,7 @@ decoder, built the core firmware, apps and host simulator (Rust 1.99.1), ran the
 | 3 | APRS: wrong CRC, no HDLC/NRZI, dropped last byte, modem unproven, hardcoded third-party callsign and coordinates. | Open |
 | 4 | Horus/RS41: sync words, baud, scrambler and FEC do not match the real protocols (checked from memory; verify against `horusdemodlib`, `radiosonde_auto_rx`). | Open |
 | 5 | Core image 61,352 of 61,440 bytes (88 free). New features must be overlay apps. TEXT arena use 8,119 of 8,192. | Open (now reported by `verify_release.py`) |
-| 6 | Toolchain unpinned (`stable`); shipped `.BF` not reproducible; `Cargo.lock` was gitignored. | Fixed going forward (pin 1.99.1, lockfiles tracked) |
+| 6 | Toolchain was unpinned and `Cargo.lock` gitignored (fixed: pin 1.99.1, lockfiles tracked). **The shipped default `.BF` does not reproduce from its own source** (15,730 bytes differ) even with the mod's documented command and Rust 1.99.1. This is *not* a toolchain or path problem: a Linux build of upstream PR #3's `bk4819` variant is byte-identical to that PR's published binary. So the shipped default `.BF` has unexplained provenance (BF and source were committed together upstream). | Open: ship only CI-built images (artifacts now uploaded); ask upstream |
 | 7 | No CI, no Rust unit tests. Simulator exists (324 checks pass). JS uploader tests need an uncommitted radio dump (`RADIO_DUMP_B64`). | CI added for gate+sim+build |
 | 8 | Hardware ID `5RHNRFB-YP07` unverified; mod README says to refuse `…NRF`. | Open; verify on the radio |
 | 9 | `patch_fw.py` makes first boot clean stale factory records in SPI flash; no restore tool exists for the backup. | Open |

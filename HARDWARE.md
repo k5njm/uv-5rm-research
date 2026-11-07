@@ -111,3 +111,9 @@ Supplied by the owner (page itself not fetchable). **Consistent with the right f
 | No firmware version, no chip, no PCB revision stated | Unknown until the `8`-key screen is read on the physical unit. |
 
 **Practical steps:** (1) on arrival read the `8`-key screen and photograph it; (2) before anything else, save a CHIRP image of the stock channel memory; (3) the listing's 180-day replacement offer means a non-YP07 unit can be exchanged, so **do not flash until the screen is verified**; (4) keep the original radio as stock only if you have a second one for flashing, since no stock YP07 image is available to restore.
+
+### BK4819 build (upstream PR #3, `bk4819` feature)
+
+Upstream PR [#3](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod/pull/3) adds a build for boards whose `8`-key screen reads **`5RHBK`** (BK4819), versus **`5RHNRFB-YP07`** (FD6818B) for the default build. That gives the screen string a documented meaning: it selects the firmware variant. Build it with `--features bk4819`; the default build is unchanged.
+
+Validation done here (static, no hardware): 15 of its 17 new register constants appear in Baofeng's stock `5RH_BK_V0.14` image (the other two, `0x06D8` and the already-existing `0x13A0`, could not be located by a simple scan). The YP07 values it replaces appear in **neither** stock image, which fits upstream's note that the YP07 driver is a BK4829 port. Surprisingly the stock **NRF** V0.14 image contains the same BK4819 values, so a plain-NRF (FD6818) board may also work with this build; that is a hypothesis, not tested. The PR author reports one `5RHBK` radio tested, with output power not measured.
