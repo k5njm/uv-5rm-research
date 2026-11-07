@@ -200,8 +200,9 @@ static mut STATE: State = State {
     view_idx: 0,
     tx_count: 0,
     rx_count: 0,
-    my_call: *b"K5RWK-7   ",
-    my_call_len: 7,
+    // Placeholder only: a real callsign must come from user configuration, never from source.
+    my_call: *b"NOCALL    ",
+    my_call_len: 6,
     auto_beacon: false,
     high_power: true,
     last_beacon_uptime: 0,
@@ -354,7 +355,7 @@ fn transmit_beacon(api: &Api, s: &mut State) {
     frame[flen] = 0xF0; flen += 1; // PID: No layer 3
 
     // APRS Info payload: Position text
-    let payload = b"!3257.00N/09648.00W-UV5RM HAB Chase";
+    let payload = b"!0000.00N/00000.00E-UV5RM HAB Chase" // placeholder position;
     frame[flen..flen + payload.len()].copy_from_slice(payload);
     flen += payload.len();
 

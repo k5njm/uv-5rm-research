@@ -5,6 +5,7 @@
 #   sim          original simulator suite        unit       cargo test (app logic.rs tests)
 #   scenarios    [--update] classic + all styles apps       build every HAM TOOLS style with sizes
 #   firmware     build core firmware variants    hil-test   offline HIL pipeline tests
+#   hashes       [--update] compare/record sha256 of built images with firmware/expected-hashes.json
 #   gate         offline release gate (verify_release.py)
 #   tools-test   host tool tests against the fake radio / bootloader (firmware/tests)
 #   repro        build for arm64 AND amd64 and require identical hashes (cross-architecture reproducibility)
@@ -57,6 +58,7 @@ cmd_firmware() {
 }
 cmd_hil_test()  { run "python3 hil/test_hil.py > /tmp/hil.log 2>&1 || { tail -30 /tmp/hil.log; exit 1; }; tail -3 /tmp/hil.log"; }
 cmd_tools_test() { run "for t in firmware/tests/test_*.py; do echo \"-- \$t\"; python3 -W error::ResourceWarning \$t > /tmp/t.log 2>&1 || { tail -40 /tmp/t.log; exit 1; }; tail -3 /tmp/t.log | head -2; done"; }
+cmd_hashes()    { cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/pin_hashes.py build-out $*"; }
 cmd_gate()      { run "python3 -I firmware/tools/verify_release.py > /tmp/gate.log || { cat /tmp/gate.log; exit 1; }; tail -1 /tmp/gate.log"; }
 
 cmd_check() {
@@ -66,6 +68,7 @@ cmd_check() {
   step "simulator suite";        cmd_sim
   step "HAM TOOLS overlays";     cmd_apps
   step "core firmware";          cmd_firmware
+  step "pinned image hashes";    cmd_hashes
   step "host tool tests (fake radio / bootloader)"; cmd_tools_test
   step "HIL pipeline (offline)"; cmd_hil_test
   printf '\n\033[1;32mall checks passed\033[0m\n'
@@ -94,6 +97,6 @@ case "${1:-}" in
   image) image ;; shell) docker image inspect "$IMAGE:$ARCH_TAG" >/dev/null 2>&1 || image
          docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "uv5rm-target-$ARCH_TAG":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
-  gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
+  hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
   *) sed -n '2,10p' "$0"; exit 1 ;;
 esac

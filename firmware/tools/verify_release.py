@@ -20,7 +20,8 @@ SLOT_SIZE = 32 * 1024
 ARENA = 8192
 KEYS = (b"KDHT", b"RBGI")
 PKG = 1024
-MIN_FW_HEADROOM = 0  # report-only; raise once the core image has room
+MIN_FW_HEADROOM = 64  # bytes of core flash that must stay free (88 today): alarm before it is eaten
+MIN_ARENA_SPARE = 64  # bytes of 8 KB arena each app must leave free (TEXT has 73)
 
 
 def unxor(block, key):
@@ -67,6 +68,7 @@ def verify_bf(path):
     check(cnt == 1 and l2 == 0, "single region, no config region (as upstream-tested)")
     check(0 < l1 <= APP_AREA, f"firmware {l1} bytes fits {APP_AREA}-byte app area "
                               f"({APP_AREA - l1} bytes headroom)")
+    check(APP_AREA - l1 >= MIN_FW_HEADROOM, f"core headroom {APP_AREA - l1} >= floor {MIN_FW_HEADROOM}")
     img = decrypt(d[16:16 + l1])
     sp, rst = struct.unpack_from("<II", img, 0)
     check(0x20000000 < sp <= 0x20004000, f"stack pointer {sp:#x} inside 16 KB SRAM")
@@ -102,6 +104,7 @@ def verify_apps(apps_dir):
                 check(zlib.crc32(d[off:off + ilen]) & 0xFFFFFFFF == crc, f"{n}[{i}]: crc32")
             check(ilen + bss <= ARENA, f"{n}[{i}]: {ilen}+{bss} bss fits {ARENA}-byte arena "
                                        f"({ARENA - ilen - bss} spare)")
+            check(ARENA - ilen - bss >= MIN_ARENA_SPARE, f"{n}[{i}]: arena spare >= floor {MIN_ARENA_SPARE}")
         print(f"  sha256 {sha(d)}  {n}")
 
 

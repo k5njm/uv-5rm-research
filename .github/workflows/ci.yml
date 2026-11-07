@@ -31,6 +31,10 @@ jobs:
         with:
           name: scenario-frames
           path: /tmp/scenario-frames
+      - name: Host tool tests (fake radio, fake KDH bootloader, recovery tools)
+        run: |
+          pip install pillow numpy
+          for t in firmware/tests/test_*.py; do python3 "$t"; done
       - name: HIL pipeline (synthetic camera, fake injector)
         run: |
           pip install pillow numpy
@@ -58,6 +62,10 @@ jobs:
         with:
           name: firmware-images
           path: /tmp/out/*.bin
+      - name: Pinned image hashes (reproducibility regression)
+        run: |
+          mkdir -p /tmp/pinned && cp /tmp/out/*.bin /tmp/out/*.app /tmp/pinned/
+          python3 firmware/tools/pin_hashes.py /tmp/pinned
   hab-apps:
     # aprs/horus/rs41 do not compile yet (see AUDIT.md). The failure is reported as a
     # warning annotation, not a red check. Remove continue-on-error once they build.
