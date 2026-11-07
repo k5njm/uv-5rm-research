@@ -16,7 +16,7 @@ decoder, built the core firmware, apps and host simulator (Rust 1.99.1), ran the
 | 6 | Toolchain was unpinned and `Cargo.lock` gitignored (fixed: pin 1.99.1, lockfiles tracked). **The shipped default `.BF` does not reproduce from its own source** (15,730 bytes differ) even with the mod's documented command and Rust 1.99.1. This is *not* a toolchain or path problem: a Linux build of upstream PR #3's `bk4819` variant is byte-identical to that PR's published binary. So the shipped default `.BF` has unexplained provenance (BF and source were committed together upstream). | Open: ship only CI-built images (artifacts now uploaded); ask upstream |
 | 7 | No CI, no Rust unit tests. Simulator exists (324 checks pass). JS uploader tests need an uncommitted radio dump (`RADIO_DUMP_B64`). | CI added for gate+sim+build |
 | 8 | Hardware ID `5RHNRFB-YP07` unverified; mod README says to refuse `…NRF`. | Open; verify on the radio |
-| 9 | `patch_fw.py` makes first boot clean stale factory records in SPI flash; no restore tool exists for the backup. | Open |
+| 9 | First boot erases the VFO, settings, DTMF/ANI and FM sectors (`first_boot_format`; channels and calibration untouched). `restore_channels.py` now restores the channel table only; the other erased areas cannot be restored by any tool here. | Partly fixed (channels), tested on a fake radio only |
 | 10 | Host tools: no network calls (HTML and Python). `exec()` helper pattern is local-only but crude. | Confirmed |
 | 11 | Shipped `.app` files: ABI hash and CRCs valid; firmware re-validates at load. TX is locked by default and gated by firmware (`tx_forbid`, band lock). | Confirmed |
 
@@ -29,3 +29,5 @@ decoder, built the core firmware, apps and host simulator (Rust 1.99.1), ran the
 5. **HIL:** sacrificial radio on a UART/CPS cable for flash/readback loops, then a second radio or SDR for over-the-air checks (dummy load, low power).
 
 Tools: `firmware/tools/verify_release.py` (offline release gate), `.github/workflows/ci.yml`.
+| 12 | `radio_read.py` (stock protocol, read-only) does **not** back up calibration (`0xF000-0xF260`), contrary to the earlier docs. The custom firmware has no CPS command that writes calibration (verified by reading `cps/mod.rs`: writes reach channels, VFO, settings, contacts, FM, logo, apps, sat data only), and `first_boot_format` does not erase it. `dump_nor.py` (read-only) can record it after the first flash; whether the stock protocol could read it before flashing is unknown. | Docs corrected; dump tool added (fake radio only) |
+| 13 | `flash_bf.py` had no board gate. It now requires `--board` matching `--variant` (`firmware/variants.json`) before opening the port, and has `--check-only`. Mutation-tested: disabling the gate fails two tests. | Fixed, fake bootloader only |

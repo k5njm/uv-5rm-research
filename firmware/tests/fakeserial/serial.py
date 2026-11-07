@@ -8,7 +8,14 @@ Emulates only what source-changes/cps_tool.py frames: handshake, READ_LOGO/WRITE
 READ/WRITE of the 168-byte settings record at 0x9000, END. Frame layout matches
 cps_tool.Cps (A6 cmd addr16 len16 data crc16-xmodem).
 
-Fault injection ($FAKE_RADIO_DIR/faults.json, consumed once each):
+Also models the 2 MiB SPI flash in nor.bin: channel read/write (32-byte slots 0..999 below 0x8000),
+VFO (0x8000, 64 bytes) and the raw read 'D' (64-byte chunks, addr*64) over the whole chip. The logo
+(0xC0000) and settings (0x9000) overlay their own files. Every command is appended to log.txt:
+"R/W/D <addr>" so tests can assert exactly what a tool touched (e.g. calibration at 0xF000 is never written).
+
+Fault injection ($FAKE_RADIO_DIR/faults.json, consumed once each unless noted):
+  {"corrupt_channel_write": true}   flip one byte of the next channel write
+  {"die_after_channel_writes": N}   (persistent) stop answering after N channel writes: a pulled cable
   {"corrupt_logo_write": true}      flip one byte of the next full logo write
   {"corrupt_settings_write": true}  flip one byte of the next settings write
   {"silent": true}                  never answer the handshake
@@ -18,6 +25,7 @@ import json, os, struct
 HEADER, ACK, ERR = 0xA6, 0x06, 0xEE
 READ_LOGO, WRITE_LOGO, END, READ, WRITE = 0x4C, 0x6C, 0x45, 0x52, 0x57
 LOGO_SIZE, SETTINGS_ADDR, SETTINGS_BYTES = 160 * 128 * 2, 0x9000, 168
+READ_RAW, NOR_SIZE, LOGO_ADDR, VFO_ADDR, CHAN_SIZE, MAX_CHAN = 0x44, 2 * 1024 * 1024, 0xC0000, 0x8000, 32, 999
 HANDSHAKE = b"PROGRAMBF-5RH"
 
 
@@ -63,6 +71,8 @@ class Serial:
         self._tx = bytearray()   # bytes the host wrote
         self.logo = bytearray(_load("logo.bin", b"\x00" * LOGO_SIZE))
         self.settings = bytearray(_load("settings.bin", bytes(range(SETTINGS_BYTES))))
+        self.nor = bytearray(_load("nor.bin", b"\xff" * NOR_SIZE))
+        self.chan_writes = 0
         self.log = os.path.join(_dir(), "log.txt")
 
     def _note(self, s):
@@ -71,6 +81,7 @@ class Serial:
     def _persist(self):
         open(os.path.join(_dir(), "logo.bin"), "wb").write(self.logo)
         open(os.path.join(_dir(), "settings.bin"), "wb").write(self.settings)
+        open(os.path.join(_dir(), "nor.bin"), "wb").write(self.nor)
 
     def reset_input_buffer(self):
         self._rx.clear()
@@ -113,6 +124,38 @@ class Serial:
             self._handle(cmd, addr, data)
 
     def _handle(self, cmd, addr, data):
+        n = _faults().get("die_after_channel_writes")
+        if n is not None and self.chan_writes >= n:
+            self._note("fault: radio went silent (cable pulled)")
+            return
+        if cmd in (READ, WRITE, READ_RAW):
+            self._note(f"{chr(cmd)} {addr:#x}" if cmd != READ_RAW else f"D {addr * 64:#x}")
+        if cmd == READ_RAW:
+            a = addr * 64
+            if a + 64 > NOR_SIZE:
+                return self._reply(ERR, addr, b"\x02")
+            chunk = bytearray(self.nor[a:a + 64])
+            for base, blob in ((SETTINGS_ADDR, self.settings), (LOGO_ADDR, self.logo)):
+                lo, hi = max(a, base), min(a + 64, base + len(blob))
+                if lo < hi:  # overlay the part of the chunk covered by that region
+                    chunk[lo - a:hi - a] = blob[lo - base:hi - base]
+            return self._reply(cmd, addr, bytes(chunk))
+        if cmd == READ and addr < VFO_ADDR and addr % CHAN_SIZE == 0 and addr // CHAN_SIZE <= MAX_CHAN:
+            return self._reply(cmd, addr, bytes(self.nor[addr:addr + CHAN_SIZE]))
+        if cmd == READ and addr == VFO_ADDR:
+            return self._reply(cmd, addr, bytes(self.nor[addr:addr + 64]))
+        if cmd == WRITE and addr < VFO_ADDR:
+            if addr % CHAN_SIZE or len(data) != CHAN_SIZE or addr // CHAN_SIZE > MAX_CHAN:
+                return self._reply(ERR, addr, b"\x02")
+            blk = bytearray(data)
+            if _faults().get("corrupt_channel_write"):
+                blk[5] ^= 0xFF
+                _clear_fault("corrupt_channel_write")
+                self._note("fault: corrupted channel write")
+            self.nor[addr:addr + CHAN_SIZE] = blk
+            self.chan_writes += 1
+            self._persist()
+            return self._reply(cmd, addr)
         if cmd == READ_LOGO:
             self._reply(cmd, addr, bytes(self.logo[addr:addr + 512]))
         elif cmd == WRITE_LOGO:

@@ -46,7 +46,7 @@ For the examples below, replace `/dev/cu.usbserial-XXXX` with your actual device
 4. Turn off the radio. **If the screen says anything else, STOP. Do not flash.**
 
 ### Step B: Read & Backup Factory Memory (Point of No Return)
-While this tool cannot dump the factory executable ROM (due to MCU read protection), it **does** dump your calibration data, serial records, and factory channel mapping:
+This tool cannot dump the factory executable ROM (MCU read protection). It reads the channel table, VFO, radio info and DTMF areas (`0x0000-0x8040`, `0x9000`, `0xA000`, `0xD000`). **It does not include the calibration page (`0xF000-0xF260`)**; an earlier version of this document claimed it did. See [FIRST-FLASH-RUNBOOK.md](docs/FIRST-FLASH-RUNBOOK.md):
 
 1. Turn on the radio normally and leave it on the main frequency display.
 2. Connect the programming cable securely (ensure the 2-pin K-plug is pushed in all the way until it clicks).
@@ -78,7 +78,7 @@ You should receive a clean handshake acknowledgment.
 ### Step C: Flash the Firmware Image
 Execute the flash script with the expected SHA256 checksum:
 ```bash
-python3 source-changes/flash_bf.py UV-5RM_Custom_Firmware.BF /dev/cu.usbserial-XXXX 4340f205430f0741
+python3 source-changes/flash_bf.py UV-5RM_Custom_Firmware.BF /dev/cu.usbserial-XXXX 4340f205430f0741 --board 5RHNRFB-YP07 --variant default
 ```
 * **Duration:** ~45 seconds.
 * **Caution:** Do not touch the radio or bump the cable during this process.
