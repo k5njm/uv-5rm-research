@@ -42,3 +42,6 @@ venv/
 *.swp
 *.swo
 *~
+*-backup.bin
+*-backup.rgb565
+backup.bin

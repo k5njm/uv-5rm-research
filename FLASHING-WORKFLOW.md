@@ -121,3 +121,22 @@ Once the radio reboots to its main screen:
    - Launch Google Chrome or Microsoft Edge on your Mac.
    - Open `firmware/UV-5RM_Channel_Uploader.html` in your browser.
    - Click **Connect Radio**, select your USB serial adapter, and configure your preferred frequency channels.
+
+---
+
+## 6. Boot Logo and Start-up Tune Tools (from upstream PR #2)
+
+Imported from [UV-5RM-Radio-Mod#2](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod/pull/2) (not yet merged upstream). Needs `pip install pyserial pillow`.
+
+```bash
+# convert locally, no radio involved
+python3 source-changes/set_boot_logo.py preview photo.png --preview preview.png --fit contain
+# upload: backs up the current logo first, verifies by full readback, auto-restores on mismatch
+python3 source-changes/set_boot_logo.py upload /dev/cu.usbserial-XXXX photo.png my-backup/logo-backup.rgb565 --preview preview.png
+# restore a saved logo
+python3 source-changes/set_boot_logo.py restore /dev/cu.usbserial-XXXX my-backup/logo-backup.rgb565
+# tune presets: doom (default) or mario
+python3 source-changes/set_boot_tune.py /dev/cu.usbserial-XXXX my-backup/boot-tune-before.bin mario
+```
+
+Not imported: the PR's Zelda/Ocarina of Time logos and Zelda/Song of Storms melodies (third-party trademarks and copyrighted music in a GPL repo). Neither script has been run against hardware from this repo, and the PR's code has only been syntax-checked and read here.
