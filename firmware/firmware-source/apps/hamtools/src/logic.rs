@@ -24,14 +24,6 @@ const KEY_UP: u8 = 14;
 const KEY_DOWN: u8 = 15;
 const KEY_AB: u8 = 17;
 
-const BLACK: u16 = 0x0000;
-const WHITE: u16 = 0xFFFF;
-const GRAY: u16 = 0x8410;
-const TITLE_BG: u16 = 0x5800;
-const CYAN: u16 = 0x07FF;
-const YELLOW: u16 = 0xFFE0;
-const GREEN: u16 = 0x07E0;
-const RED: u16 = 0xF800;
 
 const TICKS_PER_S: u32 = 10_000; // uptime and Tick dt are in 100 us units
 const ID_DEFAULT_S: u32 = 600; // FCC 97.119: every 10 minutes
@@ -209,6 +201,100 @@ fn next(t: Tool) -> Tool {
     }
 }
 
+// ------------------------------------------------------------------- styles
+//
+// One visual style is compiled in (cargo feature), so a build carries only what was chosen.
+// Palettes and the two layout switches below are the whole difference between styles.
+
+#[cfg(any(
+    all(feature = "style-d74", feature = "style-proxx"),
+    all(feature = "style-d74", feature = "style-ft5d"),
+    all(feature = "style-proxx", feature = "style-ft5d")
+))]
+compile_error!("enable at most one style-* feature");
+
+/// Default: the mod's black and red.
+#[cfg(not(any(feature = "style-d74", feature = "style-proxx", feature = "style-ft5d")))]
+mod style {
+    pub const NAME: &[u8] = b"classic";
+    pub const BG: u16 = 0x0000;
+    pub const FG: u16 = 0xFFFF;
+    pub const DIM: u16 = 0x8410;
+    pub const HEAD_BG: u16 = 0x5800;
+    pub const HEAD_FG: u16 = 0xFFFF;
+    pub const OK: u16 = 0x07E0;
+    pub const WARN: u16 = 0xFFE0;
+    pub const ALERT: u16 = 0xF800;
+    pub const VALUE: u16 = 0xFFE0;
+    pub const ACCENT: u16 = 0x07FF;
+    pub const RULE: u16 = 0x8410;
+    pub const HEAD_RULE: u16 = 0x0000; // invisible: keeps the original look
+    pub const TABS: bool = false;
+    pub const SOFTKEYS: bool = false;
+}
+
+/// Inspired by the Kenwood TH-D74: black, dense, colour-coded labels, thin green rules.
+#[cfg(feature = "style-d74")]
+mod style {
+    pub const NAME: &[u8] = b"d74";
+    pub const BG: u16 = 0x0000;
+    pub const FG: u16 = 0xFFFF;
+    pub const DIM: u16 = 0x7BEF;
+    pub const HEAD_BG: u16 = 0x0000;
+    pub const HEAD_FG: u16 = 0x07E0;
+    pub const OK: u16 = 0x07E0;
+    pub const WARN: u16 = 0xFFE0;
+    pub const ALERT: u16 = 0xF800;
+    pub const VALUE: u16 = 0xFFFF;
+    pub const ACCENT: u16 = 0x07FF;
+    pub const RULE: u16 = 0x0320;
+    pub const HEAD_RULE: u16 = 0x0320;
+    pub const TABS: bool = false;
+    pub const SOFTKEYS: bool = false;
+}
+
+/// Inspired by the Yaesu Pro-X: light screen, tab strip like its tile menu, blue selection.
+#[cfg(feature = "style-proxx")]
+mod style {
+    pub const NAME: &[u8] = b"proxx";
+    pub const BG: u16 = 0xFFFF;
+    pub const FG: u16 = 0x0000;
+    pub const DIM: u16 = 0x7BEF;
+    pub const HEAD_BG: u16 = 0xC618;
+    pub const HEAD_FG: u16 = 0x0000;
+    pub const OK: u16 = 0x0400;
+    pub const WARN: u16 = 0xC400;
+    pub const ALERT: u16 = 0xF800;
+    pub const VALUE: u16 = 0x0000;
+    pub const ACCENT: u16 = 0x001F;
+    pub const RULE: u16 = 0xC618;
+    pub const HEAD_RULE: u16 = 0xC618;
+    pub const TABS: bool = true;
+    pub const SOFTKEYS: bool = false;
+}
+
+/// Inspired by the Yaesu FT-5D: black, huge digits, red/blue tags, soft-key boxes along the bottom.
+#[cfg(feature = "style-ft5d")]
+mod style {
+    pub const NAME: &[u8] = b"ft5d";
+    pub const BG: u16 = 0x0000;
+    pub const FG: u16 = 0xFFFF;
+    pub const DIM: u16 = 0x8410;
+    pub const HEAD_BG: u16 = 0x0000;
+    pub const HEAD_FG: u16 = 0xFFFF;
+    pub const OK: u16 = 0x041F;
+    pub const WARN: u16 = 0xFFE0;
+    pub const ALERT: u16 = 0xF800;
+    pub const VALUE: u16 = 0xFFFF;
+    pub const ACCENT: u16 = 0xF800;
+    pub const RULE: u16 = 0x4208;
+    pub const HEAD_RULE: u16 = 0x4208;
+    pub const TABS: bool = false;
+    pub const SOFTKEYS: bool = true;
+}
+
+use style as st;
+
 // ----------------------------------------------------------------- drawing
 
 fn text(api: &Api, x: i16, y: i16, s: &[u8], fg: u16, bg: u16, font: u8) -> i16 {
@@ -228,120 +314,166 @@ fn dec(buf: &mut [u8; 12], mut v: u32) -> usize {
     }
 }
 
-fn title(api: &Api, name: &[u8], bg: u16) {
-    (api.fill_rect)(0, 0, 160, 14, bg);
-    text(api, 6, 2, name, WHITE, bg, 1);
+const TOOL_NAMES: [&[u8]; 4] = [b"ID TIMER", b"STOPWATCH", b"WAVELENGTH", b"GRID LOCATOR"];
+const TAB_LABELS: [&[u8]; 4] = [b"ID", b"WATCH", b"WAVE", b"GRID"];
+
+fn index(t: Tool) -> usize {
+    match t {
+        Tool::Id => 0,
+        Tool::Watch => 1,
+        Tool::Wave => 2,
+        Tool::Grid => 3,
+    }
 }
 
-fn footer(api: &Api, s: &State, hint: &[u8]) {
-    (api.draw_line)(0, 106, 160, 106, GRAY);
-    if !s.note.is_empty() {
-        text(api, 4, 110, s.note, YELLOW, BLACK, 0);
+/// Header: title bar (flashes `alert_bg` when `alert`), or a tab strip in tab styles.
+fn head(api: &Api, s: &State, alert: bool) {
+    let i = index(s.tool);
+    if st::TABS {
+        (api.fill_rect)(0, 0, 160, 14, st::HEAD_BG);
+        for (n, label) in TAB_LABELS.iter().enumerate() {
+            let x = n as i16 * 40;
+            let on = n == i;
+            let bg = if alert && on { st::ALERT } else if on { st::ACCENT } else { st::HEAD_BG };
+            (api.fill_rect)(x + 1, 1, 38, 12, bg);
+            text(api, x + 4, 3, label, if on { 0xFFFF } else { st::HEAD_FG }, bg, 0);
+        }
+        (api.draw_line)(0, 14, 160, 14, st::HEAD_RULE);
+        return;
     }
-    text(api, 4, 120, hint, GRAY, BLACK, 0);
+    let bg = if alert { st::ALERT } else { st::HEAD_BG };
+    (api.fill_rect)(0, 0, 160, 14, bg);
+    let name: &[u8] = if alert && s.tool == Tool::Id { b"ID NOW" } else { TOOL_NAMES[i] };
+    text(api, 6, 2, name, st::HEAD_FG, bg, 1);
+    (api.draw_line)(0, 14, 160, 14, st::HEAD_RULE);
+}
+
+const SOFT: [[&[u8]; 3]; 4] = [
+    [b"IDed", b"ARM", b"TIME"],
+    [b"GO/STOP", b"LAP", b"RESET"],
+    [b"", b"CLEAR", b"A/B"],
+    [b"", b"", b"A/B"],
+];
+
+fn foot(api: &Api, s: &State, hint: &[u8]) {
+    if st::SOFTKEYS {
+        if !s.note.is_empty() {
+            text(api, 4, 92, s.note, st::WARN, st::BG, 0);
+        }
+        let labels = SOFT[index(s.tool)];
+        for (n, l) in labels.iter().enumerate() {
+            let x = 2 + n as i16 * 52;
+            (api.fill_rect)(x, 104, 50, 22, 0x2104);
+            (api.draw_line)(x, 104, x + 49, 104, st::DIM);
+            text(api, x + 4, 111, l, st::FG, 0x2104, 0);
+        }
+        return;
+    }
+    (api.draw_line)(0, 106, 160, 106, st::RULE);
+    if !s.note.is_empty() {
+        text(api, 4, 110, s.note, st::WARN, st::BG, 0);
+    }
+    text(api, 4, 120, hint, st::DIM, st::BG, 0);
 }
 
 fn draw_id(api: &Api, s: &State) {
     let due = s.id.due();
     let flash = due && (s.clock / (TICKS_PER_S / 2)) % 2 == 0;
-    title(api, if due { b"ID NOW" } else { b"ID TIMER" }, if flash { RED } else { TITLE_BG });
+    head(api, s, flash);
     let mut t = [0u8; 5];
     let n = fmt_mmss(s.id.display_s(), &mut t);
-    let colour = if due { RED } else if s.id.armed { GREEN } else { GRAY };
-    text(api, 38, 34, if due { b"+" } else { b" " }, colour, BLACK, 2);
-    text(api, 47, 34, &t[..n], colour, BLACK, 2);
-    let mut b = [0u8; 12];
+    let colour = if due { st::ALERT } else if s.id.armed { st::OK } else { st::DIM };
+    text(api, 38, 34, if due { b"+" } else { b" " }, colour, st::BG, 2);
+    text(api, 47, 34, &t[..n], colour, st::BG, 2);
     let mut m = [0u8; 5];
     fmt_mmss(s.id.interval_s, &mut m);
-    let i = dec(&mut b, 0);
-    let _ = i;
-    text(api, 4, 62, b"EVERY", GRAY, BLACK, 0);
-    text(api, 40, 62, &m, WHITE, BLACK, 0);
-    text(api, 4, 74, if s.id.armed { b"ARMED " } else { b"OFF   " }, colour, BLACK, 1);
+    text(api, 4, 62, b"EVERY", st::DIM, st::BG, 0);
+    text(api, 40, 62, &m, st::FG, st::BG, 0);
+    text(api, 4, 74, if s.id.armed { b"ARMED " } else { b"OFF   " }, colour, st::BG, 1);
     if due {
-        text(api, 4, 90, b"SAY YOUR CALLSIGN", YELLOW, BLACK, 0);
+        text(api, 4, 90, b"SAY YOUR CALLSIGN", st::WARN, st::BG, 0);
     }
-    footer(api, s, b"MENU:IDed *:ARM UP/DN:TIME");
+    foot(api, s, b"MENU:IDed *:ARM UP/DN:TIME");
 }
 
 fn draw_watch(api: &Api, s: &State) {
-    title(api, b"STOPWATCH", TITLE_BG);
+    head(api, s, false);
     let tenths = s.sw.elapsed / 1000;
     let mut t = [0u8; 5];
     let n = fmt_mmss(tenths / 10, &mut t);
-    let x = text(api, 24, 22, &t[..n], if s.sw.running { GREEN } else { WHITE }, BLACK, 2);
-    text(api, x, 22, b".", WHITE, BLACK, 2);
-    text(api, x + 9, 22, &[b'0' + (tenths % 10) as u8], WHITE, BLACK, 2);
+    let x = text(api, 24, 22, &t[..n], if s.sw.running { st::OK } else { st::FG }, st::BG, 2);
+    text(api, x, 22, b".", st::FG, st::BG, 2);
+    text(api, x + 9, 22, &[b'0' + (tenths % 10) as u8], st::FG, st::BG, 2);
     for i in 0..s.sw.lap_count {
         let l = s.sw.laps[i] / 1000;
         let mut lt = [0u8; 5];
         let ln = fmt_mmss(l / 10, &mut lt);
         let y = 48 + 12 * i as i16;
-        text(api, 6, y, &[b'1' + i as u8], GRAY, BLACK, 0);
-        let nx = text(api, 18, y, &lt[..ln], CYAN, BLACK, 1);
-        text(api, nx, y, &[b'.', b'0' + (l % 10) as u8], CYAN, BLACK, 1);
+        text(api, 6, y, &[b'1' + i as u8], st::DIM, st::BG, 0);
+        let nx = text(api, 18, y, &lt[..ln], st::ACCENT, st::BG, 1);
+        text(api, nx, y, &[b'.', b'0' + (l % 10) as u8], st::ACCENT, st::BG, 1);
     }
-    footer(api, s, b"MENU:GO/STOP *:LAP 0:RESET");
+    foot(api, s, b"MENU:GO/STOP *:LAP 0:RESET");
 }
 
 fn draw_wave(api: &Api, s: &State) {
-    title(api, b"WAVELENGTH", TITLE_BG);
+    head(api, s, false);
     let mhz = s.khz / 1000;
     let frac = s.khz % 1000;
     let mut b = [0u8; 12];
     let i = dec(&mut b, mhz);
-    let x = text(api, 6, 20, &b[i..], YELLOW, BLACK, 2);
-    let x = text(api, x, 20, b".", YELLOW, BLACK, 2);
+    let x = text(api, 6, 20, &b[i..], st::VALUE, st::BG, 2);
+    let x = text(api, x, 20, b".", st::VALUE, st::BG, 2);
     let f = [b'0' + (frac / 100) as u8, b'0' + (frac / 10 % 10) as u8, b'0' + (frac % 10) as u8];
-    let x = text(api, x, 20, &f, YELLOW, BLACK, 2);
-    text(api, x + 3, 26, b"MHz", GRAY, BLACK, 0);
+    let x = text(api, x, 20, &f, st::VALUE, st::BG, 2);
+    text(api, x + 3, 26, b"MHz", st::DIM, st::BG, 0);
     let lam = wavelength_mm(s.khz);
     rows(api, 46, b"FULL", lam);
     rows(api, 60, b"1/2", lam / 2);
     rows(api, 74, b"1/4", lam / 4);
     rows(api, 88, b"1/4 VF95", lam / 4 * VELOCITY_FACTOR_PCT / 100);
-    footer(api, s, b"DIGITS:kHz  *:CLEAR");
+    foot(api, s, b"DIGITS:kHz  *:CLEAR");
 }
 
 /// One row: label, cm with one decimal, inches with one decimal. At 100 m and above (below
 /// roughly 3 MHz) it switches to metres alone, so a long wavelength never runs off the screen.
 fn rows(api: &Api, y: i16, label: &[u8], mm: u32) {
-    text(api, 4, y, label, GRAY, BLACK, 0);
+    text(api, 4, y, label, st::DIM, st::BG, 0);
     let mut b = [0u8; 12];
     if mm >= LONG_WAVE_MM {
         let i = dec(&mut b, mm / 1000);
-        let x = text(api, 50, y, &b[i..], WHITE, BLACK, 1);
-        let x = text(api, x, y, &[b'.', b'0' + (mm / 100 % 10) as u8], WHITE, BLACK, 1);
-        text(api, x, y, b"m", GRAY, BLACK, 0);
+        let x = text(api, 50, y, &b[i..], st::FG, st::BG, 1);
+        let x = text(api, x, y, &[b'.', b'0' + (mm / 100 % 10) as u8], st::FG, st::BG, 1);
+        text(api, x, y, b"m", st::DIM, st::BG, 0);
         return;
     }
     let i = dec(&mut b, mm / 10);
-    let x = text(api, 50, y, &b[i..], WHITE, BLACK, 1);
-    let x = text(api, x, y, &[b'.', b'0' + (mm % 10) as u8], WHITE, BLACK, 1);
-    text(api, x, y, b"cm", GRAY, BLACK, 0);
+    let x = text(api, 50, y, &b[i..], st::FG, st::BG, 1);
+    let x = text(api, x, y, &[b'.', b'0' + (mm % 10) as u8], st::FG, st::BG, 1);
+    text(api, x, y, b"cm", st::DIM, st::BG, 0);
     let inch_tenths = mm * 100 / 254;
     let mut c = [0u8; 12];
     let j = dec(&mut c, inch_tenths / 10);
-    let x = text(api, 110, y, &c[j..], CYAN, BLACK, 1);
-    text(api, x, y, &[b'.', b'0' + (inch_tenths % 10) as u8], CYAN, BLACK, 1);
+    let x = text(api, 110, y, &c[j..], st::ACCENT, st::BG, 1);
+    text(api, x, y, &[b'.', b'0' + (inch_tenths % 10) as u8], st::ACCENT, st::BG, 1);
 }
 
 fn draw_grid(api: &Api, s: &State) {
-    title(api, b"GRID LOCATOR", TITLE_BG);
+    head(api, s, false);
     let lat = (api.settings_get)(5) as i32;
     let lon = (api.settings_get)(6) as i32;
     if lat == SETTING_COORD_NOT_SET || lon == SETTING_COORD_NOT_SET {
-        text(api, 12, 50, b"NO POSITION SET", YELLOW, BLACK, 1);
-        text(api, 12, 66, b"ENTER IT IN SETTINGS", GRAY, BLACK, 0);
+        text(api, 12, 50, b"NO POSITION SET", st::WARN, st::BG, 1);
+        text(api, 12, 66, b"ENTER IT IN SETTINGS", st::DIM, st::BG, 0);
     } else {
         let g = grid_locator(lat, lon);
-        text(api, 30, 40, &g, GREEN, BLACK, 2);
+        text(api, 30, 40, &g, st::OK, st::BG, 2);
     }
-    footer(api, s, b"A/B:NEXT TOOL");
+    foot(api, s, b"A/B:NEXT TOOL");
 }
 
 fn draw(api: &Api, s: &State) {
-    (api.fill_rect)(0, 0, 160, 128, BLACK);
+    (api.fill_rect)(0, 0, 160, 128, st::BG);
     match s.tool {
         Tool::Id => draw_id(api, s),
         Tool::Watch => draw_watch(api, s),

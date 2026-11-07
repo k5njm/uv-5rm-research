@@ -10,6 +10,11 @@ name = "hamtools"
 test = false
 bench = false
 
+[features]
+style-d74 = []
+style-proxx = []
+style-ft5d = []
+
 [dependencies]
 bf5rh-abi = { path = "../../abi" }
 

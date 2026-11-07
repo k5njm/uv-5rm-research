@@ -102,9 +102,11 @@ def cargo_build(app_dir: Path, bin_name: str) -> Path:
     print(f"[..] {app_dir.name}: cargo build --release")
     touch_if_stale_linker_script(app_dir, elf_path(app_dir))
     full_env = {**os.environ, "RUSTFLAGS": APP_RUSTFLAGS}
-    subprocess.run(
-        ["cargo", "build", "--release"], cwd=app_dir, env=full_env, check=True
-    )
+    cmd = ["cargo", "build", "--release"]
+    features = os.environ.get("MKAPP_FEATURES")  # e.g. MKAPP_FEATURES=style-d74
+    if features:
+        cmd += ["--features", features]
+    subprocess.run(cmd, cwd=app_dir, env=full_env, check=True)
     elf = app_dir / "target" / "thumbv7em-none-eabi" / "release" / bin_name
     if not elf.exists():
         sys.exit(f"[ERR] No elf generated: {elf}")

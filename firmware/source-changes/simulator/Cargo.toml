@@ -9,6 +9,11 @@ edition = "2021"
 name = "sim"
 path = "main.rs"
 
+[features]
+style-d74 = []
+style-proxx = []
+style-ft5d = []
+
 [dependencies]
 bf5rh-abi = { path = "../../firmware-source/abi" }
 embedded-graphics = "0.8"

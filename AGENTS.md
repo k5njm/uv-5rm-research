@@ -13,6 +13,7 @@ Conventions for this repo (borrowed from the sibling `beepy-ui` project's workfl
   (`cargo test --release` in the simulator crate runs them).
 - Every new app: `#[path]` module in the simulator, an entry in `scenario.rs::lookup`, scenarios, **look at the PNG frames**
   before `run_scenarios.sh --update`.
+- Visual styles are cargo features (`style-d74|proxx|ft5d`, default classic) of an app; build with `MKAPP_FEATURES=style-d74 mkapp.py ...`; each style has its own golden dir. Classic must stay pixel-identical unless intentionally changed.
 - Receive-only apps must never call `api.tone_on` (it keys the transmitter) or key PTT. Scenarios enforce this.
 - App arena is 8,192 bytes; core firmware has ~88 bytes of flash free: new features are overlay apps.
 - Build overlays with `firmware/firmware-source/tools/mkapp.py` (needs `rust-objcopy`, `rust-nm`, `rust-size` on PATH; llvm-* symlinks work).

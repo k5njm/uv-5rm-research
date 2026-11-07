@@ -7,6 +7,7 @@ Runs the real app code (`logic.rs`) against a simulated radio, no hardware neede
 | `cargo run --release -- OUTDIR ../../skull_logo.rgb565` | the original built-in test suite (324 checks) |
 | `cargo test --release` | unit tests inside app `logic.rs` files (e.g. `hamtools`) |
 | `./run_scenarios.sh` | every `tests/scenarios/*.txt` against `tests/golden/` frames |
+| `STYLE=d74 ./run_scenarios.sh` | same scenarios for another visual style (`d74`, `proxx`, `ft5d`) against `tests/golden-<style>` |
 | `./run_scenarios.sh --update` | rewrite goldens after an intentional UI change; **look at the PNGs first** |
 
 A scenario is a text file of steps (`app`, `key`, `hold`, `wait`, `shot`, `expect`, `coords`; see the

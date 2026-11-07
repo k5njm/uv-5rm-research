@@ -18,7 +18,10 @@ jobs:
         run: cargo test --release
       - name: Scenario + golden-frame tests
         working-directory: firmware/source-changes/simulator
-        run: OUT=/tmp/scenario-frames ./run_scenarios.sh
+        run: |
+          export OUT=/tmp/scenario-frames
+          ./run_scenarios.sh
+          for st in d74 proxx ft5d; do STYLE=$st ./run_scenarios.sh; done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -34,7 +37,10 @@ jobs:
           sudo apt-get install -y llvm >/dev/null
           mkdir -p /tmp/shim /tmp/out
           for t in objcopy nm size; do ln -sf "$(command -v llvm-$t || command -v llvm-$t-*)" /tmp/shim/rust-$t; done
-          PATH=/tmp/shim:$PATH python3 tools/mkapp.py apps/hamtools --name "HAM TOOLS" -o /tmp/out/hamtools.app
+          for st in classic d74 proxx ft5d; do
+            f=""; [ $st != classic ] && f="style-$st"
+            MKAPP_FEATURES=$f PATH=/tmp/shim:$PATH python3 tools/mkapp.py apps/hamtools --name "HAM TOOLS" -o /tmp/out/hamtools-$st.app
+          done
       - name: Core firmware builds and fits 60 KB
         working-directory: firmware/firmware-source
         run: |
