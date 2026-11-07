@@ -41,8 +41,15 @@ const REG_RXAGC_6: u8 = 0x49;
 
 const REG_AGC_MODE: u8 = 0x7E;
 const AGC_INDEX_BY_RANK: [u16; 8] = [3, 2, 1, 0, 7, 6, 5, 4];
+#[cfg(not(feature = "bk4819"))]
 const RXAGC_5_FM: u16 = 0x0210;
+#[cfg(not(feature = "bk4819"))]
 const RXAGC_6_FM: u16 = 0x2AB2;
+/// Baofeng's 5RH BK stock (V0.14) init values for REG_14/REG_49.
+#[cfg(feature = "bk4819")]
+const RXAGC_5_FM: u16 = 0x0019;
+#[cfg(feature = "bk4819")]
+const RXAGC_6_FM: u16 = 0x2A38;
 const RXAGC_5_AM: u16 = RXAGC_5_FM;
 const RXAGC_6_AM: u16 = RXAGC_6_FM;
 const REG_RSSI_TABLE_LO: u8 = 0x7B;
@@ -494,8 +501,15 @@ const XTAL_ADJUST_ZERO_POINT: u8 = 8;
 
 /// BK4829's init-time REG_37 words. Both bit15+bit4 set relative to
 /// BK4819's `0x1D0F`/`0x1F0F`.
+#[cfg(not(feature = "bk4819"))]
 const POWER_UP_VALUE: u16 = 0x9D1F;
+#[cfg(not(feature = "bk4819"))]
 const POWER_RX_VALUE: u16 = 0x9F1F;
+/// BK4819's own REG_37 words, as Baofeng's BK stock writes them.
+#[cfg(feature = "bk4819")]
+const POWER_UP_VALUE: u16 = 0x1D0F;
+#[cfg(feature = "bk4819")]
+const POWER_RX_VALUE: u16 = 0x1F0F;
 /// REG_POWER (0x37) value for RX duty-cycle power-save: same base as
 /// `POWER_UP_VALUE` but with the low nibble (xtal-osc enable + bandgap-ref
 /// enable) cleared
@@ -609,6 +623,20 @@ impl<'a> Fd6818<'a> {
             PA_GAIN_UHF
         } else {
             PA_GAIN_VHF
+        };
+        let value = ((self.pa_target as u16) << 8) | gain;
+        self.write_reg(syst, REG_PA, value);
+    }
+
+    /// BK board: Baofeng's BK stock gain word (`{High 0xFF, Low 0xD7,
+    /// Mid 0xFF}`, Low backed off to 0xC3 inside 155-175MHz), the one the
+    /// factory APC calibration was taken with.
+    #[cfg(feature = "bk4819")]
+    pub fn pa_enable_at(&mut self, syst: &mut SYST, power: Power, tx_hz: u32) {
+        let gain = match power {
+            Power::Low if (155_000_000..175_000_000).contains(&tx_hz) => 0xC3,
+            Power::Low => 0xD7,
+            _ => 0xFF,
         };
         let value = ((self.pa_target as u16) << 8) | gain;
         self.write_reg(syst, REG_PA, value);
@@ -1646,18 +1674,37 @@ impl<'a> Fd6818<'a> {
         self.write_reg(syst, REG_PA, PA_OFF_VALUE);
 
         // RX AGC
-        self.write_reg(syst, REG_RXAGC_1, 0x03DF);
-        self.write_reg(syst, REG_RXAGC_2, 0x03DB);
-        self.write_reg(syst, REG_RXAGC_3, 0x033A);
-        self.write_reg(syst, REG_RXAGC_4, 0x0318);
+        #[cfg(not(feature = "bk4819"))]
+        {
+            self.write_reg(syst, REG_RXAGC_1, 0x03DF);
+            self.write_reg(syst, REG_RXAGC_2, 0x03DB);
+            self.write_reg(syst, REG_RXAGC_3, 0x033A);
+            self.write_reg(syst, REG_RXAGC_4, 0x0318);
+        }
+        #[cfg(feature = "bk4819")]
+        {
+            self.write_reg(syst, REG_RXAGC_1, 0x03BE);
+            self.write_reg(syst, REG_RXAGC_2, 0x037B);
+            self.write_reg(syst, REG_RXAGC_3, 0x027B);
+            self.write_reg(syst, REG_RXAGC_4, 0x007A);
+        }
         self.write_reg(syst, REG_RXAGC_5, RXAGC_5_FM);
         self.write_reg(syst, REG_RXAGC_6, RXAGC_6_FM);
+        #[cfg(not(feature = "bk4819"))]
         self.write_reg(syst, REG_RSSI_TABLE_LO, 0x73DC);
+        #[cfg(feature = "bk4819")]
+        self.write_reg(syst, REG_RSSI_TABLE_LO, 0x8420);
 
         // PA bias output: low nibble 0x1 ~= 1.4V
         self.write_reg(syst, REG_PA_BIAS, 0x1041);
 
+        #[cfg(not(feature = "bk4819"))]
         self.write_reg(syst, REG_2A, 0x6600);
+        #[cfg(feature = "bk4819")]
+        {
+            self.write_reg(syst, REG_2A, 0x4F18);
+            self.write_reg(syst, 0x21, 0x06D8);
+        }
 
         // DTMF Goertzel coefficient table (decoder itself not implemented yet)
         for &value in DTMF_COEF_TABLE.iter() {
@@ -1676,30 +1723,45 @@ impl<'a> Fd6818<'a> {
         self.write_reg(syst, REG_MIC_SENS, MIC_SENS_VALUE);
         self.write_reg(syst, REG_VOLUME, 0x33A8);
 
-        self.write_reg(syst, REG_PLL_VCO_BIAS, 0xC65A);
-        self.write_reg(syst, REG_FIXED_3E, 0x94C6);
-        self.write_reg(syst, REG_ANTI_SPUR, 0x88EF);
-        self.write_reg(syst, REG_OOB_NOISE, 0x2F2E); // unverified for BK4829
-        self.write_reg(syst, REG_DISTORTION, 0x13A0); // unverified for BK4829
+        #[cfg(not(feature = "bk4819"))]
+        {
+            self.write_reg(syst, REG_PLL_VCO_BIAS, 0xC65A);
+            self.write_reg(syst, REG_FIXED_3E, 0x94C6);
+            self.write_reg(syst, REG_ANTI_SPUR, 0x88EF);
+            self.write_reg(syst, REG_OOB_NOISE, 0x2F2E); // unverified for BK4829
+            self.write_reg(syst, REG_DISTORTION, 0x13A0); // unverified for BK4829
 
-        self.write_reg(syst, REG_AFC_DISABLE, 0x4691);
+            self.write_reg(syst, REG_AFC_DISABLE, 0x4691);
 
-        self.write_reg(syst, 0x1C, 0x07C0);
-        self.write_reg(syst, 0x1D, 0xE555);
-        self.write_reg(syst, 0x1E, 0x4C58);
-        self.write_reg(syst, 0x28, 0x0B40);
-        self.write_reg(syst, 0x29, 0xAA00);
-        self.write_reg(syst, 0x2C, 0x1822);
-        self.write_reg(syst, 0x2F, 0x9890);
-        self.write_reg(syst, 0x53, 0x2028);
-        self.write_reg(syst, 0x7E, 0x303E);
-        self.write_reg(syst, 0x46, 0x600A);
-        self.write_reg(syst, 0x4A, 0x5430);
+            self.write_reg(syst, 0x1C, 0x07C0);
+            self.write_reg(syst, 0x1D, 0xE555);
+            self.write_reg(syst, 0x1E, 0x4C58);
+            self.write_reg(syst, 0x28, 0x0B40);
+            self.write_reg(syst, 0x29, 0xAA00);
+            self.write_reg(syst, 0x2C, 0x1822);
+            self.write_reg(syst, 0x2F, 0x9890);
+            self.write_reg(syst, 0x53, 0x2028);
+            self.write_reg(syst, 0x7E, 0x303E);
+            self.write_reg(syst, 0x46, 0x600A);
+            self.write_reg(syst, 0x4A, 0x5430);
+        }
+        // Baofeng 5RH BK stock V0.14 tail; it never writes the BK4829-only
+        // registers above, so they stay at BK4819 reset values.
+        #[cfg(feature = "bk4819")]
+        {
+            self.write_reg(syst, REG_PLL_VCO_BIAS, 0x5454);
+            self.write_reg(syst, REG_FIXED_3E, 0xA037);
+            self.write_reg(syst, REG_ANTI_SPUR, 0x88EF);
+            self.write_reg(syst, REG_OOB_NOISE, 0x3732);
+            self.write_reg(syst, REG_DISTORTION, 0x13A0);
+        }
 
         self.write_reg(syst, REG_SUBAUDIO_FREQ, 0x61CE);
 
-        // GPIO initial state
+        // GPIO initial state (also GPIO2 low, which the BK stock asserts)
         self.write_reg(syst, REG_GPIO, 0x9000);
+        #[cfg(feature = "bk4819")]
+        self.write_reg(syst, 0x34, 0x0200);
         self.write_reg(syst, REG_WORK_MODE, 0x0000);
     }
 }

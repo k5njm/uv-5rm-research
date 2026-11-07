@@ -41,11 +41,19 @@ jobs:
             f=""; [ $st != classic ] && f="style-$st"
             MKAPP_FEATURES=$f PATH=/tmp/shim:$PATH python3 tools/mkapp.py apps/hamtools --name "HAM TOOLS" -o /tmp/out/hamtools-$st.app
           done
-      - name: Core firmware builds and fits 60 KB
-        working-directory: firmware/firmware-source
+      - name: Core firmware builds (default YP07/FD6818B and bk4819 variants) and fits 60 KB
+        working-directory: firmware
         run: |
-          cargo build --release
-          python3 -I ../source-changes/elf2bin.py target/thumbv7em-none-eabi/release/bf5rh-fw /tmp/fw.bin
+          mkdir -p /tmp/out
+          cargo build --release --manifest-path firmware-source/Cargo.toml --config firmware-source/.cargo/config.toml --target-dir /tmp/t/fw
+          python3 -I source-changes/elf2bin.py /tmp/t/fw/thumbv7em-none-eabi/release/bf5rh-fw /tmp/out/fw-default.bin
+          cargo build --release --features bk4819 --manifest-path firmware-source/Cargo.toml --config firmware-source/.cargo/config.toml --target-dir /tmp/t/fwbk
+          python3 -I source-changes/elf2bin.py /tmp/t/fwbk/thumbv7em-none-eabi/release/bf5rh-fw /tmp/out/fw-bk4819.bin
+          sha256sum /tmp/out/*.bin | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-images
+          path: /tmp/out/*.bin
   hab-apps:
     # aprs/horus/rs41 do not compile yet (see AUDIT.md). The failure is reported as a
     # warning annotation, not a red check. Remove continue-on-error once they build.
