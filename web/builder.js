@@ -101,6 +101,8 @@
 
   function load(m) {
     manifest = m;
+    // The default variant is listed first and preselected, so nobody lands on another board's image by accident.
+    m.core.sort((a, b) => (a.id === "default" ? -1 : b.id === "default" ? 1 : a.id.localeCompare(b.id)));
     $("core").innerHTML = m.core.map(c => `<option value="${c.id}">${c.id} (${c.rf_chip}; board ${c.boards.join(" / ")})</option>`).join("");
     $("apps").innerHTML = m.apps.map(a => `<div class="app" data-id="${a.id}"><label><input type="checkbox"> ${a.id}</label>
       <select>${Object.keys(a.styles).map(s => `<option>${s}</option>`).join("")}</select></div>`).join("");

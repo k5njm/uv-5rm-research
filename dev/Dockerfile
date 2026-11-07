@@ -20,4 +20,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --pr
 RUN bin="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/host: //p')/bin" \
  && for t in objcopy nm size; do ln -sf "$bin/llvm-$t" /usr/local/bin/rust-$t; done \
  && rust-objcopy --version | head -1
+# Browser test of web/ (approved: Node + Playwright + headless Chromium). Pinned.
+ARG PLAYWRIGHT_VERSION=1.49.1
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers NODE_PATH=/usr/local/lib/node_modules
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm \
+ && npm install -g playwright@${PLAYWRIGHT_VERSION} \
+ && playwright install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/* \
+ && node --version && playwright --version
 WORKDIR /work

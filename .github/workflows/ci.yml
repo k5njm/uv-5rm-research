@@ -61,7 +61,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: firmware-images
-          path: /tmp/out/*.bin
+          path: |
+            /tmp/out/*.bin
+            /tmp/out/*.app
       - name: Size budgets on the freshly built images (core headroom and per-app arena floors)
         run: python3 -I firmware/tools/verify_release.py --no-committed --apps /tmp/out --image /tmp/out/fw-default.bin --image /tmp/out/fw-bk4819.bin
       - name: Pinned image hashes (reproducibility regression)
@@ -83,3 +85,30 @@ jobs:
           if ! cargo build --release; then
             echo "::warning title=${{ matrix.app }} does not compile::Known issue tracked in AUDIT.md"
           fi
+  web:
+    # Headless-Chromium test of web/ (phase 1: planning + fake radio) against the CI-built images.
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: firmware-images, path: /tmp/dl }
+      - name: Manifest from the CI-built images
+        run: |
+          python3 firmware/tools/make_manifest.py /tmp/dl /tmp/dl/manifest.json
+          mkdir /tmp/served && cp web/index.html web/builder.js /tmp/dl/manifest.json /tmp/dl/*.app /tmp/dl/*.bin /tmp/served/
+      - name: Playwright (pinned, same version as dev/Dockerfile)
+        run: |
+          npm install --prefix /tmp/pw playwright@1.49.1
+          /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
+      - name: Browser test
+        run: NODE_PATH=/tmp/pw/node_modules node web/test/run.cjs /tmp/served
+  repro:
+    # Build under native amd64 and emulated arm64 and require identical images (scripts/dev.sh repro).
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with: { platforms: arm64 }
+      - run: scripts/dev.sh repro

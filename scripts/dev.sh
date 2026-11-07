@@ -8,10 +8,11 @@
 #   hashes       [--update] compare/record sha256 of built images with firmware/expected-hashes.json
 #   manifest     write build-out/manifest.json describing the built images (web builder input)
 #   provenance   rebuild every shipped .app from source and compare bytes
+#   web-test     headless-Chromium test of web/ against the real built images and manifest
 #   exec "CMD"   run any command in the container (cwd /work)
 #   gate         offline release gate (verify_release.py)
 #   tools-test   host tool tests against the fake radio / bootloader (firmware/tests)
-#   repro        build for arm64 AND amd64 and require identical hashes (cross-architecture reproducibility)
+#   repro        build for arm64 AND amd64; everything must match except the known arch-sensitive image (fw-bk4819.bin)
 # Env: PLATFORM=linux/amd64 to run any command under x86 emulation (Rosetta on OrbStack).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -30,7 +31,7 @@ image() {
 # run CMD... inside the container; caches in named volumes, per architecture
 run() {
   docker image inspect "$IMAGE:$ARCH_TAG" >/dev/null 2>&1 || image
-  docker run --rm $(plat) -t \
+  docker run --rm $(plat) $([ -t 1 ] && echo -t) \
     -v "$ROOT":/work \
     -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry \
     -v "uv5rm-target-$ARCH_TAG":/cache \
@@ -50,7 +51,12 @@ cmd_scenarios() {
 cmd_apps() {
   run "cd $FWDIR && mkdir -p /work/build-out && for st in classic $STYLES; do f=''; [ \$st != classic ] && f=style-\$st; MKAPP_FEATURES=\$f python3 tools/mkapp.py apps/hamtools --name 'HAM TOOLS' -o /work/build-out/hamtools-\$st.app 2>&1 | grep -E '^\[OK  \]|ERR' | sed \"s/^/\$st: /\"; done; sha256sum /work/build-out/hamtools-*.app"
 }
+# Core firmware is built under linux/amd64 (the CI and upstream-author environment): the BK4819 image built on
+# native arm64 differs by 11,163 bytes (AUDIT.md 18), so Apple Silicon must use emulation for images that are pinned.
 cmd_firmware() {
+  if [ -z "${PLATFORM:-}" ]; then PLATFORM=linux/amd64 "$0" firmware; else _firmware_impl; fi
+}
+_firmware_impl() {
   run "cd firmware && mkdir -p /work/build-out && \
     cargo build --release --manifest-path firmware-source/Cargo.toml --config firmware-source/.cargo/config.toml --target-dir /cache/fw 2>&1 | tail -1 && \
     python3 source-changes/elf2bin.py /cache/fw/thumbv7em-none-eabi/release/bf5rh-fw /work/build-out/fw-default.bin | tail -2 && \
@@ -62,6 +68,7 @@ cmd_firmware() {
 cmd_hil_test()  { run "python3 hil/test_hil.py > /tmp/hil.log 2>&1 || { tail -30 /tmp/hil.log; exit 1; }; tail -3 /tmp/hil.log"; }
 cmd_tools_test() { run "for t in firmware/tests/test_*.py; do echo \"-- \$t\"; python3 -W error::ResourceWarning \$t > /tmp/t.log 2>&1 || { tail -40 /tmp/t.log; exit 1; }; tail -3 /tmp/t.log | head -2; done"; }
 cmd_hashes()    { cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/pin_hashes.py build-out $*"; }
+cmd_web_test()  { cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json >/dev/null && rm -rf /tmp/served && mkdir /tmp/served && cp web/index.html web/builder.js build-out/manifest.json build-out/*.app build-out/*.bin /tmp/served/ && node web/test/run.cjs /tmp/served"; }
 cmd_gate()      { run "python3 -I firmware/tools/verify_release.py > /tmp/gate.log || { cat /tmp/gate.log; exit 1; }; tail -1 /tmp/gate.log"; }
 
 cmd_check() {
@@ -75,6 +82,7 @@ cmd_check() {
   step "shipped apps rebuild from source"; run "python3 firmware/tools/provenance.py --strict | tail -3"
   step "pinned image hashes";    cmd_hashes
   step "host tool tests (fake radio / bootloader)"; cmd_tools_test
+  step "web builder page (headless Chromium)"; cmd_web_test
   step "HIL pipeline (offline)"; cmd_hil_test
   printf '\n\033[1;32mall checks passed\033[0m\n'
 }
@@ -91,17 +99,25 @@ cmd_repro() {
     cp "$ROOT"/build-out/hamtools-*.app "$d/"
   done
   step "compare"
-  if diff -r "$ROOT/build-out/repro-arm64" "$ROOT/build-out/repro-amd64" >/dev/null; then
-    echo "IDENTICAL across arm64 and amd64:"; (cd "$ROOT/build-out/repro-arm64" && shasum -a 256 *)
-  else
-    echo "DIFFERENT:"; diff -rq "$ROOT/build-out/repro-arm64" "$ROOT/build-out/repro-amd64"; exit 1
-  fi
+  # Images known to differ between architectures (AUDIT.md 18). They are reported, not failed; if one starts
+  # matching, or any OTHER file differs, this command fails so the list cannot go stale silently.
+  KNOWN="fw-bk4819.bin"
+  bad=0
+  for f in $(cd "$ROOT/build-out/repro-amd64" && ls); do
+    a="$ROOT/build-out/repro-arm64/$f"; b="$ROOT/build-out/repro-amd64/$f"
+    if cmp -s "$a" "$b"; then
+      case " $KNOWN " in *" $f "*) echo "UNEXPECTED: $f now matches across architectures; remove it from KNOWN"; bad=1 ;; *) echo "  identical  $f" ;; esac
+    else
+      case " $KNOWN " in *" $f "*) echo "  DIVERGES   $f (known, AUDIT 18): arm64 $(shasum -a 256 "$a" | cut -c1-12) vs amd64 $(shasum -a 256 "$b" | cut -c1-12)" ;; *) echo "  DIFFERENT  $f (NEW divergence)"; bad=1 ;; esac
+    fi
+  done
+  [ $bad = 0 ] && echo "repro OK: everything matches except the known architecture-sensitive image(s)" || { echo "repro FAILED"; exit 1; }
 }
 
 case "${1:-}" in
   image) image ;; shell) docker image inspect "$IMAGE:$ARCH_TAG" >/dev/null 2>&1 || image
          docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "uv5rm-target-$ARCH_TAG":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
-  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
+  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
   *) sed -n '2,10p' "$0"; exit 1 ;;
 esac

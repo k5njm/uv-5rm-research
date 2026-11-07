@@ -23,7 +23,7 @@ Conventions for this repo (borrowed from the sibling `beepy-ui` project's workfl
 
 ## Build environment
 Build and test in the container, not on the host: `scripts/dev.sh check` (OrbStack/Docker; image in `dev/Dockerfile`, pinned Rust,
-cache volumes per architecture). `scripts/dev.sh repro` builds under arm64 and x86 emulation and requires identical hashes.
+cache volumes per architecture). Core firmware is always built under linux/amd64 emulation (the CI environment): the BK4819 image built on native arm64 differs from x86 (AUDIT 18). `scripts/dev.sh repro` builds both and requires everything to match except that one known image.
 Hardware-facing steps (flashing, serial, webcam, injector) cannot run in a container and stay on the host.
 
 ## Before a PR

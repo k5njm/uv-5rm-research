@@ -2,7 +2,7 @@
 
 Status: **design, styles prototype, manifest generator, and a phase-1 page** (`web/`, planning only: validates a selection and
 writes to a *software* radio; it has no serial access, pinned by `firmware/tests/test_web_static.py`). The page is
-**UNVERIFIED in a browser**: its headless-Chromium test needs Node/Playwright, which is awaiting approval. Nothing here has run on a real radio.
+tested in headless Chromium (`scripts/dev.sh web-test`, 27 checks including mutation-checked board gate, budget rules, tamper refusal and read-back on the fake radio); it has still never met a real radio or a real serial port. Nothing here has run on a real radio.
 
 ## Key insight: almost nothing needs a per-user compile
 
@@ -58,7 +58,7 @@ verify/restore path. Same philosophy as `firmware/tests/test_boot_logo_tune_tool
 ## Phases
 0. Style infrastructure in apps *(done for HAM TOOLS; goldens per style; CI)*
 1. `manifest.json` generator + CI matrix building every app/style (+ board core variants) with provenance
-2. Static page: option picker, dependency and budget validation, dry-run against the fake radio (apps-only flow) *(page written; browser test pending approval)*
+2. Static page: option picker, dependency and budget validation, dry-run against the fake radio (apps-only flow) *(page written and browser-tested against the fake radio)*
 3. Real-radio apps-only flow on the sacrificial radio; HIL rig replays scenarios per style
 4. Core flash flow behind the gate (after restore tooling exists)
 5. Locales
