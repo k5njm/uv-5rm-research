@@ -139,4 +139,4 @@ python3 source-changes/set_boot_logo.py restore /dev/cu.usbserial-XXXX my-backup
 python3 source-changes/set_boot_tune.py /dev/cu.usbserial-XXXX my-backup/boot-tune-before.bin mario
 ```
 
-Not imported: the PR's Zelda/Ocarina of Time logos and Zelda/Song of Storms melodies (third-party trademarks and copyrighted music in a GPL repo). Neither script has been run against hardware from this repo, and the PR's code has only been syntax-checked and read here.
+Not imported: the PR's Zelda/Ocarina of Time logos and Zelda/Song of Storms melodies (third-party trademarks and copyrighted music in a GPL repo). Neither script has been run against a real radio from this repo. Both pass `firmware/tests/test_boot_logo_tune_tools.py` (12 tests against a fake CPS radio: exact RGB565 conversion, backup, readback verify, automatic restore after an injected write fault, refusal to overwrite a different backup, tune-only settings change), including against the PR exactly as submitted.
