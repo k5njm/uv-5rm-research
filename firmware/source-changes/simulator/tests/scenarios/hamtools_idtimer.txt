@@ -1,0 +1,23 @@
+# Station-ID timer: arm, count down, go overdue, identify, and the Exit guard.
+app hamtools
+shot idle
+key star                  # arm
+shot armed_10_00
+step 1000                 # 1 s ticks keep long waits fast
+wait 599
+shot armed_00_01
+step 100
+wait 2
+expect backlight on       # overdue: backlight held so the banner is seen
+shot overdue
+key menu                  # "I just identified"
+wait 0.2
+expect backlight off
+shot after_id
+key down                  # interval is locked while armed
+shot locked
+key exit
+expect noexit             # a running timer needs a held Exit
+shot hold_exit_note
+hold exit
+expect exit

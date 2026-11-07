@@ -24,6 +24,9 @@ mod qtscan2;
 mod search2;
 #[path = "../apps_new/textapp/src/logic.rs"]
 mod textapp;
+#[path = "../../firmware-source/apps/hamtools/src/logic.rs"]
+mod hamtools;
+mod scenario;
 
 mod flash_map {
     pub mod addr {
@@ -367,11 +370,18 @@ extern "C" fn chan_read(num: u16, out: *mut u8, _len: u16) -> bool {
         None => false,
     }
 }
+/// Observer position in 1e-5 degrees; None = not set (what the real firmware reports until entered).
+static mut COORDS: Option<(i32, i32)> = None;
+static mut BACKLIGHT_HOLD: bool = false;
+extern "C" fn backlight_hold(on: bool) {
+    unsafe { BACKLIGHT_HOLD = on };
+}
 extern "C" fn settings_get(id: u16) -> u32 {
-    if id == 0 {
-        3
-    } else {
-        0
+    match id {
+        0 => 3,
+        5 => unsafe { COORDS.map_or(i32::MAX, |c| c.0) as u32 },
+        6 => unsafe { COORDS.map_or(i32::MAX, |c| c.1) as u32 },
+        _ => 0,
     }
 }
 extern "C" fn app_fault(line: u32) -> ! {
@@ -582,7 +592,7 @@ static API: Api = Api {
     set_tx_enabled,
     utc_get,
     utc_set,
-    set_backlight_hold: nop_bool,
+    set_backlight_hold: backlight_hold,
     get_master_wide,
     squelch_open,
     set_subaudio_scan_filter: sub_filter,
@@ -2222,6 +2232,15 @@ fn test_text() {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("scenario") {
+        let opts = scenario::parse_args(&args[2..]).unwrap_or_else(|e| {
+            eprintln!("{e}");
+            std::process::exit(2)
+        });
+        let fails = scenario::run_file(&opts);
+        std::process::exit(if fails == 0 { 0 } else { 1 });
+    }
     test_repeater();
     test_sweep();
     test_fox();

@@ -1,0 +1,12 @@
+# Grid locator from the stored observer position.
+app hamtools
+key ab
+key ab
+key ab
+shot no_position
+coords 40.71 -74.00
+shot new_york
+coords -33.86 151.21
+shot sydney
+coords 51.5 0
+shot greenwich
