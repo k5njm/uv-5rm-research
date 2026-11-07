@@ -24,6 +24,10 @@ jobs:
         with:
           name: scenario-frames
           path: /tmp/scenario-frames
+      - name: HIL pipeline (synthetic camera, fake injector)
+        run: |
+          pip install pillow numpy
+          python3 hil/test_hil.py
       - name: HAM TOOLS overlay builds for the target and fits the 8 KB arena
         working-directory: firmware/firmware-source
         run: |
