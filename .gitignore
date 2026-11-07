@@ -42,3 +42,6 @@ venv/
 *.swp
 *.swo
 *~
+
+# Containerised build output
+build-out/

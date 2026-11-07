@@ -21,5 +21,10 @@ Conventions for this repo (borrowed from the sibling `beepy-ui` project's workfl
 - Ship only CI-built images; do not trust a committed `.BF` (see AUDIT.md finding 6).
 - Do not merge or push to upstream (jakegarrett13-afk) repos; import their PRs as source on a branch, tested.
 
+## Build environment
+Build and test in the container, not on the host: `scripts/dev.sh check` (OrbStack/Docker; image in `dev/Dockerfile`, pinned Rust,
+cache volumes per architecture). `scripts/dev.sh repro` builds under arm64 and x86 emulation and requires identical hashes.
+Hardware-facing steps (flashing, serial, webcam, injector) cannot run in a container and stay on the host.
+
 ## Before a PR
-`python3 firmware/tools/verify_release.py`, `cargo test --release` + `./run_scenarios.sh` in the simulator, `python3 hil/test_hil.py`.
+`scripts/dev.sh check` (release gate, unit tests, scenarios for every style, simulator suite, overlay builds, core firmware, HIL tests).
