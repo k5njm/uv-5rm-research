@@ -9,6 +9,7 @@
 #   manifest     write build-out/manifest.json describing the built images (web builder input)
 #   provenance   rebuild every shipped .app from source and compare bytes
 #   web-test     headless-Chromium test of web/ against the real built images and manifest
+#   size-report  where the core firmware's bytes go: by module, by feature, ABI wrappers and who uses them
 #   exec "CMD"   run any command in the container (cwd /work)
 #   gate         offline release gate (verify_release.py)
 #   tools-test   host tool tests against the fake radio / bootloader (firmware/tests)
@@ -69,6 +70,7 @@ cmd_hil_test()  { run "python3 hil/test_hil.py > /tmp/hil.log 2>&1 || { tail -30
 cmd_tools_test() { run "for t in firmware/tests/test_*.py; do echo \"-- \$t\"; python3 -W error::ResourceWarning \$t > /tmp/t.log 2>&1 || { tail -40 /tmp/t.log; exit 1; }; tail -3 /tmp/t.log | head -2; done"; }
 cmd_hashes()    { cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/pin_hashes.py build-out $*"; }
 cmd_web_test()  { cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json >/dev/null && rm -rf /tmp/served && mkdir /tmp/served && cp web/index.html web/builder.js build-out/manifest.json build-out/*.app build-out/*.bin /tmp/served/ && node web/test/run.cjs /tmp/served"; }
+cmd_size_report() { cmd_firmware >/dev/null; for t in by_module by_feature api_usage; do echo "=== $t"; run "python3 firmware/tools/size/$t.py"; done; }
 cmd_gate()      { run "python3 -I firmware/tools/verify_release.py > /tmp/gate.log || { cat /tmp/gate.log; exit 1; }; tail -1 /tmp/gate.log"; }
 
 cmd_check() {
@@ -118,6 +120,6 @@ case "${1:-}" in
   image) image ;; shell) docker image inspect "$IMAGE:$ARCH_TAG" >/dev/null 2>&1 || image
          docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "uv5rm-target-$ARCH_TAG":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
-  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
+  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; size-report) cmd_size_report ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
   *) sed -n '2,10p' "$0"; exit 1 ;;
 esac
