@@ -24,14 +24,22 @@ STYLES="d74 proxx ft5d"
 
 plat() { [ -n "$PLATFORM" ] && echo "--platform $PLATFORM" || true; }
 
+# An image is stamped with a hash of what it was built from (Dockerfile + pinned toolchains + browser flag), and is rebuilt
+# automatically when that changes, so a stale image can never silently build with the wrong toolchain.
+stamp() { cat "$ROOT/dev/Dockerfile" "$ROOT/firmware/toolchain.env" | shasum -a 256 | cut -c1-12; echo "-b${WITH_BROWSER:-1}"; }
 image() {
-  want="$(sed -n 's/^channel = "\(.*\)"/\1/p' "$ROOT/firmware/firmware-source/rust-toolchain.toml")"
-  docker build $(plat) --build-arg RUST_TOOLCHAIN="$want" --build-arg WITH_BROWSER="${WITH_BROWSER:-1}" -t "$IMAGE:$ARCH_TAG" -f "$ROOT/dev/Dockerfile" "$ROOT/dev"
+  . "$ROOT/firmware/toolchain.env"
+  docker build $(plat) --build-arg RUST_TOOLCHAIN="$LEGACY_TOOLCHAIN" --build-arg SMALL_TOOLCHAIN="$SMALL_TOOLCHAIN" \
+    --build-arg WITH_BROWSER="${WITH_BROWSER:-1}" --label "stamp=$(stamp | tr -d '\n')" -t "$IMAGE:$ARCH_TAG" -f "$ROOT/dev/Dockerfile" "$ROOT/dev"
+}
+ensure_image() {
+  have="$(docker image inspect --format '{{ index .Config.Labels "stamp" }}' "$IMAGE:$ARCH_TAG" 2>/dev/null || true)"
+  [ "$have" = "$(stamp | tr -d '\n')" ] || { echo "dev image $IMAGE:$ARCH_TAG is missing or out of date; rebuilding" >&2; image; }
 }
 
 # run CMD... inside the container; caches in named volumes, per architecture
 run() {
-  docker image inspect "$IMAGE:$ARCH_TAG" >/dev/null 2>&1 || image
+  ensure_image
   docker run --rm $(plat) $([ -t 1 ] && echo -t) \
     -v "$ROOT":/work \
     -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry \
@@ -58,12 +66,12 @@ cmd_firmware() {
   if [ -z "${PLATFORM:-}" ]; then PLATFORM=linux/amd64 "$0" firmware; else _firmware_impl; fi
 }
 _firmware_impl() {
+  # MODE=small (default, nightly, smaller image) or MODE=legacy (stable, as the shipped binaries were built)
+  m="${MODE:-small}"
   run "cd firmware && mkdir -p /work/build-out && \
-    cargo build --release --manifest-path firmware-source/Cargo.toml --config firmware-source/.cargo/config.toml --target-dir /cache/fw 2>&1 | tail -1 && \
-    python3 source-changes/elf2bin.py /cache/fw/thumbv7em-none-eabi/release/bf5rh-fw /work/build-out/fw-default.bin | tail -2 && \
+    CARGO_TARGET_DIR=/cache/fw-$m bash tools/build_core.sh $m /work/build-out/fw-default.bin && \
     if grep -q 'bk4819' firmware-source/Cargo.toml; then \
-      cargo build --release --features bk4819 --manifest-path firmware-source/Cargo.toml --config firmware-source/.cargo/config.toml --target-dir /cache/fwbk 2>&1 | tail -1 && \
-      python3 source-changes/elf2bin.py /cache/fwbk/thumbv7em-none-eabi/release/bf5rh-fw /work/build-out/fw-bk4819.bin | tail -2; fi; \
+      CARGO_TARGET_DIR=/cache/fwbk-$m bash tools/build_core.sh $m /work/build-out/fw-bk4819.bin bk4819; fi; \
     sha256sum /work/build-out/fw-*.bin"
 }
 cmd_hil_test()  { run "python3 hil/test_hil.py > /tmp/hil.log 2>&1 || { tail -30 /tmp/hil.log; exit 1; }; tail -3 /tmp/hil.log"; }
@@ -117,7 +125,7 @@ cmd_repro() {
 }
 
 case "${1:-}" in
-  image) image ;; shell) docker image inspect "$IMAGE:$ARCH_TAG" >/dev/null 2>&1 || image
+  image) image ;; shell) ensure_image
          docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "uv5rm-target-$ARCH_TAG":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
   manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; size-report) cmd_size_report ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;

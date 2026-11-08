@@ -54,7 +54,7 @@ def explain(a, b):
 
 def main():
     strict = "--strict" in sys.argv
-    env = dict(os.environ)
+    env = dict(os.environ, MKAPP_MODE="legacy")   # the shipped binaries were built with the stable toolchain
     results = {}
     with tempfile.TemporaryDirectory() as tmp:
         for pkg, (name, dirs) in PACKAGES.items():

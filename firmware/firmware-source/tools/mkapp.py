@@ -21,6 +21,19 @@ assert SEG_SIZE == 20 and HEADER_SIZE == 108
 SEG_ALIGN = 4
 
 APP_RUSTFLAGS = "-C link-arg=-Tapp.x -C link-arg=--nmagic"
+# Default "small" build (nightly, panic=immediate-abort, core rebuilt for size). MKAPP_MODE=legacy builds with the stable
+# toolchain exactly as the shipped binaries were (used by tools/provenance.py). Toolchains come from firmware/toolchain.env.
+SMALL_RUSTFLAGS = APP_RUSTFLAGS + " -Zunstable-options -Cpanic=immediate-abort"
+
+
+def toolchains() -> dict:
+    env = Path(__file__).resolve().parents[2] / "toolchain.env"
+    out = {}
+    for line in env.read_text().splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
 
 
 def run(cmd, **kw):
@@ -101,8 +114,12 @@ def check_is_crate(app_dir: Path) -> None:
 def cargo_build(app_dir: Path, bin_name: str) -> Path:
     print(f"[..] {app_dir.name}: cargo build --release")
     touch_if_stale_linker_script(app_dir, elf_path(app_dir))
-    full_env = {**os.environ, "RUSTFLAGS": APP_RUSTFLAGS}
-    cmd = ["cargo", "build", "--release"]
+    tc = toolchains()
+    legacy = os.environ.get("MKAPP_MODE", "small") == "legacy"
+    full_env = {**os.environ, "RUSTFLAGS": APP_RUSTFLAGS if legacy else SMALL_RUSTFLAGS}
+    cmd = ["cargo", "+" + (tc["LEGACY_TOOLCHAIN"] if legacy else tc["SMALL_TOOLCHAIN"]), "build", "--release"]
+    if not legacy:
+        cmd += ["-Z", "build-std=core,compiler_builtins", "-Z", "build-std-features=compiler-builtins-mem"]
     features = os.environ.get("MKAPP_FEATURES")  # e.g. MKAPP_FEATURES=style-d74
     if features:
         cmd += ["--features", features]

@@ -1,6 +1,6 @@
 import re, subprocess, glob, collections
 fields = re.findall(r"pub (\w+): (?:extern \"C\" fn|extern \"C\" fn)", open("/work/firmware/firmware-source/abi/src/lib.rs").read())
-nm = subprocess.run(["rust-nm", "-S", "-C", "/cache/fw/thumbv7em-none-eabi/release/bf5rh-fw"], capture_output=True, text=True).stdout
+nm = subprocess.run(["rust-nm", "-S", "-C", "/cache/fw-small/thumbv7em-none-eabi/release/bf5rh-fw"], capture_output=True, text=True).stdout
 size = {}
 for l in nm.splitlines():
     m = re.search(r"app::overlay::api_(\w+)$", l)

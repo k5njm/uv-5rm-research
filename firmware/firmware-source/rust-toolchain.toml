@@ -1,6 +1,6 @@
 [toolchain]
-# Pinned so builds are reproducible. This is the version used for the Nov-2026 audit;
-# it does NOT reproduce the shipped UV-5RM_Custom_Firmware.BF byte-for-byte (the original
-# toolchain was never recorded). When a build is released, record its toolchain here.
-channel = "1.99.1"
+# The shipped core and apps are built with this pinned nightly (see firmware/toolchain.env and
+# docs/CORE-FIRMWARE-BUDGET.md). rust-src is needed to recompile `core` for size.
+channel = "nightly-2026-11-06"
+components = ["rust-src"]
 targets = ["thumbv7em-none-eabi"]

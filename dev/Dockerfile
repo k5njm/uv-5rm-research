@@ -5,6 +5,7 @@
 # done here: containers cannot reach the Mac's USB serial ports or camera.
 FROM ubuntu:24.04
 ARG RUST_TOOLCHAIN=1.99.1
+ARG SMALL_TOOLCHAIN=nightly-2026-11-06
 ENV DEBIAN_FRONTEND=noninteractive \
     RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo \
     PATH=/opt/cargo/bin:/usr/local/bin:/usr/bin:/bin
@@ -15,7 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Rust: pinned toolchain (keep in sync with firmware/firmware-source/rust-toolchain.toml; dev.sh checks)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none \
  && rustup toolchain install ${RUST_TOOLCHAIN} --profile minimal -t thumbv7em-none-eabi -c llvm-tools \
- && rustup default ${RUST_TOOLCHAIN}
+ && rustup default ${RUST_TOOLCHAIN} \
+ && rustup toolchain install ${SMALL_TOOLCHAIN} --profile minimal -t thumbv7em-none-eabi -c rust-src
 # mkapp.py expects rust-objcopy / rust-nm / rust-size on PATH
 RUN bin="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/host: //p')/bin" \
  && for t in objcopy nm size; do ln -sf "$bin/llvm-$t" /usr/local/bin/rust-$t; done \

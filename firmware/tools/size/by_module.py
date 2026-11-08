@@ -1,5 +1,5 @@
 import re, subprocess, collections, sys
-elf = "/cache/fw/thumbv7em-none-eabi/release/bf5rh-fw"
+elf = "/cache/fw-small/thumbv7em-none-eabi/release/bf5rh-fw"
 out = subprocess.run(["rust-nm", "-S", "--size-sort", "-C", elf], capture_output=True, text=True).stdout
 syms = []
 for line in out.splitlines():

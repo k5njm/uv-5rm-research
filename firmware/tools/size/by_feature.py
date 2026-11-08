@@ -1,5 +1,5 @@
 import re, subprocess, collections
-elf = "/cache/fw/thumbv7em-none-eabi/release/bf5rh-fw"
+elf = "/cache/fw-small/thumbv7em-none-eabi/release/bf5rh-fw"
 print(subprocess.run(["rust-size", "-A", elf], capture_output=True, text=True).stdout.split("\n\n")[0][:900])
 out = subprocess.run(["rust-nm", "-S", "-C", elf], capture_output=True, text=True).stdout
 syms = []
