@@ -58,7 +58,7 @@ cmd_scenarios() {
   run "cd $SIMDIR && export CARGO_TARGET_DIR=/cache/sim && ./run_scenarios.sh $* && for st in $STYLES; do STYLE=\$st ./run_scenarios.sh $*; done"
 }
 cmd_apps() {
-  run "cd $FWDIR && mkdir -p /work/build-out && for st in classic $STYLES; do f=''; [ \$st != classic ] && f=style-\$st; MKAPP_FEATURES=\$f python3 tools/mkapp.py apps/hamtools --name 'HAM TOOLS' -o /work/build-out/hamtools-\$st.app 2>&1 | grep -E '^\[OK  \]|ERR' | sed \"s/^/\$st: /\"; done; sha256sum /work/build-out/hamtools-*.app"
+  run "cd $FWDIR && mkdir -p /work/build-out && for st in classic $STYLES; do f=''; [ \$st != classic ] && f=style-\$st; MKAPP_FEATURES=\$f python3 tools/mkapp.py apps/hamtools --name 'HAM TOOLS' -o /work/build-out/hamtools-\$st.app 2>&1 | grep -E '^\[OK  \]|ERR' | sed \"s/^/\$st: /\"; done; python3 tools/mkapp.py apps/fskprobe --name 'FSK PROBE' -o /work/build-out/fskprobe.app 2>&1 | grep -E '^\[OK  \]|ERR' | sed 's/^/fskprobe: /'; sha256sum /work/build-out/hamtools-*.app /work/build-out/fskprobe.app"
 }
 # Core firmware is built under linux/amd64 (the CI and upstream-author environment): the BK4819 image built on
 # native arm64 differs by 11,163 bytes (AUDIT.md 18), so Apple Silicon must use emulation for images that are pinned.
@@ -106,7 +106,7 @@ cmd_repro() {
     PLATFORM=$p "$0" firmware | sed 's/^/  /' || { echo "build failed under $p"; exit 1; }
     cp "$ROOT"/build-out/fw-*.bin "$d/"
     PLATFORM=$p "$0" apps >/dev/null || { echo "app build failed under $p"; exit 1; }
-    cp "$ROOT"/build-out/hamtools-*.app "$d/"
+    cp "$ROOT"/build-out/hamtools-*.app "$ROOT"/build-out/fskprobe.app "$d/"
   done
   step "compare"
   # Images known to differ between architectures (AUDIT.md 18). They are reported, not failed; if one starts

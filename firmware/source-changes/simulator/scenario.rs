@@ -10,6 +10,7 @@
 //!                       (-1 none), either always on or on for ON s of every PERIOD s of radio time
 //!   chan N RXHZ [TXHZ] [NAME]   a stored channel (blank TX = receive-only)
 //!                       master/signal/chan may appear before or after `app`; they are applied after the reset
+//!   air HEX [HEX...]   the simulated FSK modem hears a sync, then these 16-bit words (hex), one per poll
 //!   handoff GROUP ACTION   preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
 //!   key K               single press. K = 0-9 star pound menu exit up down ab
@@ -32,6 +33,7 @@ fn lookup(name: &str) -> Option<Entry> {
     Some(match name {
         "hamtools" => hamtools::entry,
         "foxhunt" => foxhunt::entry,
+        "fskprobe" => fskprobe::entry,
         "bandsweep" => bandsweep::entry,
         "rptfind" => rptfind::entry,
         "qtscan2" => qtscan2::entry,
@@ -313,6 +315,14 @@ impl Run<'_> {
                 });
                 if self.app.is_some() { f(); }
                 self.setup.push(f);
+            }
+            ["air", words @ ..] => {
+                let Ok(w) = words.iter().map(|h| u16::from_str_radix(h, 16)).collect::<Result<Vec<_>, _>>() else {
+                    return self.check(false, "air needs hex words");
+                };
+                let c = chip();
+                c.script.push_back(AirEvent::Sync);
+                c.script.extend(w.into_iter().map(AirEvent::Word));
             }
             ["chan", n, rx, rest @ ..] => {
                 let (Ok(n), Ok(rx)) = (n.parse::<u16>(), rx.parse::<u32>()) else {

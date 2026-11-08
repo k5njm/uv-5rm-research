@@ -1,0 +1,18 @@
+# FSK probe on a quiet channel: the modem is off until the user starts it, then hears nothing.
+master 144390000
+app fskprobe
+shot off
+key menu                  # modem on
+wait 1
+shot on_quiet
+key 3                     # 2400 baud
+key 6                     # sync 2DD4
+shot baud_sync_changed
+key down                  # next register in the peek list
+key down
+shot peek_register
+key star                  # next frequency
+shot next_frequency
+key menu                  # modem off
+shot off_again
+expect rfrefused 0

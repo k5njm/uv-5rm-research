@@ -48,7 +48,7 @@ bit-banged copy of the RF chip's 3-wire bus, poking GPIO registers behind the co
 
 **Do not put a protocol modem in the core.** The chip's FSK engine is configured by plain register writes; AX.25, Horus and RS41
 framing belong in host-testable crates linked into apps (the simulator and golden vectors then cover them). The core needs only
-three tiny ABI additions (estimate ~100-150 B in total, which fits only after lever 1):
+three tiny ABI additions (estimated ~100-150 B; **measured: 268 B**, see "What the prototypes measured"):
 
 | New ABI function | Why | Already in core? |
 |---|---|---|
@@ -64,11 +64,31 @@ Feasibility, ranked (all UNVERIFIED hypotheses; flash space is not the real bloc
 2. **APRS (1200/2200 Hz AFSK):** TX might step the tone generator with microsecond timing; RX needs audio samples and no route to them is known.
 3. **Horus Binary (4FSK):** the chip's demodulator is 2-level, so probably not without raw samples.
 
-The cheapest first experiment needs no new core code: a diagnostic **FSK probe app** that configures the chip, then dumps its FIFO
-and registers for a known signal, on hardware day.
+The cheapest first experiment needs no new protocol code: the diagnostic **FSK probe app** (`apps/fskprobe`, built, receive-only) configures
+the chip's modem, then shows RSSI, status/IRQ flags, sync/word counters, the last four FIFO words and a register peek, so a known signal
+can be checked on hardware day.
 
 ## Suggested order
 1. Decide on lever 1 (largest, safest, no source change) and verify it on both architectures.
 2. ABI additions (`rf_reg_*`, `delay_us`, `play_cue`) with a simulator mock; migrate TEXT onto them (removes its bus copy).
 3. Host-testable protocol crates with reference vectors.
 4. FSK probe app, then an RS41 decoder if the chip's behaviour allows it.
+
+## What the prototypes measured (branch `feature/core-prototype-nightly-abi-probe`)
+
+| Step | Core image | Free in 60 KB |
+|---|---|---|
+| Original (stable toolchain) | 61,352 B shipped / ~60 KB | 88 B |
+| Pinned nightly, `panic=immediate-abort`, `core` rebuilt for size | | 3,628 B |
+| + ABI additions (`rf_reg_read/write`, `delay_us`, `play_cue`) | | 3,360 B (cost **268 B**, not the 100-150 B estimated) |
+| + `fmtlite` replaces `core::fmt` (**-2,236 B**) | 55,844 B default / 55,820 B BK4819 | **5,596 B / 5,620 B** |
+
+* `fmtlite` (`src/fmtlite.rs`): a small `Sink` trait and ASCII-only `TextBuf`, tested exhaustively against `format!` on the host.
+  `dyn core::fmt::Write` has to go too: its vtable keeps the formatting machinery alive.
+* Verified on the host: 22 unit tests, 342 simulator checks, every pre-existing golden frame byte-identical. Not verified: the standby,
+  boot, scan and launcher write sites have no render tests (reviewed by diff only), and nothing has run on a radio.
+* The ABI hash changed, so the committed shipped apps keep their old hash in `firmware/legacy-abi-hash.txt` and fail to load on this core until
+  rebuilt; built apps use the current hash. Re-pinned after each change.
+* **Reproducibility regressed:** the default core image now also differs between arm64 and amd64 (1,554 bytes; AUDIT 21). amd64 stays canonical.
+* The ID timer in HAM TOOLS now uses `play_cue` for an overdue alert (a speaker-only tone; a simulator test checks it never moves the PTT counters).
+* `fskprobe.app` is 2,932 B of the 8,192 B arena and reproduces identically on both architectures.

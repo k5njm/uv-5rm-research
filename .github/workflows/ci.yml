@@ -48,7 +48,7 @@ jobs:
         run: |
           pip install pillow numpy
           python3 hil/test_hil.py
-      - name: HAM TOOLS overlay builds for the target and fits the 8 KB arena
+      - name: HAM TOOLS and FSK PROBE overlays build for the target and fit the 8 KB arena
         working-directory: firmware/firmware-source
         run: |
           sudo apt-get install -y llvm >/dev/null
@@ -58,6 +58,7 @@ jobs:
             f=""; [ $st != classic ] && f="style-$st"
             MKAPP_FEATURES=$f PATH=/tmp/shim:$PATH python3 tools/mkapp.py apps/hamtools --name "HAM TOOLS" -o /tmp/out/hamtools-$st.app
           done
+          PATH=/tmp/shim:$PATH python3 tools/mkapp.py apps/fskprobe --name "FSK PROBE" -o /tmp/out/fskprobe.app
       - name: Core firmware builds (default YP07/FD6818B and bk4819 variants) and fits 60 KB
         working-directory: firmware
         run: |

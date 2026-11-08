@@ -26,6 +26,8 @@ mod search2;
 mod textapp;
 #[path = "../../firmware-source/apps/hamtools/src/logic.rs"]
 mod hamtools;
+#[path = "../../firmware-source/apps/fskprobe/src/logic.rs"]
+mod fskprobe;
 #[path = "../../firmware-source/apps/spectrum/src/main.rs"]
 mod spectrum;
 #[path = "../../firmware-source/apps/fm/src/main.rs"]
