@@ -5,9 +5,9 @@
 //! through `api.rf_reg_read` / `api.rf_reg_write`; the core refuses writes outside the modem allow-list
 //! (`bf5rh_abi::RF_WRITABLE`), and this app only ever writes registers on that list.
 //!
-//! UNVERIFIED on hardware: the baud divisor formula (scaled from the 1200 baud value the APRS app uses), the sync
-//! words, and the FIFO/threshold semantics are carried over from the other modem apps, not measured. Finding out
-//! which of them are right on the YP07's FD6818B is the point of this app.
+//! Register meanings come from Fudan's "FD6818B Registers Definition" (2025/1/11); see HARDWARE.md. Still UNVERIFIED on
+//! the YP07's FD6818B: the crystal (the baud formula depends on it), the sync words, and that the modem hears a real
+//! signal at all. Finding that out is the point of this app.
 
 use bf5rh_abi::{Api, AppEvent, AppResult};
 
@@ -57,8 +57,10 @@ const FREQS: [u32; 4] = [144_390_000, 146_520_000, 446_000_000, 434_714_000];
 const BAUDS: [u16; 4] = [450, 1200, 2400, 4800];
 const SYNCS: [u16; 3] = [0x7E7E, 0x2DD4, 0xAAAA];
 
-/// 1200 baud is 4646 on the register the APRS app writes; assume it scales linearly (UNVERIFIED).
-const BAUD_REG_1200: u32 = 4646;
+/// REG_72 (TONE2/FSK frequency control word) = baud * 10.32444 for a 13/26 MHz crystal, * 10.48576 for 12.8/19.2/25.6/38.4 MHz
+/// (datasheet). TEXT writes 4646 for 450 baud, which is exactly 450 * 10.32444, so a 13/26 MHz crystal is assumed.
+/// Scaled by 1e5 for integer math.
+const BAUD_REG_PER_BAUD_1E5: u64 = 1_032_444;
 
 const SCREEN_W: u16 = 160;
 const LINE_H: i16 = 10;
@@ -161,7 +163,7 @@ fn modem_off(api: &Api) {
 }
 
 fn baud_reg(baud: u16) -> u16 {
-    (baud as u32 * BAUD_REG_1200 / 1200) as u16
+    ((baud as u64 * BAUD_REG_PER_BAUD_1E5 + 50_000) / 100_000) as u16
 }
 
 fn key(api: &Api, id: u8, kind: u8) -> AppResult {
@@ -238,7 +240,7 @@ fn tick(api: &Api, s: &mut State) {
 fn draw(api: &Api, s: &mut State) {
     // The RSSI line moves constantly, so it is redrawn every frame; the rest only when something changed.
     let raw = (api.read_rssi)();
-    let dbm = raw as i32 - 170;
+    let dbm = raw as i32 - 160; // datasheet: REG_67[8:0]/2 - 160; read_rssi already returns the halved value
     let mut b = [0u8; 28];
     let mut n = 0;
     n = put(&mut b, n, b"RSSI ");
@@ -371,11 +373,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn baud_register_matches_the_known_1200_value_and_scales() {
-        assert_eq!(baud_reg(1200), 4646);
-        assert_eq!(baud_reg(450), 1742);
-        assert_eq!(baud_reg(2400), 9292);
-        assert_eq!(baud_reg(4800), 18584);
+    fn baud_register_follows_the_datasheet_formula() {
+        // 4646 is what the working TEXT app writes for its 450 baud link.
+        assert_eq!(baud_reg(450), 4646);
+        assert_eq!(baud_reg(1200), 12389);
+        assert_eq!(baud_reg(2400), 24779);
+        assert_eq!(baud_reg(4800), 49557);
     }
 
     #[test]

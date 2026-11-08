@@ -57,7 +57,7 @@ Based on hardware reverse engineering by `amoxu` (`Baofeng-UV-5RM-5RH-RE`) and `
 * **Note on ISP:** The chip's native Artery system ISP bootloader mode (`0x1FFFE400`) is repurposed by Baofeng for configuration storage; external updates run through Baofeng's KDH bootloader over the K-plug UART.
 
 ### RF Transceiver
-* **Chip:** **Beken BK4819** or **Fudan Micro FD6818B** (fully register- and pin-compatible clone)
+* **Chip:** **Beken BK4819**, or **Fudan Micro FD6818B** (the YP07 board's chip, ID `0x4829`). The FD6818B is *not* a drop-in register clone: upstream ported a separate driver for it (see section 4), and the register map below has to be read from Fudan's document, not Beken's.
 * **Bus Interface:** 3-wire bit-banged serial bus connected to AT32F421:
   - `PC13`: Latch Enable (LE)
   - `PA2`: Serial Clock (SCK)
@@ -117,3 +117,16 @@ Supplied by the owner (page itself not fetchable). **Consistent with the right f
 Upstream PR [#3](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod/pull/3) adds a build for boards whose `8`-key screen reads **`5RHBK`** (BK4819), versus **`5RHNRFB-YP07`** (FD6818B) for the default build. That gives the screen string a documented meaning: it selects the firmware variant. Build it with `--features bk4819`; the default build is unchanged.
 
 Validation done here (static, no hardware): 15 of its 17 new register constants appear in Baofeng's stock `5RH_BK_V0.14` image (the other two, `0x06D8` and the already-existing `0x13A0`, could not be located by a simple scan). The YP07 values it replaces appear in **neither** stock image, which fits upstream's note that the YP07 driver is a BK4829 port. Surprisingly the stock **NRF** V0.14 image contains the same BK4819 values, so a plain-NRF (FD6818) board may also work with this build; that is a hypothesis, not tested. The PR author reports one `5RHBK` radio tested, with output power not measured.
+
+## 5. Reference documents (linked, not stored; not redistributed here)
+
+| Document | Use | Notes |
+|---|---|---|
+| [AT32F421 datasheet v2.02](https://www.arterychip.com/download/DS/DS_AT32F421_V2.02_EN.pdf) (Artery) | The core's MCU: flash/RAM layout, clocks, peripherals | Vendor download |
+| FD6818B Registers Definition, 2025/1/11 (Fudan; 12 pages; sha256 `3a2d14e1debbd12a...` of the copy used here), found via [cnt7/BAOFENG-UV-K6-Firmware issue 1](https://github.com/cnt7/BAOFENG-UV-K6-Firmware/issues/1) | **The register map for the chip on this board.** Used for the FSK probe (REG_58 to REG_5F, REG_70 to REG_72, REG_67 RSSI) | Not linked directly: the issue's `file://` path is the reporter's local copy. Provenance is a third party's download, so treat it as unofficial |
+| [BK4819 datasheet](https://www.qsl.net/g0ftd/other/Quansheng%2520UV5R%2520Plus%2520and%2520variants/Quansheng%2520UV5R%2520and%2520variants%2520stuff/Parts%2520and%2520Misc%2520stuff/BK4819.PDF) (hobbyist mirror) | Analogy only, for the `bk4819` build variant | **Wrong chip for the default YP07 build**; do not treat its values as this board's spec |
+
+**`cnt7/BAOFENG-UV-K6-Firmware`** is Baofeng's published source for a different radio (the UV-K6 family, a different MCU, the `KD32F328`). It has its own FD6818 driver (`src/Driver/DevFD6818.c`, `DevFD6818Data.c`), the KD32F328 and SC5260 datasheets and a K6 schematic, so it may show how the vendor initialises the same RF chip. **Not used so far:** its licence is Baofeng's own BFPL-1.0, which I have only skimmed, so check its terms before copying anything; reading it for reference needs no copy. Its register-poking is for a different board and chip revision, so anything taken from it is a hypothesis until measured on the YP07.
+
+**Better K6 source, from upstream issue #18:** the YP07 author points to [`sophiel-meow/bf-k61-firmware-aura`](https://github.com/sophiel-meow/bf-k61-firmware-aura), open-source Rust firmware for the K6 family. It has a working [FD6818 driver](https://github.com/sophiel-meow/bf-k61-firmware-aura/blob/master/src/driver/fd6818.rs) and an [FD6818B driver on its `fd6818b` branch](https://github.com/sophiel-meow/bf-k61-firmware-aura/blob/fd6818b/src/drivers/fd6818b.rs), which the issue says was being ported into the 5RH firmware. This repo's `src/drivers/fd6818b.rs` probably descends from it, but **I have not compared them**. That comparison (register init values, the FSK blocks) is the useful next read, and it is the same author as our upstream, so the licence question is simpler than for the Baofeng C source above. Check the repo's licence before copying.
+
