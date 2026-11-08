@@ -845,7 +845,7 @@ impl<'a> App<'a> {
     pub fn launcher_label_at(
         &mut self,
         index: usize,
-        w: &mut dyn core::fmt::Write,
+        w: &mut dyn crate::fmtlite::Sink,
     ) {
         launcher::label_at(self, index, w);
     }

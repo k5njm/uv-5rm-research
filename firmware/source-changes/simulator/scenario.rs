@@ -19,6 +19,8 @@
 //!   shot NAME           save NAME.png and compare with the golden of the same name
 //!   expect exit|noexit  whether the LAST key made the app exit
 //!   expect backlight on|off   the app's backlight-hold request
+//!   expect cues N       speaker-only cue sequences played so far (api.play_cue); never keys PTT, checked automatically
+//!   expect rfrefused N  RF register writes the core's allow-list refused
 //!   expect rxonly       (default on) fails the scenario if the app keyed PTT or the tone function
 //!   allow tx            disables the rx-only safety check for this scenario
 //! The same file is meant to drive the real radio through hil/ (keys via the injector,
@@ -281,7 +283,7 @@ impl Run<'_> {
                 reset(self.master);
                 chip_reset();   // the simulated FSK modem (TEXT)
                 nor_clear();    // a blank SPI flash for apps that save data
-                unsafe { TONE_ON_CALLS = 0; }
+                unsafe { TONE_ON_CALLS = 0; CUES.clear(); RF_WRITES_REFUSED = 0; }
                 for f in &self.setup {
                     f();
                 }
@@ -357,6 +359,14 @@ impl Run<'_> {
                 let want = *v == "on";
                 let got = unsafe { BACKLIGHT_HOLD };
                 self.check(got == want, &format!("backlight hold is {v}"));
+            }
+            ["expect", "cues", n] => {
+                let got = unsafe { CUES.len() };
+                self.check(n.parse::<usize>().ok() == Some(got), &format!("{n} speaker cue(s) played (got {got})"));
+            }
+            ["expect", "rfrefused", n] => {
+                let got = unsafe { RF_WRITES_REFUSED };
+                self.check(n.parse::<u32>().ok() == Some(got), &format!("{n} refused RF register write(s) (got {got})"));
             }
             ["allow", "tx"] => self.rx_only = false,
             _ => self.check(false, &format!("unrecognised step `{}`", t.join(" "))),

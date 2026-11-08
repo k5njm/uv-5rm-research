@@ -161,7 +161,7 @@ print(vision.similarity(vision.rectify(f, c), real))
         waits = []
         hil_run.run([s for s in steps if s.op != "shot"], GOLDEN, "hamtools_idtimer", fake,
                     None, None, 0.8, tempfile.mkdtemp(), sleep=waits.append)
-        self.assertEqual(waits, [599.0, 2.0, 0.2])   # the waits the scenario asks for, not slept
+        self.assertEqual(waits, [599.0, 2.0, 30.0, 0.2])   # the waits the scenario asks for, not slept
         self.assertEqual(fake.log, [("star", 120), ("menu", 120), ("down", 120), ("exit", 120), ("exit", 900)])
 
 

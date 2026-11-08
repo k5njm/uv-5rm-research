@@ -183,6 +183,39 @@ pub struct Api {
     pub set_holds_rx: extern "C" fn(on: bool),
     pub set_af_out: extern "C" fn(on: bool),
     pub set_agc_fix: extern "C" fn(rank: i8),
+    // modem access and alerts
+    /// Raw 16-bit RF chip register read; any address. Reading the FIFO register (0x5F) pops one word.
+    pub rf_reg_read: extern "C" fn(addr: u8) -> u16,
+    /// Raw register write. Returns `false` and writes nothing unless [`rf_reg_writable`]: the power-amplifier,
+    /// bias, power, band-switch, scramble and AFC registers are never writable by apps. This guards against mistakes;
+    /// it is not a security boundary (an app can still drive the pins directly).
+    pub rf_reg_write: extern "C" fn(addr: u8, value: u16) -> bool,
+    /// Busy-wait `us` microseconds (SysTick based).
+    pub delay_us: extern "C" fn(us: u32),
+    /// Local-speaker-only tone sequence; never keys the transmitter; honours the user's beep setting.
+    /// `cues` points to `count` entries, at most 8.
+    pub play_cue: extern "C" fn(cues: *const Cue, count: u16),
+}
+
+/// One tone of a [`Api::play_cue`] sequence: `hz_div10` = frequency / 10 (88 = 880 Hz), `ms` = duration.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Cue {
+    pub hz_div10: u16,
+    pub ms: u16,
+}
+
+/// RF chip registers an app may write through [`Api::rf_reg_write`]: interrupt/status (0x02, 0x0C), receive filter (0x2B),
+/// state (0x30, written by TEXT), interrupt enable (0x3F), deviation (0x40), audio (0x47, 0x48), the FSK modem block
+/// (0x58-0x5F: mode, control, sync, CRC, size, threshold, FIFO) and gain/tone/baud (0x70-0x72). This is the union of the
+/// registers the existing modem apps write. Everything else, notably 0x19 (PA bias), 0x31 (scramble), 0x33 (band/TX/RX
+/// path switch), 0x36 (PA), 0x37 (power) and 0x73 (AFC), stays core-only. Reads are unrestricted.
+pub const RF_WRITABLE: [u8; 19] = [
+    0x02, 0x0C, 0x2B, 0x30, 0x3F, 0x40, 0x47, 0x48, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F, 0x70, 0x71, 0x72,
+];
+
+pub fn rf_reg_writable(addr: u8) -> bool {
+    RF_WRITABLE.contains(&addr)
 }
 
 /// `settings_get(5)` / `settings_get(6)` when no position has been entered.

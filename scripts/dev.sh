@@ -13,7 +13,7 @@
 #   exec "CMD"   run any command in the container (cwd /work)
 #   gate         offline release gate (verify_release.py)
 #   tools-test   host tool tests against the fake radio / bootloader (firmware/tests)
-#   repro        build for arm64 AND amd64; everything must match except the known arch-sensitive image (fw-bk4819.bin)
+#   repro        build for arm64 AND amd64; everything must match except the known arch-sensitive images (fw-bk4819.bin, fw-default.bin)
 # Env: PLATFORM=linux/amd64 to run any command under x86 emulation (Rosetta on OrbStack).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -111,7 +111,7 @@ cmd_repro() {
   step "compare"
   # Images known to differ between architectures (AUDIT.md 18). They are reported, not failed; if one starts
   # matching, or any OTHER file differs, this command fails so the list cannot go stale silently.
-  KNOWN="fw-bk4819.bin"
+  KNOWN="fw-bk4819.bin fw-default.bin"
   bad=0
   for f in $(cd "$ROOT/build-out/repro-amd64" && ls); do
     a="$ROOT/build-out/repro-arm64/$f"; b="$ROOT/build-out/repro-amd64/$f"

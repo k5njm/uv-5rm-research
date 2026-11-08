@@ -6,7 +6,7 @@ pub fn total_item_count() -> usize {
     overlay::SLOT_COUNT as usize
 }
 
-pub fn label_at(app: &mut App, index: usize, w: &mut dyn core::fmt::Write) {
+pub fn label_at(app: &mut App, index: usize, w: &mut dyn crate::fmtlite::Sink) {
     overlay::slot_name(app, index as u8, w);
 }
 

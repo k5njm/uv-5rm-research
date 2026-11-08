@@ -9,7 +9,10 @@ shot armed_00_01
 step 100
 wait 2
 expect backlight on       # overdue: backlight held so the banner is seen
+expect cues 1             # and one speaker-only beep (never keys the transmitter)
 shot overdue
+wait 30
+expect cues 2             # still overdue 30 s later: it repeats
 key menu                  # "I just identified"
 wait 0.2
 expect backlight off

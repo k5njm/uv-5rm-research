@@ -1,8 +1,9 @@
 //! HAM TOOLS: station-ID timer, stopwatch, wavelength calculator and grid locator.
 //!
 //! Receive-only and integer-only. Never call `api.tone_on`: it maps to
-//! `Radio::rtone_on`, which keys the transmitter, so the ID alert is visual
-//! (flashing banner and backlight hold) and never audible.
+//! `Radio::rtone_on`, which keys the transmitter. The ID alert is a flashing banner, a backlight hold and a
+//! two-tone beep through `api.play_cue`, which is speaker-only, never keys the transmitter and honours the user's
+//! beep setting. It repeats every 30 s while the ID is overdue.
 //!
 //! State lives in a `static`, which is reloaded with the app image, so leaving
 //! the app loses the timers; Exit therefore has to be held while one is running.
@@ -13,7 +14,7 @@
 //!   WAVELENGTH digits = frequency in kHz, * = clear
 //!   GRID       shows the six-character Maidenhead locator of the stored position
 
-use bf5rh_abi::{Api, AppEvent, AppResult, SETTING_COORD_NOT_SET};
+use bf5rh_abi::{Api, AppEvent, AppResult, Cue, SETTING_COORD_NOT_SET};
 
 const KIND_SINGLE: u8 = 2;
 const KIND_LONG: u8 = 3;
@@ -30,6 +31,8 @@ const ID_DEFAULT_S: u32 = 600; // FCC 97.119: every 10 minutes
 const ID_MIN_S: u32 = 60;
 const ID_MAX_S: u32 = 1800;
 const ID_STEP_S: u32 = 60;
+const ALERT_EVERY_S: u32 = 30; // repeat the beep this often while the ID is overdue
+const ALERT_CUE: [Cue; 2] = [Cue { hz_div10: 88, ms: 120 }, Cue { hz_div10: 66, ms: 160 }];
 const SW_MAX: u32 = 5999 * 10 * 1000 + 9000; // 99:59.9 in 100 us units
 const LAPS: usize = 4;
 const FREQ_DIGITS: usize = 6;
@@ -85,11 +88,12 @@ pub struct IdTimer {
     pub interval_s: u32,
     pub armed: bool,
     pub elapsed: u32, // 100 us units since the last identification
+    pub alerts: u32,  // beeps already given for the current overdue period
 }
 
 impl IdTimer {
     pub const fn new() -> Self {
-        IdTimer { interval_s: ID_DEFAULT_S, armed: false, elapsed: 0 }
+        IdTimer { interval_s: ID_DEFAULT_S, armed: false, elapsed: 0, alerts: 0 }
     }
     pub fn advance(&mut self, dt: u32) {
         if self.armed {
@@ -106,6 +110,21 @@ impl IdTimer {
     }
     pub fn identified(&mut self) {
         self.elapsed = 0;
+        self.alerts = 0;
+    }
+    /// True once when the ID becomes overdue and again every `ALERT_EVERY_S` seconds after that.
+    pub fn alert_due(&mut self) -> bool {
+        if !self.due() {
+            self.alerts = 0;
+            return false;
+        }
+        let k = (self.elapsed / TICKS_PER_S - self.interval_s) / ALERT_EVERY_S + 1;
+        if k > self.alerts {
+            self.alerts = k;
+            true
+        } else {
+            false
+        }
     }
     pub fn adjust(&mut self, up: bool) {
         if self.armed {
@@ -551,6 +570,9 @@ pub fn entry(api: &Api, ev: AppEvent) -> AppResult {
             s.id.advance(dt_100us);
             s.sw.advance(dt_100us);
             (api.set_backlight_hold)(s.id.due());
+            if s.id.alert_due() {
+                (api.play_cue)(ALERT_CUE.as_ptr(), ALERT_CUE.len() as u16);
+            }
             AppResult::Continue
         }
         AppEvent::Draw => {
@@ -593,6 +615,28 @@ mod tests {
         t.identified();
         assert!(!t.due());
         assert_eq!(t.display_s(), 600);
+    }
+
+    #[test]
+    fn alert_fires_when_overdue_then_every_30_seconds_and_resets_on_id() {
+        let mut t = IdTimer::new();
+        t.armed = true;
+        t.advance(599 * TICKS_PER_S);
+        assert!(!t.alert_due());                      // not yet due
+        t.advance(TICKS_PER_S);                       // exactly due
+        assert!(t.alert_due());
+        assert!(!t.alert_due());                      // once only
+        t.advance(29 * TICKS_PER_S);
+        assert!(!t.alert_due());                      // 29 s overdue
+        t.advance(TICKS_PER_S);
+        assert!(t.alert_due());                       // 30 s overdue: repeat
+        t.advance(60 * TICKS_PER_S);
+        assert!(t.alert_due());                       // a late tick still gives one alert, not two
+        assert!(!t.alert_due());
+        t.identified();
+        assert!(!t.alert_due());
+        t.advance(600 * TICKS_PER_S);
+        assert!(t.alert_due());                       // next cycle alerts again
     }
 
     #[test]

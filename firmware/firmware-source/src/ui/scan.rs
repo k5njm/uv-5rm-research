@@ -1,7 +1,7 @@
+use crate::fmtlite::Sink;
 use super::standby::draw_frequency;
 use super::{clear_strip, TextBuf, SCREEN_H};
 use crate::app;
-use core::fmt::Write as _;
 use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyle};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
@@ -87,16 +87,15 @@ where
     let dir = if app.scan_direction_up() { "UP" } else { "DN" };
     let mut header: TextBuf<27> = TextBuf::new();
     if app.watching_is_channel_mode() {
-        write!(
-            header,
-            "{} {} M{:03}",
-            app.chan_mode_name(),
-            dir,
-            app.watching_channel_num() + 1
-        )
-        .ok();
+        header.put_str(app.chan_mode_name());
+        header.put_char(' ');
+        header.put_str(dir);
+        header.put_str(" M");
+        header.put_u32_w((app.watching_channel_num() + 1) as u32, 3, b'0');
     } else {
-        write!(header, "{} {}", app.chan_mode_name(), dir).ok();
+        header.put_str(app.chan_mode_name());
+        header.put_char(' ');
+        header.put_str(dir);
     }
     Text::new(
         header.as_str(),
@@ -108,14 +107,11 @@ where
     if app.watching_is_channel_mode() {
         let hz = app.watching_freq_hz();
         let mut line: TextBuf<26> = TextBuf::new();
-        write!(
-            line,
-            "{}  {}.{:04}",
-            app.side_name_str(app.watching_index()),
-            hz / 1_000_000,
-            hz / 100 % 10_000
-        )
-        .ok();
+        line.put_str(app.side_name_str(app.watching_index()));
+        line.put_str("  ");
+        line.put_u32(hz / 1_000_000);
+        line.put_char('.');
+        line.put_u32_w(hz / 100 % 10_000, 4, b'0');
         Text::new(
             line.as_str(),
             Point::new(4, 27),

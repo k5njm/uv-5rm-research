@@ -99,9 +99,15 @@ def abi_hash():
     return zlib.crc32(open(p, "rb").read()) & 0xFFFFFFFF
 
 
-def verify_apps(apps_dir):
-    h = abi_hash()
-    print(f"[APPS] {apps_dir}  (ABI hash {h:08x})")
+def legacy_abi_hash():
+    """ABI hash the committed (shipped) binaries were built against; the source ABI has moved on since (new functions)."""
+    with open(os.path.join(FW, "legacy-abi-hash.txt")) as f:
+        return int(f.read().strip(), 16)
+
+
+def verify_apps(apps_dir, committed=False):
+    h = legacy_abi_hash() if committed else abi_hash()
+    print(f"[APPS] {apps_dir}  (ABI hash {h:08x}{', the shipped set: built against the previous ABI' if committed else ''})")
     paths = sorted(glob.glob(os.path.join(apps_dir, "*.app")))
     check(bool(paths), "at least one .app found")
     for p in paths:
@@ -133,7 +139,7 @@ def main():
     a = ap.parse_args()
     if not a.no_committed:
         verify_bf(a.bf)
-    verify_apps(a.apps)
+    verify_apps(a.apps, committed=os.path.abspath(a.apps) == os.path.join(FW, "apps"))
     for img in a.image:
         verify_image(img)
     print(f"\n{'FAILED' if fails else 'PASSED'}: {len(fails)} failure(s)")

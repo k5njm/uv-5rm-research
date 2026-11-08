@@ -1,3 +1,4 @@
+use crate::fmtlite::Sink;
 use super::list::{draw_list, Cache, ListSource};
 use crate::app;
 use embedded_graphics::mono_font::ascii::FONT_5X8;
@@ -17,15 +18,15 @@ impl<'a, 'b> ListSource for LauncherSource<'a, 'b> {
         self.0.storage_mut().read_raw(addr, buf);
     }
 
-    fn label(&mut self, index: usize, w: &mut dyn core::fmt::Write) {
+    fn label(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) {
         self.0.launcher_label_at(index, w);
     }
 
-    fn value(&mut self, index: usize, w: &mut dyn core::fmt::Write) -> bool {
+    fn value(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) -> bool {
         if self.0.launcher_available_at(index) {
             false
         } else {
-            let _ = write!(w, "----");
+            w.put_str("----");
             true
         }
     }
@@ -41,13 +42,13 @@ where
 
     let err = crate::app::overlay::take_load_err();
     if err != 0 {
-        use core::fmt::Write;
         let style: MonoTextStyle<'_, Rgb565> = MonoTextStyleBuilder::new()
             .font(&FONT_5X8)
             .text_color(Rgb565::RED)
             .build();
         let mut buf: crate::ui::TextBuf<16> = crate::ui::TextBuf::new();
-        let _ = write!(buf, "LDERR {}", err);
+        buf.put_str("LDERR ");
+        buf.put_u32(err as u32);
         Text::new(
             buf.as_str(),
             Point::new(2, crate::drivers::st7735::HEIGHT as i32 - 9),

@@ -283,7 +283,7 @@ impl<'a> App<'a> {
     pub fn range_input_len(&self) -> usize {
         self.input.len
     }
-    pub fn range_input_write(&self, w: &mut dyn core::fmt::Write) {
+    pub fn range_input_write(&self, w: &mut dyn crate::fmtlite::Sink) {
         self.input.write_display(3, w);
     }
 }

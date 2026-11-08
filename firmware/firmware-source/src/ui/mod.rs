@@ -30,35 +30,7 @@ where
         .ok();
 }
 
-#[derive(Clone, Copy, PartialEq)]
-pub struct TextBuf<const N: usize> {
-    buf: [u8; N],
-    len: usize,
-}
-
-impl<const N: usize> TextBuf<N> {
-    pub fn new() -> Self {
-        TextBuf {
-            buf: [0; N],
-            len: 0,
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        core::str::from_utf8(&self.buf[..self.len]).unwrap_or("")
-    }
-}
-
-impl<const N: usize> core::fmt::Write for TextBuf<N> {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        let bytes = s.as_bytes();
-        let space = N - self.len;
-        let n = bytes.len().min(space);
-        self.buf[self.len..self.len + n].copy_from_slice(&bytes[..n]);
-        self.len += n;
-        Ok(())
-    }
-}
+pub use crate::fmtlite::{Sink, TextBuf};
 
 pub struct UiState {
     last_mode: Option<app::Mode>,
@@ -85,13 +57,15 @@ fn draw_stack_probe<D>(lcd: &mut D)
 where
     D: DrawTarget<Color = Rgb565>,
 {
-    use core::fmt::Write;
     use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyle};
     use embedded_graphics::text::Text;
 
     let (used, free) = crate::hal::stackprobe::high_water();
     let mut t: TextBuf<16> = TextBuf::new();
-    let _ = write!(t, "U{used} F{free}");
+    t.put_char('U');
+    t.put_u32(used as u32);
+    t.put_str(" F");
+    t.put_u32(free as u32);
 
     let y = SCREEN_H - 10;
     clear_strip(lcd, y, 10);

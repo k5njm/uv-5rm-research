@@ -1,8 +1,8 @@
+use crate::fmtlite::Sink;
 use super::backdrop::draw_backdrop;
 use super::list::{draw_list, Cache, ListSource};
 use super::{TextBuf, SCREEN_H};
 use crate::app::{self, modes_table};
-use core::fmt::Write as _;
 use embedded_graphics::mono_font::ascii::{FONT_6X10, FONT_9X18};
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::pixelcolor::Rgb565;
@@ -28,13 +28,13 @@ impl<'a, 'b> ListSource for ModeSource<'a, 'b> {
         self.app.storage_mut().read_raw(addr, buf);
     }
 
-    fn label(&mut self, index: usize, w: &mut dyn core::fmt::Write) {
-        let _ = w.write_str(modes_table()[index].name);
+    fn label(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) {
+        w.put_str(modes_table()[index].name);
     }
 
-    fn value(&mut self, index: usize, w: &mut dyn core::fmt::Write) -> bool {
+    fn value(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) -> bool {
         if index == self.current {
-            let _ = w.write_str("*");
+            w.put_str("*");
             true
         } else {
             false
@@ -129,15 +129,21 @@ where
     for (stage, label, hz, y) in [(0u8, "START", lo, 40), (1u8, "STOP", hi, 66)] {
         let mut value: TextBuf<8> = TextBuf::new();
         if snap.stage == stage && snap.typed_len > 0 {
-            write!(value, "{}", typed.as_str()).ok();
+            value.put_str(typed.as_str());
         } else {
-            write!(value, "{}.{:03}", hz / 1_000_000, hz / 1000 % 1000).ok();
+            value.put_u32(hz / 1_000_000);
+            value.put_char('.');
+            value.put_u32_w(hz / 1000 % 1000, 3, b'0');
         }
         field(lcd, label, value.as_str(), y, snap.stage == stage);
     }
 
     let mut step: TextBuf<20> = TextBuf::new();
-    write!(step, "STEP {}.{:02} KHZ UP/DN", snap.step / 100, snap.step % 100).ok();
+    step.put_str("STEP ");
+    step.put_u32((snap.step / 100) as u32);
+    step.put_char('.');
+    step.put_u32_w((snap.step % 100) as u32, 2, b'0');
+    step.put_str(" KHZ UP/DN");
     small(lcd, step.as_str(), 90, FG);
 
     if snap.err {

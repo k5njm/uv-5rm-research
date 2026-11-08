@@ -54,16 +54,16 @@ impl<const N: usize> DigitInput<N> {
     pub(crate) fn write_display(
         &self,
         int_digits: usize,
-        w: &mut dyn core::fmt::Write,
+        w: &mut dyn crate::fmtlite::Sink,
     ) {
         for i in 0..N {
             if i == int_digits {
-                let _ = w.write_char('.');
+                w.put_char('.');
             }
             if i < self.len {
-                let _ = write!(w, "{}", self.digits[i] as u32);
+                w.put_u32(self.digits[i] as u32);
             } else {
-                let _ = w.write_char('-');
+                w.put_char('-');
             }
         }
     }

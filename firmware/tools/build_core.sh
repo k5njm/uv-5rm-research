@@ -12,10 +12,12 @@ dir="${CARGO_TARGET_DIR:-/tmp/core-$mode}"
 cd "$FW"
 args=(--release --manifest-path firmware-source/Cargo.toml --config firmware-source/.cargo/config.toml --target-dir "$dir")
 [ -n "$feat" ] && args+=(--features "$feat")
+log="$(mktemp)"
 case "$mode" in
   small)  RUSTFLAGS="-C link-arg=-Tlink.x -Zunstable-options -Cpanic=immediate-abort" \
-          cargo "+$SMALL_TOOLCHAIN" build "${args[@]}" -Z build-std=core,compiler_builtins -Z build-std-features=compiler-builtins-mem 2>&1 | tail -1 ;;
-  legacy) cargo "+$LEGACY_TOOLCHAIN" build "${args[@]}" 2>&1 | tail -1 ;;
+          cargo "+$SMALL_TOOLCHAIN" build "${args[@]}" -Z build-std=core,compiler_builtins -Z build-std-features=compiler-builtins-mem >"$log" 2>&1 || { cat "$log"; exit 1; } ;;
+  legacy) cargo "+$LEGACY_TOOLCHAIN" build "${args[@]}" >"$log" 2>&1 || { cat "$log"; exit 1; } ;;
   *) echo "mode must be small or legacy" >&2; exit 2 ;;
 esac
+tail -1 "$log"
 python3 -I source-changes/elf2bin.py "$dir/thumbv7em-none-eabi/release/bf5rh-fw" "$out" | tail -2

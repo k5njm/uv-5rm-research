@@ -27,8 +27,8 @@ pub(crate) trait ListSource {
     fn row_count(&mut self) -> usize;
     /// Raw flash read, for the menu backdrop.
     fn read_flash(&mut self, addr: u32, buf: &mut [u8]);
-    fn label(&mut self, index: usize, w: &mut dyn core::fmt::Write);
-    fn value(&mut self, _index: usize, _w: &mut dyn core::fmt::Write) -> bool {
+    fn label(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink);
+    fn value(&mut self, _index: usize, _w: &mut dyn crate::fmtlite::Sink) -> bool {
         false
     }
     fn cursor(&mut self, _index: usize) -> Option<usize> {

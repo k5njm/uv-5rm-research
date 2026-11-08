@@ -1,9 +1,10 @@
 use core::mem::MaybeUninit;
 
 use bf5rh_abi::{
-    Api, AppEntryFn, AppEvent, AppResult, ListRow, PackageHeader, ARENA_MAX,
-    ARENA_SIZE, BUILD_HASH, HANDOFF_SIZE, MAGIC,
+    rf_reg_writable, Api, AppEntryFn, AppEvent, AppResult, Cue, ListRow,
+    PackageHeader, ARENA_MAX, ARENA_SIZE, BUILD_HASH, HANDOFF_SIZE, MAGIC,
 };
+use crate::fmtlite::Sink;
 use cortex_m::peripheral::{SCB, SYST};
 use embedded_graphics::mono_font::ascii::{FONT_5X8, FONT_6X10, FONT_9X18};
 use embedded_graphics::mono_font::{MonoFont, MonoTextStyleBuilder};
@@ -185,13 +186,13 @@ pub(crate) fn slot_valid(app: &mut App, slot: u8) -> bool {
         && hdr.segment(0).is_some()
 }
 
-pub(crate) fn slot_name(app: &mut App, slot: u8, w: &mut dyn core::fmt::Write) {
+pub(crate) fn slot_name(app: &mut App, slot: u8, w: &mut dyn crate::fmtlite::Sink) {
     if !slot_valid(app, slot) {
-        let _ = write!(w, "EMPTY");
+        w.put_str("EMPTY");
         return;
     }
     let hdr = peek_header(app, slot);
-    let _ = write!(w, "{}", hdr.name_str());
+    w.put_str(hdr.name_str());
 }
 
 /// Load segment `seg` of the package in `slot` into the arena. Every segment
@@ -783,12 +784,11 @@ extern "C" fn api_nor_erase_sector(addr: u32) -> bool {
 
 #[inline(never)]
 extern "C" fn api_fmt_u32(v: u32, out: *mut u8) -> u16 {
-    use core::fmt::Write;
     if out.is_null() {
         return 0;
     }
     let mut buf: crate::ui::TextBuf<10> = crate::ui::TextBuf::new();
-    let _ = write!(buf, "{v}");
+    buf.put_u32(v);
     let s = buf.as_str().as_bytes();
     unsafe { core::ptr::copy_nonoverlapping(s.as_ptr(), out, s.len()) };
     s.len() as u16
@@ -796,14 +796,15 @@ extern "C" fn api_fmt_u32(v: u32, out: *mut u8) -> u16 {
 
 #[inline(never)]
 extern "C" fn api_fmt_freq(hz: u32, out: *mut u8) -> u16 {
-    use core::fmt::Write;
     if out.is_null() {
         return 0;
     }
     let mhz = hz / 1_000_000;
     let frac = (hz % 1_000_000) / 10;
     let mut buf: crate::ui::TextBuf<16> = crate::ui::TextBuf::new();
-    let _ = write!(buf, "{mhz}.{frac:05}");
+    buf.put_u32(mhz);
+    buf.put_char('.');
+    buf.put_u32_w(frac, 5, b'0');
     let s = buf.as_str().as_bytes();
     unsafe { core::ptr::copy_nonoverlapping(s.as_ptr(), out, s.len()) };
     s.len() as u16
@@ -874,7 +875,7 @@ impl<'a> ListSource for BufferListSource<'a> {
         app_ref().storage_mut().read_raw(addr, buf);
     }
 
-    fn label(&mut self, index: usize, w: &mut dyn core::fmt::Write) {
+    fn label(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) {
         if let Some(row) = self.window_row(index) {
             let end = row
                 .label
@@ -882,12 +883,12 @@ impl<'a> ListSource for BufferListSource<'a> {
                 .position(|&b| b == 0)
                 .unwrap_or(row.label.len());
             if let Ok(s) = core::str::from_utf8(&row.label[..end]) {
-                let _ = w.write_str(s);
+                w.put_str(s);
             }
         }
     }
 
-    fn value(&mut self, index: usize, w: &mut dyn core::fmt::Write) -> bool {
+    fn value(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) -> bool {
         if let Some(row) = self.window_row(index) {
             if row.has_value {
                 let end = row
@@ -896,7 +897,7 @@ impl<'a> ListSource for BufferListSource<'a> {
                     .position(|&b| b == 0)
                     .unwrap_or(row.value.len());
                 if let Ok(s) = core::str::from_utf8(&row.value[..end]) {
-                    let _ = w.write_str(s);
+                    w.put_str(s);
                 }
                 return true;
             }
@@ -1001,7 +1002,6 @@ extern "C" fn api_subaudio_code_of_index(v: i32) -> u16 {
 
 #[inline(never)]
 extern "C" fn api_subaudio_format(v: i32, out: *mut u8, cap: u16) -> u16 {
-    use core::fmt::Write;
     if out.is_null() || cap == 0 {
         return 0;
     }
@@ -1009,18 +1009,18 @@ extern "C" fn api_subaudio_format(v: i32, out: *mut u8, cap: u16) -> u16 {
     let mut buf: crate::ui::TextBuf<16> = crate::ui::TextBuf::new();
     match sub {
         crate::device::radio::SubAudio::None => {
-            let _ = write!(buf, "OFF");
+            buf.put_str("OFF");
         }
         crate::device::radio::SubAudio::Ctcss(hz) => {
-            let _ = write!(buf, "{}.{}Hz", hz / 10, hz % 10);
+            buf.put_u32((hz / 10) as u32);
+            buf.put_char('.');
+            buf.put_u32((hz % 10) as u32);
+            buf.put_str("Hz");
         }
         crate::device::radio::SubAudio::Dcs { code, inverted } => {
-            let _ = write!(
-                buf,
-                "D{:03o}{}",
-                code,
-                if inverted { "I" } else { "N" }
-            );
+            buf.put_char('D');
+            buf.put_oct3(code as u32);
+            buf.put_str(if inverted { "I" } else { "N" });
         }
     }
     let s = buf.as_str().as_bytes();
@@ -1409,6 +1409,44 @@ extern "C" fn api_set_agc_fix(rank: i8) {
     app.radio_mut().set_agc_fix(syst, rank);
 }
 
+#[inline(never)]
+extern "C" fn api_rf_reg_read(addr: u8) -> u16 {
+    let (app, syst) = (app_ref(), syst_ref());
+    app.radio_mut().rf_reg_read(syst, addr)
+}
+
+/// Writes only registers on the ABI crate's allow-list; anything else is refused without touching the chip.
+#[inline(never)]
+extern "C" fn api_rf_reg_write(addr: u8, value: u16) -> bool {
+    if !rf_reg_writable(addr) {
+        return false;
+    }
+    let (app, syst) = (app_ref(), syst_ref());
+    app.radio_mut().rf_reg_write(syst, addr, value);
+    true
+}
+
+#[inline(never)]
+extern "C" fn api_delay_us(us: u32) {
+    crate::hal::delay::us(syst_ref(), us);
+}
+
+/// Speaker-only (never keys the transmitter) and subject to the user's beep setting.
+#[inline(never)]
+extern "C" fn api_play_cue(cues: *const Cue, count: u16) {
+    if cues.is_null() {
+        return;
+    }
+    let n = (count as usize).min(8);
+    let src = unsafe { core::slice::from_raw_parts(cues, n) };
+    let mut tones = [(0u16, 0u32); 8];
+    for (t, c) in tones.iter_mut().zip(src) {
+        *t = (c.hz_div10, c.ms as u32);
+    }
+    let (app, syst) = (app_ref(), syst_ref());
+    app.radio_mut().play_cue(syst, &tones[..n]);
+}
+
 static API: Api = Api {
     uptime_100us: api_uptime_100us,
     delay_ms: api_delay_ms,
@@ -1485,4 +1523,8 @@ static API: Api = Api {
     set_holds_rx: api_set_holds_rx,
     set_af_out: api_set_af_out,
     set_agc_fix: api_set_agc_fix,
+    rf_reg_read: api_rf_reg_read,
+    rf_reg_write: api_rf_reg_write,
+    delay_us: api_delay_us,
+    play_cue: api_play_cue,
 };

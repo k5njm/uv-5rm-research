@@ -1,6 +1,6 @@
 use super::{TextBuf, SCREEN_H, SCREEN_W};
 use crate::flash_map::{self, Settings};
-use core::fmt::Write as _;
+use crate::fmtlite::Sink as _;
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::mono_font::{
     ascii::{FONT_6X10, FONT_9X18},
@@ -139,7 +139,10 @@ where
     D: DrawTarget<Color = Rgb565>,
 {
     let mut line: TextBuf<8> = TextBuf::new();
-    write!(line, "{}.{:02}V", voltage_cv / 100, voltage_cv % 100).ok();
+    line.put_u32((voltage_cv / 100) as u32);
+    line.put_char('.');
+    line.put_u32_w((voltage_cv % 100) as u32, 2, b'0');
+    line.put_char('V');
     let line = line.as_str();
     text_big(lcd, line, centered(line, BIG_W), GAUGE_Y, FG);
 
@@ -179,7 +182,8 @@ where
     //     other => write!(chip, "RFIC {other:04X}"),
     // }
     //     .ok();
-    write!(chip, "0x{chip_id:04X}").ok();
+    chip.put_str("0x");
+    chip.put_hex4(chip_id as u32);
     text_small(lcd, chip.as_str(), 7, FOOTER_BASELINE, DIM);
 
     let ver = crate::app::FIRMWARE_VERSION;

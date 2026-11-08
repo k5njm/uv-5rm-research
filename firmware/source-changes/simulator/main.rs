@@ -43,6 +43,9 @@ pub const MY_SEG: u8 = 2;
 mod settings;
 #[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system"))]
 const _: () = settings::assert_seg_features();
+#[path = "../../firmware-source/src/fmtlite.rs"]
+mod fmtlite;
+use fmtlite::Sink;
 mod scenario;
 
 mod flash_map {
@@ -65,30 +68,7 @@ pub mod ui {
     pub(crate) const SCREEN_W: i32 = 160;
     pub(crate) const SCREEN_H: i32 = 128;
 
-    #[derive(Clone, Copy, PartialEq)]
-    pub struct TextBuf<const N: usize> {
-        buf: [u8; N],
-        len: usize,
-    }
-
-    impl<const N: usize> TextBuf<N> {
-        pub fn new() -> Self {
-            TextBuf { buf: [0; N], len: 0 }
-        }
-        pub fn as_str(&self) -> &str {
-            core::str::from_utf8(&self.buf[..self.len]).unwrap_or("")
-        }
-    }
-
-    impl<const N: usize> core::fmt::Write for TextBuf<N> {
-        fn write_str(&mut self, s: &str) -> core::fmt::Result {
-            let bytes = s.as_bytes();
-            let n = bytes.len().min(N - self.len);
-            self.buf[self.len..self.len + n].copy_from_slice(&bytes[..n]);
-            self.len += n;
-            Ok(())
-        }
-    }
+    pub use crate::fmtlite::TextBuf;
 
     #[path = "../../backdrop.rs"]
     pub mod backdrop;
@@ -219,6 +199,35 @@ extern "C" fn uptime() -> u32 {
 }
 extern "C" fn delay_ms(ms: u32) {
     sim().now = sim().now.wrapping_add(ms * 10);
+}
+
+/// Microsecond delay: the simulator clock ticks in 100 us units, so round up.
+extern "C" fn delay_us(us: u32) {
+    sim().now = sim().now.wrapping_add(us.div_ceil(100));
+}
+
+/// Raw RF register access, on the same chip model TEXT uses. Writes honour the ABI crate's allow-list, like the core.
+static mut RF_WRITES_REFUSED: u32 = 0;
+extern "C" fn rf_reg_read(addr: u8) -> u16 {
+    sim_rf_read(addr)
+}
+extern "C" fn rf_reg_write(addr: u8, value: u16) -> bool {
+    if !bf5rh_abi::rf_reg_writable(addr) {
+        unsafe { RF_WRITES_REFUSED += 1 };
+        return false;
+    }
+    sim_rf_write(addr, value);
+    true
+}
+
+/// Speaker-only cue sequences the app asked for (never keys the transmitter: a cue must not move the PTT counters).
+static mut CUES: Vec<Vec<(u16, u16)>> = Vec::new();
+extern "C" fn play_cue(cues: *const bf5rh_abi::Cue, count: u16) {
+    let n = (count as usize).min(8);
+    let seq = unsafe { std::slice::from_raw_parts(cues, n) }.iter().map(|c| (c.hz_div10, c.ms)).collect();
+    unsafe { CUES.push(seq) };
+    let s = sim();
+    s.now = s.now.wrapping_add(unsafe { CUES.last().unwrap().iter().map(|c| c.1 as u32 * 10).sum() });
 }
 
 impl OriginDimensions for Sim {
@@ -451,15 +460,15 @@ impl ui::list::ListSource for BufferListSource {
     fn read_flash(&mut self, _addr: u32, buf: &mut [u8]) {
         buf.fill(0xFF);
     }
-    fn label(&mut self, i: usize, w: &mut dyn core::fmt::Write) {
+    fn label(&mut self, i: usize, w: &mut dyn Sink) {
         if let Some(r) = self.window_row(i) {
-            let _ = w.write_str(cstr(&r.label));
+            w.put_str(cstr(&r.label));
         }
     }
-    fn value(&mut self, i: usize, w: &mut dyn core::fmt::Write) -> bool {
+    fn value(&mut self, i: usize, w: &mut dyn Sink) -> bool {
         match self.window_row(i) {
             Some(r) if r.has_value => {
-                let _ = w.write_str(cstr(&r.value));
+                w.put_str(cstr(&r.value));
                 true
             }
             _ => false,
@@ -741,6 +750,10 @@ static API: Api = Api {
     set_holds_rx: holds,
     set_af_out: af,
     set_agc_fix: agc,
+    rf_reg_read,
+    rf_reg_write,
+    delay_us,
+    play_cue,
 };
 
 type Entry = fn(&Api, AppEvent) -> AppResult;
@@ -1263,13 +1276,13 @@ impl ui::list::ListSource for Menu {
         let off = (addr - flash_map::addr::BOOT_LOGO_ADDR) as usize;
         buf.copy_from_slice(&self.logo[off..off + buf.len()]);
     }
-    fn label(&mut self, i: usize, w: &mut dyn core::fmt::Write) {
-        let _ = w.write_str(self.rows[i].0);
+    fn label(&mut self, i: usize, w: &mut dyn Sink) {
+        w.put_str(self.rows[i].0);
     }
-    fn value(&mut self, i: usize, w: &mut dyn core::fmt::Write) -> bool {
+    fn value(&mut self, i: usize, w: &mut dyn Sink) -> bool {
         match self.rows[i].1 {
             Some(v) => {
-                let _ = w.write_str(v);
+                w.put_str(v);
                 true
             }
             None => false,
@@ -2358,6 +2371,33 @@ fn test_text() {
     check(chip().regs[0x58] == 0, "a second clean-up is harmless");
 }
 
+/// The core's new app-facing functions: raw RF registers behind an allow-list, speaker-only cues, microsecond delay.
+fn test_rf_api() {
+    println!("RF register API: allow-list, speaker cues, microsecond delay");
+    reset(146_520_000);
+    chip_reset();
+    let protected = [0x19u8, 0x31, 0x33, 0x36, 0x37, 0x73, 0x00, 0x7F];
+    let before = chip().regs;
+    for reg in protected {
+        check(!(API.rf_reg_write)(reg, 0xBEEF), &format!("write to protected register {reg:#04x} refused"));
+    }
+    check(unsafe { RF_WRITES_REFUSED } == protected.len() as u32, "every refusal was counted");
+    check(chip().regs == before, "refused writes never reached the chip");
+    check((API.rf_reg_write)(0x5A, 0x1234), "write to an allowed modem register (0x5A) accepted");
+    check(chip().regs[0x5A] == 0x1234, "and it reached the chip");
+    check(bf5rh_abi::RF_WRITABLE.iter().all(|&r| bf5rh_abi::rf_reg_writable(r)), "every listed register is writable");
+    check(!bf5rh_abi::rf_reg_writable(0x36) && !bf5rh_abi::rf_reg_writable(0x37), "PA (0x36) and power (0x37) stay core-only");
+    check((API.rf_reg_read)(0x36) == chip().regs[0x36], "reads are not restricted");
+    let t0 = sim().now;
+    (API.delay_us)(250);
+    check(sim().now.wrapping_sub(t0) == 3, "250 us rounds up to 3 simulator ticks (100 us each)");
+    let (ptt, tone) = (sim().ptt_calls, unsafe { TONE_ON_CALLS });
+    let cue = [bf5rh_abi::Cue { hz_div10: 88, ms: 100 }, bf5rh_abi::Cue { hz_div10: 66, ms: 100 }];
+    (API.play_cue)(cue.as_ptr(), 2);
+    check(unsafe { CUES.last() } == Some(&vec![(88, 100), (66, 100)]), "cue sequence recorded as given");
+    check(sim().ptt_calls == ptt && unsafe { TONE_ON_CALLS } == tone, "a cue never keys PTT or calls the transmitting tone function");
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("scenario") {
@@ -2374,6 +2414,7 @@ fn main() {
     test_search_qt();
     test_text();
     test_menus();
+    test_rf_api();
     check(unsafe { TONE_ON_CALLS } == 0, "no app called the transmitting tone function");
     unsafe {
         println!("\n{} passed, {} failed", PASSES, FAILS);

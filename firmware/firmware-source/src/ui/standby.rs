@@ -1,7 +1,7 @@
+use crate::fmtlite::Sink;
 use super::{icons, TextBuf, SCREEN_H, SCREEN_W};
 use crate::app::{self, ChannelDisplayMode};
 use crate::device::radio::{Modulation, Power, SubAudio};
-use core::fmt::Write as _;
 use embedded_graphics::mono_font::{
     ascii::{FONT_5X8, FONT_6X10, FONT_9X18},
     MonoFont, MonoTextStyle,
@@ -455,7 +455,9 @@ where
 {
     let secs = app.tx_elapsed_seconds();
     let mut buf: TextBuf<8> = TextBuf::new();
-    write!(buf, "{:02}:{:02}", secs / 60, secs % 60).ok();
+    buf.put_u32_w((secs / 60) as u32, 2, b'0');
+    buf.put_char(':');
+    buf.put_u32_w((secs % 60) as u32, 2, b'0');
     text(
         lcd,
         buf.as_str(),
@@ -508,7 +510,10 @@ fn draw_battery<D>(
     );
 
     let mut volts: TextBuf<8> = TextBuf::new();
-    write!(volts, "{}.{:02}V", cv / 100, cv % 100).ok();
+    volts.put_u32((cv / 100) as u32);
+    volts.put_char('.');
+    volts.put_u32_w((cv % 100) as u32, 2, b'0');
+    volts.put_char('V');
     let volts = volts.as_str();
     text(
         lcd,
@@ -612,9 +617,10 @@ where
 
     let mut label: TextBuf<8> = TextBuf::new();
     if app.side_is_channel_mode(i) {
-        write!(label, "M{:03}", app.side_channel_num(i) + 1).ok();
+        label.put_char('M');
+        label.put_u32_w((app.side_channel_num(i) + 1) as u32, 3, b'0');
     } else {
-        write!(label, "VFO").ok();
+        label.put_str("VFO");
     }
     text(
         lcd,
@@ -670,13 +676,9 @@ where
                 let shown = &name[..name.len().min(10)];
                 text(lcd, shown, &FONT_9X18, CONTENT_X + 3, baseline, fg);
                 let mut freq_line: TextBuf<12> = TextBuf::new();
-                write!(
-                    freq_line,
-                    "{}.{:04}",
-                    freq_hz / 1_000_000,
-                    freq_hz / 100 % 10_000
-                )
-                .ok();
+                freq_line.put_u32(freq_hz / 1_000_000);
+                freq_line.put_char('.');
+                freq_line.put_u32_w(freq_hz / 100 % 10_000, 4, b'0');
                 text_right(lcd, freq_line.as_str(), &FONT_6X10, baseline, fg);
             }
             ChannelDisplayMode::Name if has_name => {
@@ -711,9 +713,11 @@ pub(crate) fn draw_frequency<D>(
     let frac = (freq_hz % 1_000_000) / 10; // 5 fractional digits (kHz + 2 extra)
 
     let mut head: TextBuf<8> = TextBuf::new();
-    write!(head, "{:3}.{:03}", mhz, frac / 100).ok();
+    head.put_u32_w(mhz, 3, b' ');
+    head.put_char('.');
+    head.put_u32_w(frac / 100, 3, b'0');
     let mut tail: TextBuf<4> = TextBuf::new();
-    write!(tail, "{:02}", frac % 100).ok();
+    tail.put_u32_w(frac % 100, 2, b'0');
 
     let head_w = head.as_str().len() as i32 * BIG_W;
     let tail_w = tail.as_str().len() as i32 * SMALL_W;
@@ -739,12 +743,12 @@ where
     let mut buf: TextBuf<8> = TextBuf::new();
     for pos in 0..6usize {
         if pos == 3 {
-            write!(buf, ".").ok();
+            buf.put_char('.');
         }
         if pos < len {
-            write!(buf, "{}", app.freq_input_digit(pos) as u32).ok();
+            buf.put_u32(app.freq_input_digit(pos) as u32);
         } else {
-            write!(buf, "-").ok();
+            buf.put_char('-');
         }
     }
     let w = buf.as_str().len() as i32 * BIG_W;
@@ -764,12 +768,12 @@ where
 {
     let len = app.channel_input_len();
     let mut buf: TextBuf<8> = TextBuf::new();
-    write!(buf, "M").ok();
+    buf.put_char('M');
     for pos in 0..3usize {
         if pos + len < 3 {
-            write!(buf, "-").ok();
+            buf.put_char('-');
         } else {
-            write!(buf, "{}", app.freq_input_digit(pos + len - 3) as u32).ok();
+            buf.put_u32(app.freq_input_digit(pos + len - 3) as u32);
         }
     }
     text(lcd, buf.as_str(), &FONT_6X10, LABEL_X, baseline_y, AMBER);
@@ -782,12 +786,12 @@ where
     let len = app.dtmf_dial_len();
     let cap = app.dtmf_dial_capacity();
     let mut buf: TextBuf<17> = TextBuf::new();
-    write!(buf, ">").ok();
+    buf.put_char('>');
     for pos in 0..cap {
         if pos < len {
-            write!(buf, "{}", dtmf_char(app.dtmf_dial_digit(pos))).ok();
+            buf.put_char(dtmf_char(app.dtmf_dial_digit(pos)));
         } else {
-            write!(buf, "-").ok();
+            buf.put_char('-');
         }
     }
     text(lcd, buf.as_str(), &FONT_6X10, MARGIN, baseline_y, AMBER);
@@ -1044,22 +1048,25 @@ fn draw_meter<D>(
         fill(lcd, 0, METER_TOP, S_METER_BAR_X - 3, METER_H, BG);
         let mut line: TextBuf<20> = TextBuf::new();
         if !state.live {
-            line.write_str("LAST ").ok();
+            line.put_str("LAST ");
         }
         if let Some(side) = state.side {
-            line.write_str(if side == 0 { "A " } else { "B " }).ok();
+            line.put_str(if side == 0 { "A " } else { "B " });
         }
         match state.dbm {
             None => {
-                line.write_str("--").ok();
+                line.put_str("--");
             }
             Some(dbm) => {
-                write!(line, "{dbm}dBm").ok();
+                line.put_i32(dbm as i32);
+                line.put_str("dBm");
                 if state.live {
                     if state.over_s9 > 0 {
-                        write!(line, " +{}", state.over_s9).ok();
+                        line.put_str(" +");
+                        line.put_u32(state.over_s9 as u32);
                     } else {
-                        write!(line, " S{}", state.s_number).ok();
+                        line.put_str(" S");
+                        line.put_u32(state.s_number as u32);
                     }
                 }
             }

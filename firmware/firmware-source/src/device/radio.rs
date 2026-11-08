@@ -559,6 +559,15 @@ impl<'a> Radio<'a> {
         self.play_tone_sequence(syst, &BEEP_TONES, false, true);
     }
 
+    /// Raw RF register access for apps; the caller (overlay API) enforces the write allow-list.
+    pub fn rf_reg_read(&mut self, syst: &mut SYST, addr: u8) -> u16 {
+        self.fd6818.reg_read(syst, addr)
+    }
+
+    pub fn rf_reg_write(&mut self, syst: &mut SYST, addr: u8, value: u16) {
+        self.fd6818.reg_write(syst, addr, value)
+    }
+
     /// Local-speaker-only tone sequence; never keys the transmitter.
     pub fn play_cue(&mut self, syst: &mut SYST, tones: &[(u16, u32)]) {
         if !self.beeps_enabled || self.audio_open {

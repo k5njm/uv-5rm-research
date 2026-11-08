@@ -2,6 +2,7 @@
 #![no_main]
 
 mod app;
+mod fmtlite;
 mod board;
 mod cps;
 mod device;
