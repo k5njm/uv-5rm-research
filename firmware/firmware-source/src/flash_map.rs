@@ -76,6 +76,7 @@ pub mod addr {
     /// Layout of that region (nothing in the firmware enforces it; each user checks its own range):
     ///   0x194000  satellite table (5120 bytes, `CMD_SAT_WRITE`)
     ///   0x1B0000  FSK PROBE capture, 128 KB (the app; read back by `probe_capture.py`)
+    ///   0x1D8000  FM station names, 8 KB = two 4 KB halves (the FM app; `CMD_FM_WRITE` by `fm_stations.py`)
     ///   0x1E0000  channel extras (below)
     ///   0x1F0000  TEXT message log, 16 KB (the app)
     ///
@@ -90,6 +91,11 @@ pub mod addr {
     pub const CHAN_EXTRA_TABLE: u32 = 20480; // 1000 records, padded to whole 512-byte chunks (5 sectors)
     pub const CHAN_DETAIL_LEN: usize = 16;
     pub const CHAN_EXTRA_MARK: u8 = 0xA5;
+
+    /// FM station names (layout in apps/fm/src/logic.rs). The port erases both halves at the first chunk and takes
+    /// chunks anywhere inside them; the FM app writes the table itself afterwards.
+    pub const FM_STATION_ADDR: u32 = 0x1D_8000;
+    pub const FM_STATION_TABLE: u32 = 0x2000;
 }
 
 pub const FIRST_BOOT_MAGIC: [u8; 4] = *b"AURA";

@@ -3,7 +3,9 @@
   scripts/dev.sh tools-test        (or: python3 firmware/tests/test_probe_capture.py)
 
 The capture layout here is written by hand from the comment in apps/fskprobe/src/logic.rs, not by the app; the
-simulator scenario fskprobe_capture checks the app's side of the same layout. UNVERIFIED against real hardware.
+simulator scenario fskprobe_capture and the FSK PROBE checks in the simulator suite check the app's side of the same
+layout. Both header versions are read: "FSKCAP1" (the first probe) and "FSKCAP2" (options and registers recorded).
+UNVERIFIED against real hardware.
 """
 import os, shutil, struct, subprocess, sys, tempfile, unittest
 
@@ -21,6 +23,15 @@ def rd(p, mode="r"):
 
 def header(t0=1000):
     return (b"FSKCAP1\0" + struct.pack("<IHHHHIB", 404_800_000, 4800, 0x086D, 0x5388, 0xC195, t0, REC)).ljust(PAGE, b"\xff")
+
+
+def header2(t0=1000, opts=0x10, per_irq=1, regs=(0x3002, 0x0309, 0x1008, 0x5625, 0x3B20, 0x0201, 0x00E0), frame_words=158):
+    return (b"FSKCAP2\0" + struct.pack("<IHHHHIB", 404_800_000, 4800, 0x086D, 0x5388, 0xC195, t0, REC)
+            + struct.pack("<BBB7HH", 2, opts, per_irq, *regs, frame_words)).ljust(PAGE, b"\xff")
+
+
+def rec(t, word, flags, rssi=70):
+    return struct.pack("<IHBB", t, word, flags, rssi)
 
 
 def records(n, t0=1000):
@@ -81,11 +92,12 @@ class Box(unittest.TestCase):
         self.assertEqual(blob, self.nor0[CAP:CAP + PAGE * 5])
         self.assertIn("404.800000 MHz, 4800 baud", p.stdout)
         self.assertIn("100 records of 16352 (not full): 1 sync, 100 words", p.stdout)
+        self.assertIn("header version 1: the configuration was not recorded", p.stdout)
         self.assertIn("median 3.3 ms", p.stdout)
         csv = rd(os.path.join(self.box, "cap.csv")).split("\n")
-        self.assertEqual(csv[0], "time_100us,gap_100us,word,sync,done,rssi_dbm")
-        self.assertEqual(csv[1], "1030,30,0000,1,0,-90")
-        self.assertEqual(csv[2], "1063,33,9E37,0,0,-89")
+        self.assertEqual(csv[0], "time_100us,gap_100us,word,sync,done,rssi_dbm,pos,neg,frame,tail")
+        self.assertEqual(csv[1], "1030,30,0000,1,0,-90,0,0,0,0")
+        self.assertEqual(csv[2], "1063,33,9E37,0,0,-89,0,0,0,0")
         self.assertEqual(len([l for l in csv if l]), 101)
         self.assert_only_read_the_capture()
         self.assertEqual(len(self.reads()), 6 * 4, "five pages kept and the erased one that ended it, 4 reads each")
@@ -125,6 +137,43 @@ class Box(unittest.TestCase):
             f.write(b"\x00" * 600)
         bad = self.run_tool("--decode", os.path.join(self.box, "junk.bin"), ok=False)
         self.assertIn("not an FSK PROBE capture", bad.stderr)
+
+
+    def test_a_version_2_capture_says_how_it_was_made_and_splits_into_frames(self):
+        recs = rec(1030, 0, 1 | 8)                                           # sync, matched as sent
+        recs += b"".join(rec(1063 + 33 * i, 0x1000 + i, 2 | (32 if i == 157 else 0)) for i in range(158))   # a whole frame
+        recs += rec(9000, 0, 1 | 16)                                         # a sync matched inverted ...
+        recs += b"".join(rec(9033 + 33 * i, 0x2000 + i, 2 | (4 if i == 127 else 0)) for i in range(128))   # ... and the chip's done
+        recs += rec(20000, 0, 1) + rec(20033, 0x3000, 2)                    # a sync and one word, then nothing: cut off
+        self.radio_with(header2(opts=0x01 | 1 << 2 | 1 << 3 | 1 << 5, per_irq=4) + recs)
+        p = self.run_tool("fake", self.out)
+        self.assertIn("options 0x2d: length 256 bytes (REG_5D 0x3b20), threshold 4 word(s) per interrupt, invert on, "
+                      "RX bandwidth 1.2K, sync 2 bytes; frame = 158 words", p.stdout)
+        self.assertIn("registers as written: REG_3F 3002 REG_58 0309 REG_59 1008 REG_5C 5625 REG_5D 3B20 REG_5E 0201 REG_70 00E0", p.stdout)
+        self.assertIn("syncs: 3 (1 as sent, 1 inverted); frames ended by count 1, by the chip's done flag 1, by the next sync 0, cut off 1", p.stdout)
+        self.assertIn("words per frame: min 1, median 128, max 158", p.stdout)
+        csv = rd(os.path.join(self.box, "cap.csv")).split("\n")
+        self.assertEqual(csv[1], "1030,30,,1,0,-90,1,0,0,0")
+        self.assertEqual(csv[2 + 156], f"{1063 + 33 * 156},33,{0x1000 + 156:04X},0,0,-90,0,0,0,0")
+        self.assertEqual(csv[2 + 157], f"{1063 + 33 * 157},33,{0x1000 + 157:04X},0,0,-90,0,0,1,0")
+        self.assert_only_read_the_capture()
+
+    def test_the_first_real_capture_still_decodes(self):
+        # What the radio recorded on noise: a sync, and 119.7 ms later one word with the done flag.
+        t = 28100
+        self.radio_with(header(t0=1000) + rec(t, 0, 1, 46) + rec(t + 1197, 0xFCB7, 2 | 4, 46))
+        p = self.run_tool("fake", self.out)
+        self.assertIn("2 records of 16352 (not full): 1 sync, 1 words", p.stdout)
+        self.assertIn("frames ended by count 0, by the chip's done flag 1", p.stdout)
+        self.assertIn("sync to end: median 119.7 ms", p.stdout)
+        self.assertIn("first words: FCB7", p.stdout)
+
+    def test_an_unknown_header_version_is_refused(self):
+        bad = bytearray(header2())
+        bad[25] = 9
+        self.radio_with(bytes(bad))
+        p = self.run_tool("fake", self.out, ok=False)
+        self.assertIn("header version 9", p.stderr + p.stdout)
 
 
 if __name__ == "__main__":

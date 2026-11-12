@@ -1,0 +1,27 @@
+# Hold UP: the tuner seeks to the next signal (the simulated one finds 94.5 MHz, then 98.1); keys are ignored meanwhile.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 917 KKXT Adult Album Alt
+fmstation 933 WBAP News/Talk
+fmstation 963 KSCS Country
+fmstation 1011 WRR Classical
+fmstation 1045 KKDA Hip-Hop
+handoff fm 920
+app fm
+wait 0.5
+hold up
+wait 0.05
+shot seeking
+key 5                     # not heard while seeking
+wait 1
+shot found_945
+hold up
+wait 1
+shot found_981
+hold down
+wait 1
+shot back_945
+key exit
+expect exit

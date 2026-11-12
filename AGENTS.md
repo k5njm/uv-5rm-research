@@ -15,7 +15,7 @@ Conventions for this repo (borrowed from the sibling `beepy-ui` project's workfl
   before `run_scenarios.sh --update`.
 - Visual styles are cargo features (`style-d74|proxx|ft5d`, default classic) of an app; build with `MKAPP_FEATURES=style-d74 mkapp.py ...`; each style has its own golden dir. Classic must stay pixel-identical unless intentionally changed.
 - Receive-only apps must never call `api.tone_on` (it keys the transmitter) or key PTT. Scenarios enforce this.
-- App arena is 8,192 bytes; core firmware has ~88 bytes of flash free: new features are overlay apps.
+- App arena is 8,192 bytes at `0x200002D0` (`abi::ARENA_ADDR`; 256 bytes of headroom below it for the core's statics, the link fails under 64 -- see `memory.x`; moving it means every `app.x`, `memory.x`, the ABI and a rebuild of every app); core firmware has about 2.0 KB of flash free (2,092 bytes in `fw-default.bin` after the fault handler): new features are overlay apps.
 - Build overlays with `firmware/firmware-source/tools/mkapp.py` (needs `rust-objcopy`, `rust-nm`, `rust-size` on PATH; llvm-* symlinks work).
 - Never commit radio backups (`my-backup/`, `*.img`), secrets, or third-party logos/music.
 - Development is local-first. Flash only an image built by `scripts/dev.sh release` whose sha256 equals the pin in

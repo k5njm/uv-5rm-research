@@ -1,8 +1,11 @@
-# FM broadcast app. NOTE: the simulator does not model the FM tuner (RSSI reads 0, no stations).
+# FM app on a radio with no station table and nothing in the core's bare list: the tuner on an unsaved frequency,
+# and a station list that holds only the row that saves it. The simulated tuner hears 90.1 94.5 98.1 101.1 104.5 MHz.
 app fm
-wait 2
-shot vfo
-key menu                  # save list
-shot save_list
+wait 1
+shot tuner
+key menu
+shot list_empty
 key exit
-shot back_to_vfo
+shot back_to_tuner
+key exit
+expect exit

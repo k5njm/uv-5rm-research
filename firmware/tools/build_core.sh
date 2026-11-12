@@ -29,4 +29,8 @@ nm="$(command -v rust-nm || command -v llvm-nm || ls /usr/bin/llvm-nm-* 2>/dev/n
 got="$("$nm" "$elf" | awk '/overlay5ARENA$/ {print $1}')"
 [ -n "$want" ] && [ "$got" = "$want" ] || { echo "ARENA is at 0x$got but apps are linked for 0x$want (abi ARENA_ADDR)" >&2; exit 1; }
 echo "arena at 0x$got (matches abi ARENA_ADDR)"
+# Room left below the arena for the core's statics (the link itself fails under 64 bytes: firmware-source/memory.x)
+end="$("$nm" "$elf" | awk '/ __core_statics_end$/ {print $1}')"
+[ -n "$end" ] || { echo "no __core_statics_end in the ELF: memory.x lost its headroom marker" >&2; exit 1; }
+echo "arena headroom: $((0x$got - 0x$end)) bytes (core .data+.bss $((0x$end - 0x20000000)) bytes, ends at 0x$end; the build fails below 64)"
 python3 -I source-changes/elf2bin.py "$dir/thumbv7em-none-eabi/release/bf5rh-fw" "$out" | tail -2

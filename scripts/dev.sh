@@ -82,7 +82,7 @@ _firmware_impl() {
   # MODE=small (default, nightly, smaller image) or MODE=legacy (stable, as the shipped binaries were built)
   m="${MODE:-small}"
   run "cd firmware && mkdir -p /work/build-out && \
-    CARGO_TARGET_DIR=/cache/fw-$m bash tools/build_core.sh $m /work/build-out/fw-default.bin && \
+    CARGO_TARGET_DIR=/cache/fw-$m bash tools/build_core.sh $m /work/build-out/fw-default.bin; \
     if grep -q 'bk4819' firmware-source/Cargo.toml; then \
       CARGO_TARGET_DIR=/cache/fwbk-$m bash tools/build_core.sh $m /work/build-out/fw-bk4819.bin bk4819; fi; \
     sha256sum /work/build-out/fw-*.bin"

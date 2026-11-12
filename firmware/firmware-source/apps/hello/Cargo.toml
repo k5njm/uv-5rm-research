@@ -10,6 +10,11 @@ name = "hello"
 test = false
 bench = false
 
+[features]
+# NOT for the launcher or any release: keys 1-5 crash the radio on purpose to exercise the core's fault screen
+# (the keys are listed in `fault_test` in src/main.rs). Key 5 also lets the app key the transmitter, so use a dummy load.
+fault-test = []
+
 [dependencies]
 bf5rh-abi = { path = "../../abi" }
 

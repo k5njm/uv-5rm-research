@@ -126,7 +126,8 @@ def find_group(groups, stem):
     for g in groups:
         if norm(stem) in (norm(g[0]), norm(g[1])):
             return g
-    raise PlanError(f"{stem}.csv: no group is named '{stem}'. Groups: " + ", ".join(f"{g[0]} ({g[1]})" for g in groups))
+    hint = " FM broadcast station lists are not memory channels: they belong in channels/fm/ (fm_stations.py)." if norm(stem).startswith("fm") else ""
+    raise PlanError(f"{stem}.csv: no group is named '{stem}'." + hint + " Groups: " + ", ".join(f"{g[0]} ({g[1]})" for g in groups))
 
 
 # ---------- encode / decode ----------

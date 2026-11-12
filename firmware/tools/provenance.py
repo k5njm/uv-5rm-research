@@ -24,10 +24,10 @@ PACKAGES = {
     "spectrum.app": ("SPECTRUM", ["apps/spectrum"]),
     "text.app": ("TEXT", ["apps/textapp"]),
 }
-EXPECTED_IDENTICAL = {  # measured 2026-11: these rebuild byte-identically; a change here is a regression
-    "bandsweep.app", "foxhunt.app", "rptfinder.app", "scanqt.app",
-    "searchqt.app", "spectrum.app", "text.app",
-}  # chanmgr.app and search.app are known skew (AUDIT.md finding 14). settings.app and chanmgr.app sources have since
+EXPECTED_IDENTICAL = set()  # was seven packages (measured 2026-11). Moving the arena to 0x200002D0 (AUDIT 43) changes
+#    the code addresses of every app, so none of the committed packages can match a rebuild any more; they were already
+#    unloadable (old ABI hash) and are not shipped (release builds come from the tree: build_release.py). Rebuild them
+#    for the current core with `scripts/dev.sh release`.  # chanmgr.app and search.app are known skew (AUDIT.md finding 14). settings.app and chanmgr.app sources have since
 #    moved ahead of the shipped binaries on purpose (readable names, VFO/MR long-press, name-editor fix: AUDIT 26),
 #    and fm.app's too (it starts on a frequency handed over from the main screen: AUDIT 40).
 

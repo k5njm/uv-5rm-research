@@ -11,7 +11,11 @@ pub const ARENA_SIZE: usize = 8192;
 /// packer checks each app (`mkapp.py`) and the loader refuses to start an app if the arena is anywhere else.
 /// Found the hard way on a radio: a core whose `.bss` was 8 bytes smaller put the arena at 0x200001C8, and every app
 /// hung the radio the moment it was opened.
-pub const ARENA_ADDR: usize = 0x2000_01D0;
+/// 0x2D0 is 0x1D0 plus 256 bytes of deliberate headroom for the core's own statics (460 bytes of `.data` + `.bss`
+/// when this was chosen, so about 260 free): the linker script and `build_core.sh` fail the build when less than 64
+/// bytes are left. Changing this changes the ABI hash, so every app must be rebuilt, and moves the stack's lowest
+/// address up by the same amount (the stack is whatever lies above the arena: 7,472 of 16,384 bytes).
+pub const ARENA_ADDR: usize = 0x2000_02D0;
 
 /// Hard ceiling for an *oversized* segment.
 pub const ARENA_MAX: usize = 12288;

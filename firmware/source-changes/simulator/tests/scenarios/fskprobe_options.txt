@@ -1,0 +1,22 @@
+# FSK PROBE options: AB picks one of LEN, TH, INV, BW, SYNC and 0 changes it; the modem is rewritten while it runs.
+master 404800000
+app fskprobe
+shot defaults
+key menu
+key 0                     # LEN: 316 to 256
+shot len256
+key 0                     # 256 to 2048
+shot len2048
+key ab
+key 0                     # TH 4
+key ab
+key 0                     # INV+
+key ab
+key 0                     # BW 1.2
+key ab
+key 0                     # S2
+shot all_changed
+key 0                     # S4 again
+key menu                  # modem off
+shot off
+expect rfrefused 0

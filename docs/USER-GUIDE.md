@@ -564,21 +564,65 @@ Messages are kept in the radio's flash memory until overwritten or erased. Notic
 
 ### FM
 
-The FM broadcast receiver, 87.5 to 108.0 MHz, with a list of 30 saved stations. Broadcast FM uses a separate tuner chip, so
-it is an app and not a VFO band; typing a frequency in that range on the main screen in VFO mode (`0981` and so on) opens
-this app already tuned to it, and `EXIT` returns to the main screen. The simulator does not model that tuner, so the picture shows no stations. Nothing about this app has been checked on this
-radio.
+The FM broadcast receiver, 87.5 to 108.0 MHz, with a list of saved stations that can have names. Broadcast FM uses a
+separate tuner chip, so it is an app and not a VFO band; typing a frequency in that range on the main screen in VFO mode
+(`0981` and so on) opens this app already tuned to it, and `EXIT` returns to the main screen. Nothing about this app has
+been checked on the radio yet; the pictures are from the simulator, which has a made-up tuner (signals at 90.1, 94.5, 98.1,
+101.1 and 104.5 MHz) and a made-up station list.
 
-![FM in VFO mode. The simulator has no FM tuner, so no stations are heard.](img/fm.png)
+![The tuner on a saved station.](img/fm.png)
+
+The tuner shows the frequency in large digits, the station's name and its detail line (a format or a city) under it, the
+step arrows either side, and a scale along the bottom with a mark for every saved station and a marker at the tuned
+frequency. The four bars at the right of the title bar are the signal strength. A frequency that is not in the list shows
+`Not saved`.
 
 | Key | Action |
 |---|---|
-| `UP` / `DOWN` | VFO mode: 0.1 MHz up or down. Channel mode: next saved station. |
-| Hold `UP` / `DOWN` | Seek to the next station. |
-| `0` to `9` | VFO mode: type four digits (`1015` is 101.5 MHz). Channel mode: type a two-digit slot number. |
-| `VFO/MR` | Switch between VFO and saved channels (needs at least one saved channel). |
-| `MENU` | Open the save list: `UP`/`DOWN` choose a slot, `MENU` saves the current frequency there, `EXIT` cancels. |
+| `UP` / `DOWN` | Tune 0.1 MHz up or down (holding repeats). |
+| Hold `UP` / `DOWN` | Seek to the next signal (`SEEKING` shows; only `EXIT` is heard meanwhile). |
+| `#` / `*` | Jump to the next / previous saved station, by frequency. |
+| `0` to `9` | Type a frequency in amber: `981` is 98.1 MHz and `1015` is 101.5. Three digits are taken as soon as a fourth could not make a valid frequency; `0981` also works. Outside 87.5 to 108.0 shows `RANGE 87.5-108.0`. |
+| `MENU` | Open the station list. |
 | `EXIT` | Clear a half-typed number, otherwise leave. |
+
+![Typing a frequency.](img/fm-typing.png)
+
+**The station list** (`MENU`) is a list like the others: blue is the row you are on, a speaker marks the station that is
+playing, and the frequency is on the right. It opens on the station that is playing.
+
+![The station list.](img/fm-list.png)
+
+| Key | Action |
+|---|---|
+| `UP` / `DOWN` | Move. |
+| `MENU` | On a station: tune to it and go back to the tuner. On `+ SAVE THIS`: save the tuned frequency. |
+| `*` | On a station: arm a delete (the row turns amber); `MENU` confirms, `EXIT` or a move cancels. |
+| `EXIT` | Back to the tuner. |
+
+![Saving the tuned frequency.](img/fm-save.png)
+
+`+ SAVE THIS` is the first row whenever the tuned frequency is not in the list. A frequency saved on the radio has no
+name (the list shows `(unnamed)`); names come from the computer, below. New stations are added at the end of the list;
+the list keeps the order of the file it came from. It holds 127 stations; the last one shows `LIST FULL`.
+
+**Station names from a computer.** Write the stations as a CSV (a CHIRP export works: only `Name`, `Frequency` and
+`Detail` are read; the file for the Dallas area is `channels/fm/dallas.csv`, and nothing about it is built into the app),
+check it, and install it through the programming port:
+
+```
+python3 firmware/source-changes/fm_stations.py build my-stations.csv -o build-out/my-stations.fmst
+python3 firmware/source-changes/fm_stations.py install PORT build-out/my-stations.fmst --before build-out/fm-before.bin
+```
+
+A name is at most 12 printable ASCII characters (it is not truncated; the build fails instead), a detail at most 16, the
+frequency a multiple of 0.1 MHz from 87.5 to 108.0. The name does not need to repeat the frequency: the app shows both.
+Installing replaces the whole list, including stations saved on the radio (`--before` keeps a copy of what was there;
+`fm_stations.py show FILE` reads one). It needs a core with the `F` programming-port command; an older core answers with an
+error and nothing is written. RESET ALL clears the 30-station list the stock firmware kept, not this one.
+
+Without a table the app shows the 30 bare frequencies the earlier version saved, and the first save or delete moves
+them into a table. A table that is damaged is ignored in the same way.
 
 ### HAM TOOLS
 
@@ -605,9 +649,14 @@ leave.
 A bring-up tool: does the radio chip's FSK modem hear anything, and what do its registers say? It only receives and is for
 people debugging the radio, not for ordinary use. Its source says the crystal, the sync words and whether the modem hears a
 real signal at all are all unverified on this radio. It starts on 404.800 MHz at 4800 baud with the RS41 radiosonde's
-frame header as the sync word.
+frame header as the sync word, a 4-byte sync match, and frames of 316 bytes after the sync (158 words). The counters
+show SYN (syncs), WRD (words), FRM (whole frames) and CUT (frames that stopped early). Where the register document
+leaves a choice open, the options row lets you switch, and a capture records the choice. Test steps are in
+[SONDE-APP.md](SONDE-APP.md).
 
 ![FSK PROBE with the modem on and a quiet channel.](img/fskprobe.png)
+
+![FSK PROBE with every option changed from its default; the S item is selected.](img/fskprobe-options.png)
 
 | Key | Action |
 |---|---|
@@ -616,12 +665,14 @@ frame header as the sync word.
 | `1` to `4` | Baud rate: 450, 1200, 2400, 4800. |
 | `5` to `9` | Sync word: 7E7E, 2DD4, AAAA, RS41 header (`8`), RS41 header in the other bit order (`9`). |
 | `#` | Start a capture, or stop the one running. |
+| `AB` | Pick which option (the settings row near the bottom; the chosen one is yellow) `0` changes. |
+| `0` | Change that option: LEN (bytes the chip is told to count: 316, 256 or 2048), TH (words per interrupt, 1 or 4), INV (invert received data), BW (receive bandwidth 2.4K or 1.2K), S (sync length 4 or 2 bytes). The modem is reconfigured at once. |
 | `UP` / `DOWN` | Pick the register shown at the bottom. |
 | `EXIT` | Turns the modem off (ending any capture) and leaves. |
 
 **Capture.** `#` records every word the modem delivers, with the time, sync flag and signal strength, so a decoder can be
 designed from real data. The screen shows `ERASING` for a moment, then `REC` with a count, and `SAVED` with the total
-after `#`, `MENU` or `EXIT` ends it. The frequency, baud rate and sync word cannot be changed while it runs. It holds
+after `#`, `MENU` or `EXIT` ends it. The frequency, baud rate, sync word and options cannot be changed while it runs. It holds
 16,352 records (about 55 seconds of continuous 4800 baud data), then shows `REC FULL` and records no more; it cannot
 write outside its own 128 KB of the radio's flash (0x1B0000 to 0x1D0000). Each new capture replaces the last. To copy
 one to the computer, leave the app (the radio must be on its main screen) and run:

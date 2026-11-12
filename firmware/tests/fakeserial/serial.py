@@ -11,7 +11,7 @@ cps_tool.Cps (A6 cmd addr16 len16 data crc16-xmodem).
 Also models the 2 MiB SPI flash in nor.bin: channel read/write (32-byte slots 0..999 below 0x8000),
 VFO (0x8000, 64 bytes, read and write), 20 DTMF contacts (16 bytes at 0xA020, read and write) and the raw read 'D' (64-byte chunks, addr*64) over the whole chip. The logo
 (0xC0000) and settings (0x9000) overlay their own files. Every command is appended to log.txt:
-"R/W/D <addr>" so tests can assert exactly what a tool touched (e.g. calibration at 0xF000 is never written).
+"R/W/D <addr>" (and "F <offset>" for the FM station table) so tests can assert exactly what a tool touched (e.g. calibration at 0xF000 is never written).
 
 Fault injection ($FAKE_RADIO_DIR/faults.json, consumed once each unless noted):
   {"corrupt_channel_write": true}   flip one byte of the next channel write
@@ -190,6 +190,16 @@ class Serial:
             return self._reply(cmd, addr)
         if cmd == 0x58:  # channel extras table: 512-byte chunks, the chunk at offset 0 erases the table
             base, size = 0x1E0000, 20480
+            if addr % 512 or len(data) != 512 or addr + 512 > size:
+                return self._reply(ERR, addr, b"\x02")
+            if addr == 0:
+                self.nor[base:base + size] = b"\xff" * size
+            self.nor[base + addr:base + addr + 512] = data
+            self._persist()
+            return self._reply(cmd, addr)
+        if cmd == 0x46:  # FM station table (cps/mod.rs CMD_FM_WRITE): two 4 KB halves, the chunk at offset 0 erases both
+            self._note(f"F {addr:#x}")
+            base, size = 0x1D8000, 0x2000
             if addr % 512 or len(data) != 512 or addr + 512 > size:
                 return self._reply(ERR, addr, b"\x02")
             if addr == 0:

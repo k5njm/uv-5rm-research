@@ -1,0 +1,21 @@
+# Saving the tuned frequency: the list opens on the + SAVE THIS row; MENU saves it (no name), then it is in the list.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 917 KKXT Adult Album Alt
+fmstation 933 WBAP News/Talk
+fmstation 963 KSCS Country
+fmstation 1011 WRR Classical
+fmstation 1045 KKDA Hip-Hop
+handoff fm 981
+app fm
+wait 0.5
+key menu
+shot save_row
+key menu
+shot saved
+expect fmlive 10
+key exit
+wait 0.1
+shot tuner_saved
