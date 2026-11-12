@@ -34,7 +34,7 @@ class Sandbox(unittest.TestCase):
         self.box = tempfile.mkdtemp(prefix="cpsbox-")
         self.radio = os.path.join(self.box, "radio")
         os.mkdir(self.radio)
-        for f in ("cps_tool.py", "set_boot_logo.py", "set_boot_tune.py"):
+        for f in ("cps_tool.py", "set_boot_logo.py", "set_boot_tune.py", "boot_logo_raw.py"):
             shutil.copy(os.path.join(TOOLS, f), self.box)
         shutil.copy(os.path.join(HERE, "fakeserial", "serial.py"), self.box)
         self.logo_a = bytes((i * 7) & 0xFF for i in range(LOGO))
@@ -181,6 +181,33 @@ class TuneTests(Sandbox):
         self.assertIn("READ-BACK DIFFERS", p.stdout)
         self.assertEqual(self.radio_file("settings.bin"), self.settings)
 
+
+
+class RawLogo(Sandbox):
+    """boot_logo_raw.py: a ready-made .rgb565 file, no Pillow."""
+
+    def test_backs_up_writes_verifies_and_undoes(self):
+        new = bytes((i * 5 + 2) & 0xFF for i in range(LOGO))
+        wb(os.path.join(self.box, "new.rgb565"), new)
+        p = self.run_tool("boot_logo_raw.py", "FAKE", "new.rgb565", "old.rgb565")
+        self.assertIn("written and verified", p.stdout)
+        self.assertEqual(self.radio_file("logo.bin"), new)
+        self.assertEqual(rb(os.path.join(self.box, "old.rgb565")), self.logo_a)
+        p = self.run_tool("boot_logo_raw.py", "FAKE", "new.rgb565", "second.rgb565")       # again: nothing to do
+        self.assertIn("already has this logo", p.stdout)
+        p = self.run_tool("boot_logo_raw.py", "FAKE", "old.rgb565", "second.rgb565")       # undo
+        self.assertEqual(self.radio_file("logo.bin"), self.logo_a)
+
+    def test_refuses_wrong_size_and_a_stale_backup(self):
+        wb(os.path.join(self.box, "short.rgb565"), b"\0" * 100)
+        p = self.run_tool("boot_logo_raw.py", "FAKE", "short.rgb565", "b.rgb565", expect_ok=False)
+        self.assertNotEqual(p.returncode, 0)
+        new = bytes(LOGO)
+        wb(os.path.join(self.box, "new.rgb565"), new)
+        wb(os.path.join(self.box, "stale.rgb565"), b"\x11" * LOGO)
+        p = self.run_tool("boot_logo_raw.py", "FAKE", "new.rgb565", "stale.rgb565", expect_ok=False)
+        self.assertIn("Nothing written", p.stdout + p.stderr)
+        self.assertEqual(self.radio_file("logo.bin"), self.logo_a)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

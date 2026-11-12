@@ -16,6 +16,7 @@
 #   exec "CMD"   run any command in the container (cwd /work)
 #   gate         offline release gate (verify_release.py)
 #   tools-test   host tool tests against the fake radio / bootloader (firmware/tests)
+#   personalize  boot screen from .env (callsign, name, radio, this build): build-out/personal/boot-logo.rgb565 and .png
 #   channels     build channels/*.csv into build-out/channels.img (channel_plan.py; then restore_backup.py, see channels/README.md)
 #   repro        build for arm64 AND amd64; everything must match except the known arch-sensitive images (fw-bk4819.bin, fw-default.bin)
 # Env: PLATFORM=linux/amd64 to run any command under x86 emulation (Rosetta on OrbStack).
@@ -144,6 +145,9 @@ case "${1:-}" in
          docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "uv5rm-target-$ARCH_TAG":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
   manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; size-report) cmd_size_report ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; bf) cmd_bf ;; release) cmd_release ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
+  personalize) [ -f "$ROOT/.env" ] || { echo "no .env: copy .env.sample to .env and fill it in" >&2; exit 1; }
+    ver="$(git -C "$ROOT" rev-parse --short HEAD)$(git -C "$ROOT" diff --quiet HEAD -- firmware && echo || echo +)"
+    run "mkdir -p build-out/personal && cd $SIMDIR && CARGO_TARGET_DIR=/cache/sim cargo run --release -q -- bootcard /work/.env /work/build-out/personal/boot-logo $ver $(date +%F)" ;;
   channels) run "python3 firmware/source-changes/channel_plan.py build channels -o build-out/channels.img" ;;
   *) sed -n '2,10p' "$0"; exit 1 ;;
 esac

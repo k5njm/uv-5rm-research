@@ -49,6 +49,7 @@ const _: () = settings::assert_seg_features();
 mod fmtlite;
 use fmtlite::Sink;
 mod scenario;
+mod bootcard;
 
 mod flash_map {
     pub mod addr {
@@ -2446,6 +2447,13 @@ fn test_rf_api() {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("bootcard") {
+        if let Err(e) = bootcard::run(&args[2..]) {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+        return;
+    }
     if args.get(1).map(String::as_str) == Some("scenario") {
         let opts = scenario::parse_args(&args[2..]).unwrap_or_else(|e| {
             eprintln!("{e}");
