@@ -2,7 +2,7 @@
 
 The simulator (firmware/source-changes/simulator/scenario.rs) is the reference; this parses the
 same text. Steps the rig cannot do on a real radio are reported, never silently skipped:
-`coords`, `step`, `expect backlight`, `expect fmlive` and the radio-condition setup steps (`master`, `signal`, `chan`, `air`, `handoff`, `group`) need the
+`coords`, `step`, `expect backlight`, `expect fmlive`, `expect handoff`, `expect setting` and the radio-condition setup steps (`master`, `signal`, `chan`, `air`, `handoff`, `group`, `setting`) need the
 simulator's access to internals; on a real radio the equivalent conditions (a signal generator, stored channels)
 must be arranged by hand before the run, so these are listed in the report, never silently skipped.
 """
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 KEYS = {"star": 10, "pound": 11, "menu": 12, "exit": 13, "up": 14, "down": 15, "ab": 17,
         **{str(d): d for d in range(10)}}
-SIM_ONLY = {"coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore"}
+SIM_ONLY = {"coords", "step", "master", "signal", "chan", "air", "handoff", "group", "setting", "fmstation", "fmtable", "fmcore"}
 
 
 @dataclass
@@ -33,7 +33,7 @@ def parse(text):
             raise ValueError(f"line {n}: wait needs seconds")
         if op == "shot" and len(args) != 1:
             raise ValueError(f"line {n}: shot needs a name")
-        if op not in ("app", "key", "hold", "wait", "shot", "expect", "allow", "coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore"):
+        if op not in ("app", "key", "hold", "wait", "shot", "expect", "allow", "coords", "step", "master", "signal", "chan", "air", "handoff", "group", "setting", "fmstation", "fmtable", "fmcore"):
             raise ValueError(f"line {n}: unknown step {op!r}")
         steps.append(Step(n, op, args))
     return steps
@@ -44,4 +44,4 @@ def uses_tx(steps):
 
 
 def sim_only(steps):
-    return [s for s in steps if s.op in SIM_ONLY or (s.op == "expect" and s.args[:1] in (["backlight"], ["fmlive"], ["fmtable"]))]
+    return [s for s in steps if s.op in SIM_ONLY or (s.op == "expect" and s.args[:1] in (["backlight"], ["fmlive"], ["fmtable"], ["handoff"], ["setting"]))]
