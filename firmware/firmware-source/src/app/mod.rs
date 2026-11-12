@@ -776,8 +776,10 @@ impl<'a> App<'a> {
         let cv = self.battery_cv(self.battery.resting());
         self.lowbat.step(now, cv);
         // The chime waits while a signal is heard (play_cue would refuse); it is the same speaker-only path as the key
-        // beep and follows KEY BEEP (muted: nothing plays, the notice still shows). Apps get the chime too.
-        if self.lowbat.chime_due() && !self.audio_open() {
+        // beep and follows KEY BEEP (muted: nothing plays, the notice still shows). It also waits while an app runs:
+        // the tone generator shares registers with the FSK modem, and an app (a capture in FSK PROBE, a sweep) owns
+        // the RF chip. A key beep there is the user's own doing; a chime out of nowhere is not.
+        if self.lowbat.chime_due() && !self.audio_open() && matches!(self.mode, Mode::Standby) {
             self.radio.play_cue(syst, &LOW_BATTERY_CHIME);
             self.lowbat.chimed(now);
         }

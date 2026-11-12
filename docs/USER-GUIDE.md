@@ -140,8 +140,8 @@ Not seen on a radio yet.
 * A transmission never triggers it, during or after: only the resting value is read.
 * The chime is speaker-only (it never keys the transmitter) and follows KEY BEEP: with KEY BEEP off there is no chime and
   the notice still shows. It waits while a signal is being received and plays when the squelch closes.
-* In an app the chime still plays, but the notice is not drawn over the app: it appears on the main screen when you
-  return to it.
+* While an app is running neither is shown or played (the app is using the radio chip, and a tone out of nowhere could
+  spoil a capture or a sweep): the chime and the notice come when you return to the main screen.
 * The firmware does not stop transmitting or switch off on a low battery.
 
 ### Dual watch
