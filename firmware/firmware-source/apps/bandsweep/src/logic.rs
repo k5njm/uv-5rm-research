@@ -35,6 +35,7 @@ const HINT_BG: u16 = 0x2124;
 const HINT_FG: u16 = 0xA514;
 
 const COLS: usize = 160;
+const NO_MARK: u8 = 255;
 const SCREEN_H: u16 = 128;
 const TITLE_H: u16 = 14;
 const GRAPH_TOP: i16 = 15;
@@ -154,6 +155,8 @@ struct State {
     dirty_lo: usize,
     dirty_hi: usize,
     cursor_col: usize,
+    /// Graph column of the selected hit's pointer as last drawn (`NO_MARK` when none).
+    mark: u8,
 
     hits: [Hit; MAX_HITS],
     n_hits: usize,
@@ -198,6 +201,7 @@ static mut STATE: State = State {
     dirty_lo: COLS,
     dirty_hi: 0,
     cursor_col: 0,
+    mark: NO_MARK,
     hits: [NO_HIT; MAX_HITS],
     n_hits: 0,
     selected: 0,
@@ -794,6 +798,28 @@ fn draw_column(api: &Api, st: &State, x: usize) {
     if st.cur[x] > 0 {
         (api.fill_rect)(xi, top, 1, (GRAPH_BOTTOM - top + 1) as u16, TRACE);
     }
+    // The selected hit's pointer, as SPECTRUM marks its peak: an amber line down to the trace and a small triangle
+    // at the top edge. It is drawn here, in the pass that repaints the column, so no sweep pass leaves it stale.
+    if st.mark != NO_MARK {
+        let m = st.mark as i16;
+        if xi == m && top > GRAPH_TOP {
+            (api.fill_rect)(xi, GRAPH_TOP, 1, (top - GRAPH_TOP) as u16, AMBER);
+        }
+        // the triangle stays whole at the first and last columns (its tip may then sit 1 or 2 columns off the line)
+        let dx = (xi - m.clamp(2, COLS as i16 - 3)).abs();
+        if dx <= 2 {
+            (api.fill_rect)(xi, GRAPH_TOP, 1, (3 - dx) as u16, AMBER);
+        }
+    }
+}
+
+/// The graph column of the selected hit, by the formula `step` files each reading under (position * COLS / total).
+fn mark_col(st: &State) -> u8 {
+    if st.n_hits == 0 || st.total == 0 {
+        return NO_MARK;
+    }
+    let pos = st.hits[st.selected].hz.saturating_sub(st.lo_hz) / st.step_hz();
+    (pos as u64 * COLS as u64 / st.total as u64).min(COLS as u64 - 1) as u8
 }
 
 /// Light title bar as on the list screens: band start, band name, band stop (4 decimals, so all three fit).
@@ -911,6 +937,17 @@ fn draw(api: &Api) -> AppResult {
         st.list_dirty = true;
         st.status_dirty = true;
         st.full = false;
+    }
+    let want = mark_col(st);
+    if want != st.mark {
+        // repaint the columns the pointer leaves and the ones it arrives on (the triangle is 5 wide)
+        for c in [st.mark, want] {
+            if c != NO_MARK {
+                st.dirty_lo = st.dirty_lo.min((c as usize).saturating_sub(2));
+                st.dirty_hi = st.dirty_hi.max((c as usize + 2).min(COLS - 1));
+            }
+        }
+        st.mark = want;
     }
     if st.dirty_lo <= st.dirty_hi {
         for x in st.dirty_lo..=st.dirty_hi {

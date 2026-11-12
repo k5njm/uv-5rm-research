@@ -556,7 +556,10 @@ is the range you type with `5`.
 ![BAND SWEEP over 2 m: a graph on top, a list of hits with strength and sighting count, and the strip MENU hear, VFO/MR tune.](img/bandsweep.png)
 
 The title bar shows the start and stop of the band and its name. The line under the list shows the step (`ST25K` or `ST12.5K`),
-`T+` (detection margin), `D` (dwell) and `P` (pass number and time). The selected hit is blue and the trace is green. An empty list
+`T+` (detection margin), `D` (dwell) and `P` (pass number and time). The selected hit is blue and the trace is green. **An amber pointer on the graph marks the selected hit**: a small triangle at the top edge
+and a thin line down to the trace, at the hit's own column (as SPECTRUM marks its peak), so you can see where in the band the blue row is.
+It moves as `UP` and `DOWN` change the selection and stays while you listen. A hit at the very start or end of the band has the triangle
+kept whole beside the line. With no hits there is no pointer. An empty list
 reads `NO SIGNALS YET`, and the strip then reads `BAND next  1 step  5 range`.
 
 **`MENU` hears the selected hit** (an `RX` line with its frequency and level). **`MENU` again stops listening and the sweep carries on**;

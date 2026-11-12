@@ -98,7 +98,7 @@ calibration copy you already hold. If it differs, **stop**: do not transmit.
   over the drawing and SPECTRUM stays open. (AUDIT 50)
 - [ ] **28.** In SPECTRUM press `A/B`: it stops on the signal and you hear it; `MENU` tunes to it. (AUDIT 50)
 - [ ] **29.** BAND SWEEP (`MENU`, `5`; tune the main screen to 162.400 first and it opens on `148-174`): after a pass or two the list shows hits. `MENU` hears one, `MENU` again stops listening and the sweep
-  carries on (the pass counter keeps going), `EXIT` while listening does the same. The title bar and strip are legible. (AUDIT 50, 55)
+  carries on (the pass counter keeps going), `EXIT` while listening does the same. The title bar and strip are legible. An amber triangle with a line down to the trace marks the selected hit on the graph, moves with `UP`/`DOWN`, stays while listening, and sits on the peak (a hit at the band's first or last column keeps its triangle whole). (AUDIT 50, 55, 57)
 - [ ] **29a.** In BAND SWEEP press `BAND` a few times: the title bar names each preset (`AIR`, `136-144`, `2M`, `148-174`, `MURS`, `MARINE`, `WX` ...) and the sweep restarts; hold `BAND` goes back one. Open it from the
   APPS list, hear a hit, press `VFO/MR`: you land on the main screen (not the APPS list) on that frequency in VFO mode. Try `VFO/MR` from the sweep view with a hit selected. (AUDIT 55)
 

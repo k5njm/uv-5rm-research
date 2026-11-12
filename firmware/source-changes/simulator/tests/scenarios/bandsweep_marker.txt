@@ -1,0 +1,34 @@
+# Band Sweep marks the selected hit on the graph: an amber triangle at the top edge and a line down to the trace.
+# Signals at the first and last grid points of 2 m (the triangle must stay whole there), the middle, and 146.520, which
+# falls between two grid points. UP/DOWN move the pointer; MENU listens and the pointer stays where the listened hit is
+# (UP/DOWN do nothing while listening); a sweep pass leaves no stale pointer behind.
+master 146000000
+signal 144000000 120 -1 always
+signal 146000000 110 -1 always
+signal 148000000 100 -1 always
+signal 146520000 90 -1 always
+app bandsweep
+wait 7
+shot first_hit_left_edge
+key down
+shot middle
+key down
+shot right_edge
+key down
+shot between_grid_points
+key menu
+shot listening
+key down
+shot listening_keys_ignored
+key menu
+key up
+key menu
+shot listening_right_edge
+key menu
+key up
+key up
+key menu
+shot listening_left_edge
+key menu
+wait 7
+shot after_another_pass
