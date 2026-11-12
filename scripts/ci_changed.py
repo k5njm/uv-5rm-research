@@ -90,6 +90,7 @@ RULES = [
     ("firmware/source-changes/*.py", {"tools"}),
     ("firmware/tests/**", {"tools"}),
     ("channels/*.csv", {"tools"}),
+    ("channels/fm/*.csv", {"tools"}),                 # FM station lists: fm_stations.py and its tests
     ("firmware/variants.json", {"tools", "web", "images"}),                             # flash_bf.py and make_manifest.py read it
     ("firmware/tools/make_manifest.py", {"tools", "web", "images"}),
     ("firmware/tools/verify_release.py", {"tools", "gate", "images"}),        # gate, its tests, the size-budget step

@@ -65,8 +65,10 @@ class Contents(Base):
         want |= {f"release/{n}" for n in SLOTS + EXTRAS}
         want |= {f"firmware/source-changes/{t}" for t in ["flash_bf.py", "cps_tool.py", "dump_nor.py", "install_apps.py",
                                                          "restore_backup.py", "channel_extras.py", "channel_plan.py",
-                                                         "boot_logo_raw.py", "wrap_bf.py"]}
+                                                         "boot_logo_raw.py", "wrap_bf.py", "fm_stations.py",
+                                                         "probe_capture.py"]}
         want |= {f"channels/{n}" for n in os.listdir(os.path.join(ROOT, "channels")) if n.endswith(".csv")}
+        want |= {f"channels/fm/{n}" for n in os.listdir(os.path.join(ROOT, "channels", "fm")) if n.endswith(".csv")}
         self.assertTrue(want <= set(files), sorted(want - set(files)))
         extra = set(files) - want - {"channels/README.md", "firmware/source-changes/radio_read.py"}
         self.assertEqual(extra, set(), "unexpected files in the bundle")

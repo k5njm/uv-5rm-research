@@ -35,11 +35,11 @@ PINNED_CORE = "fw-default.bin"                              # its sha256 must eq
 # Host tools a user needs to install the release (see docs/FIRST-FLASH-RUNBOOK.md), relative to firmware/source-changes/.
 # radio_read.py is not in the brief's list but the runbook's read-only backup step (A5) is that script.
 TOOLS = ["flash_bf.py", "cps_tool.py", "dump_nor.py", "install_apps.py", "restore_backup.py", "channel_extras.py",
-         "channel_plan.py", "boot_logo_raw.py", "wrap_bf.py", "radio_read.py"]
+         "channel_plan.py", "boot_logo_raw.py", "wrap_bf.py", "radio_read.py", "fm_stations.py", "probe_capture.py"]
 # Files those tools read by relative path: flash_bf.py -> ../variants.json, channel_plan.py -> ../firmware-source/src/app/group_table.rs.
 # Local imports and `cps_tool.py` (read as text by the others) are covered by TOOLS; test_bundle_release.py checks the closure.
 DATA = ["firmware/variants.json", "firmware/firmware-source/src/app/group_table.rs", "docs/FIRST-FLASH-RUNBOOK.md", "LICENSE"]
-CHANNELS_DIR = "channels"          # *.csv and README.md
+CHANNELS_DIR = "channels"          # *.csv and README.md, and fm/*.csv (FM station lists)
 
 # --- THE INSTALLER GOES HERE ---------------------------------------------------------------------------------------
 # An installer script (install.py) is being written separately. When this file exists it is copied to the bundle root
@@ -182,6 +182,10 @@ def build_stage(rel, stage, version, root=ROOT):
     for n in sorted(os.listdir(cdir)):
         if n.endswith(".csv") or n == "README.md":
             _copy(os.path.join(cdir, n), os.path.join(stage, CHANNELS_DIR, n))
+    fdir = os.path.join(cdir, "fm")
+    for n in sorted(os.listdir(fdir)) if os.path.isdir(fdir) else []:
+        if n.endswith(".csv"):
+            _copy(os.path.join(fdir, n), os.path.join(stage, CHANNELS_DIR, "fm", n))
     installer = os.path.join(root, INSTALLER_SOURCE)
     if os.path.isfile(installer):
         _copy(installer, os.path.join(stage, INSTALLER_DEST))
