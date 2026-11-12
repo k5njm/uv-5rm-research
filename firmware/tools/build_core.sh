@@ -20,4 +20,11 @@ case "$mode" in
   *) echo "mode must be small or legacy" >&2; exit 2 ;;
 esac
 tail -1 "$log"
+# The app arena must be exactly where the apps are linked to run (abi ARENA_ADDR). A core that puts it anywhere else
+# boots and looks fine, then hangs the radio when any app is opened (seen on hardware: AUDIT 31).
+elf="$dir/thumbv7em-none-eabi/release/bf5rh-fw"
+want="$(sed -n 's/^pub const ARENA_ADDR: usize = 0x\([0-9A-Fa-f_]*\);.*/\1/p' firmware-source/abi/src/lib.rs | tr -d _ | tr 'A-F' 'a-f')"
+got="$(rust-nm "$elf" | awk '/overlay5ARENA$/ {print $1}')"
+[ -n "$want" ] && [ "$got" = "$want" ] || { echo "ARENA is at 0x$got but apps are linked for 0x$want (abi ARENA_ADDR)" >&2; exit 1; }
+echo "arena at 0x$got (matches abi ARENA_ADDR)"
 python3 -I source-changes/elf2bin.py "$dir/thumbv7em-none-eabi/release/bf5rh-fw" "$out" | tail -2

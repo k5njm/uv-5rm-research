@@ -111,6 +111,9 @@ enum LoadError {
     /// oversized segment refused: SP was already too low, or the arena does
     /// not actually butt up against the stack
     NoStack,
+
+    /// the arena is not where apps are linked to run (`abi::ARENA_ADDR`): starting one would hang the radio
+    ArenaMoved,
 }
 
 fn load_err_code(e: &LoadError) -> u8 {
@@ -121,6 +124,7 @@ fn load_err_code(e: &LoadError) -> u8 {
         LoadError::TooBig => 4,
         LoadError::BadCrc => 5,
         LoadError::NoStack => 6,
+        LoadError::ArenaMoved => 7,
     }
 }
 
@@ -224,6 +228,9 @@ fn load_segment(
     }
 
     let arena_ptr = arena_ptr();
+    if arena_ptr as usize != bf5rh_abi::ARENA_ADDR {
+        return Err(LoadError::ArenaMoved);
+    }
     let ext = total.saturating_sub(ARENA_SIZE);
 
     // The extension is the bottom of the stack, so admit it only after proving

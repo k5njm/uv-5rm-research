@@ -6,6 +6,13 @@ pub const MAGIC: [u8; 4] = *b"OVL1";
 
 pub const ARENA_SIZE: usize = 8192;
 
+/// Where the firmware keeps the arena in RAM. Every app is linked to run at exactly this address (`ORIGIN` in its
+/// `app.x`); the firmware's linker script pins the arena here (`memory.x`), its build checks it (`build_core.sh`), the
+/// packer checks each app (`mkapp.py`) and the loader refuses to start an app if the arena is anywhere else.
+/// Found the hard way on a radio: a core whose `.bss` was 8 bytes smaller put the arena at 0x200001C8, and every app
+/// hung the radio the moment it was opened.
+pub const ARENA_ADDR: usize = 0x2000_01D0;
+
 /// Hard ceiling for an *oversized* segment.
 pub const ARENA_MAX: usize = 12288;
 

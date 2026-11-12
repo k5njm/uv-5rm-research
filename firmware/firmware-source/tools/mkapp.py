@@ -76,6 +76,15 @@ def slot_size(fw_root: Path) -> int:
     return int(m.group(1)) * 1024
 
 
+def abi_arena_addr(app_dir: Path) -> int:
+    """`ARENA_ADDR` from the ABI crate next to this tool: the address the firmware pins its arena to."""
+    lib_rs = (Path(__file__).resolve().parents[1] / "abi" / "src" / "lib.rs").read_text()
+    m = re.search(r"pub const ARENA_ADDR:\s*usize\s*=\s*(0x[0-9A-Fa-f_]+)", lib_rs)
+    if not m:
+        sys.exit("[ERR] missing ARENA_ADDR in abi/src/lib.rs")
+    return int(m.group(1).replace("_", ""), 16)
+
+
 def arena_origin(app_dir: Path) -> int:
     app_x = (app_dir / "app.x").read_text()
     m = re.search(r"ORIGIN\s*=\s*(0x[0-9A-Fa-f]+)", app_x)
@@ -167,6 +176,10 @@ def build_segment(app_dir: Path, out_dir: Path) -> dict:
 
     entry = entry_address(elf)
     origin = arena_origin(app_dir)
+    want = abi_arena_addr(app_dir)
+    if origin != want:
+        sys.exit(f"[ERR] {app_dir.name}: app.x ORIGIN is 0x{origin:X} but the firmware's arena is at 0x{want:X} "
+                 "(abi ARENA_ADDR). An app linked for the wrong address hangs the radio when opened.")
     entry_off = entry - origin
     if entry_off < 0:
         sys.exit(f"[ERR] entry 0x{entry:X} smaller than ORIGIN 0x{origin:X}")

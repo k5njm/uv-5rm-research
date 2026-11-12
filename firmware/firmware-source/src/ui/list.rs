@@ -50,34 +50,42 @@ pub(crate) trait ListSource {
 }
 
 pub(crate) struct Cache {
+    /// title and hint strip together
     title: Option<TitleKey>,
-    hint: Option<TitleKey>,
     selected: Option<usize>,
     total: Option<usize>,
     scroll_top: Option<usize>,
     sel: Option<SelRender>,
 }
 
+/// What a piece of text was the last time it was drawn: its length and a hash, not the text. The cache lives in the
+/// firmware's RAM for good, and that RAM sits below the app arena, whose address is fixed (`abi::ARENA_ADDR`):
+/// keeping three strings here pushed the arena up and hung the radio on every app (AUDIT 31).
 #[derive(Clone, Copy, PartialEq)]
 struct TitleKey {
     len: u8,
-    buf: [u8; TITLE_MAX],
+    hash: u32,
 }
 
 impl TitleKey {
-    fn of(title: &str) -> Self {
-        let b = title.as_bytes();
-        let n = b.len().min(TITLE_MAX);
-        let mut buf = [0u8; TITLE_MAX];
-        buf[..n].copy_from_slice(&b[..n]);
-        TitleKey { len: n as u8, buf }
+    fn of(text: &str) -> Self {
+        Self::of2(text, "")
+    }
+
+    /// One key for two pieces of text (the title and the hint strip share one, to save RAM).
+    fn of2(a: &str, b: &str) -> Self {
+        let mut hash: u32 = 0x811C_9DC5; // FNV-1a
+        for &byte in a.as_bytes().iter().chain(b.as_bytes()) {
+            hash = (hash ^ byte as u32).wrapping_mul(0x0100_0193);
+        }
+        TitleKey { len: (a.len() + b.len()) as u8, hash }
     }
 }
 
 #[derive(Clone, Copy, PartialEq)]
 struct SelRender {
     show_arrows: bool,
-    value: TextBuf<VALUE_MAX>,
+    value: TitleKey,
     cursor: Option<usize>,
 }
 
@@ -95,7 +103,7 @@ fn render_sel(
     };
     SelRender {
         show_arrows,
-        value,
+        value: TitleKey::of(value.as_str()),
         cursor,
     }
 }
@@ -104,7 +112,6 @@ impl Cache {
     pub fn new() -> Self {
         Cache {
             title: None,
-            hint: None,
             selected: None,
             total: None,
             scroll_top: None,
@@ -112,14 +119,8 @@ impl Cache {
         }
     }
 
-    fn matches_title(&self, title: &str) -> bool {
-        match self.title {
-            Some(k) => {
-                let n = k.len as usize;
-                title.len() == n && k.buf[..n] == title.as_bytes()[..n]
-            }
-            None => false,
-        }
+    fn matches_title(&self, title: &str, hint: &str) -> bool {
+        self.title == Some(TitleKey::of2(title, hint))
     }
 }
 
@@ -136,15 +137,14 @@ pub(crate) fn draw_list<D>(
     let total = source.row_count();
     let top = scroll_top(total, selected);
 
-    let title_changed = !cache.matches_title(title);
-    let first = cache.selected.is_none() || title_changed;
     let mut hint: TextBuf<TITLE_MAX> = TextBuf::new();
     source.hint(&mut hint);
-    let hint_key = TitleKey::of(hint.as_str());
-    if first || cache.hint != Some(hint_key) {
+    // a new title or a new hint repaints the whole list
+    let title_changed = !cache.matches_title(title, hint.as_str());
+    let first = cache.selected.is_none() || title_changed;
+    if first {
         draw_hint(lcd, hint.as_str());
     }
-    cache.hint = Some(hint_key);
 
     if first {
         draw_full(lcd, title, source, selected, show_arrows, total, top);
@@ -199,7 +199,7 @@ pub(crate) fn draw_list<D>(
         }
     }
 
-    cache.title = Some(TitleKey::of(title));
+    cache.title = Some(TitleKey::of2(title, hint.as_str()));
     cache.selected = Some(selected);
     cache.total = Some(total);
     cache.scroll_top = Some(top);

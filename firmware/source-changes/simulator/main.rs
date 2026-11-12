@@ -1313,7 +1313,7 @@ fn test_fox() {
     app(&API, AppEvent::Leave);
 }
 
-// menu list, using the firmware's real list.rs and backdrop.rs
+// menu list, using the firmware's real list.rs
 
 struct Menu {
     rows: &'static [(&'static str, Option<&'static str>)],
@@ -1373,7 +1373,8 @@ fn test_menus() {
         ui::list::draw_list(sim(), title, &mut menu, selected, false, &mut cache);
         shot(name);
         let red = sim().fb.iter().filter(|&&p| (p >> 11) > 2 && (p >> 5) & 0x3F < 4).count();
-        check(red > 2000, &format!("{name}: skull visible behind the list"));
+        // Lists used to paint the boot logo behind their rows; on the radio it made them hard to read.
+        check(red == 0, &format!("{name}: no boot logo behind the list rows"));
         // Moving the cursor must repaint only two rows, and match a full draw.
         if selected > 0 {
             ui::list::draw_list(sim(), title, &mut menu, selected - 1, false, &mut cache);
