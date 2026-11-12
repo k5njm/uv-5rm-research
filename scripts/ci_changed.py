@@ -122,6 +122,8 @@ RULES = [
     # --- read by no CI job -------------------------------------------------------------------------------------
     ("**/*.md", set()),
     ("docs/**", set()),
+    ("docs/INSTALL.md", {"tools"}),                   # bundled; test_bundle_release.py reads it
+    ("docs/FIRST-FLASH-RUNBOOK.md", {"tools"}),       # bundled the same way
     ("LICENSE", set()),
     ("firmware/source-changes/LICENSE-GPL3", set()),
     (".env.sample", set()),

@@ -18,6 +18,10 @@ Faults in $FAKE_BL_DIR/faults.json (persistent):
                                      ends a flash that is in fact going fine (the host can simply start over: the
                                      handshake restarts the transfer)
 
+Every command that reaches the model is appended to $FAKE_BL_DIR/log.txt as "cmd 0x01" (handshake), "cmd 0x04" (package
+count), "cmd 0x03 <seq>" (a package: a flash write) and "cmd 0x45" (end), so a test can show that nothing but
+handshakes were sent.
+
 What is known (six real flashes with flash_bf.py): the happy path above. Not known, and not modelled: error behaviour in
 general, flash write/erase time (the host allows 2 s per package), a package size other than 1 KB, a file longer than
 the application area, a handshake in the middle of a transfer (this fake restarts it), what END does to a transfer that
@@ -107,6 +111,8 @@ class Serial:
             return
         if "die_after_packages" in f and self.state["got"] >= f["die_after_packages"] and cmd == CMD_UPDATE:
             return
+        with open(os.path.join(_d(), "log.txt"), "a") as lg:
+            lg.write(f"cmd {cmd:#04x}" + (f" {self.state['got']}" if cmd == CMD_UPDATE else "") + "\n")
         if cmd == CMD_HANDSHAKE:
             if data != b"BOOTLOADER":
                 return self._reply(0xE1, 0)

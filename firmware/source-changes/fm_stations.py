@@ -3,9 +3,10 @@
 
   fm_stations.py build STATIONS.csv -o OUT.fmst     check the CSV and write the table (4,096 bytes)
   fm_stations.py show OUT.fmst                      print what a table file (or a --before backup) holds
-  fm_stations.py install PORT OUT.fmst [--before OLD.bin]
+  fm_stations.py install PORT OUT.fmst [--before OLD.bin] [--dry-run]
                                                     write the table to the radio through the programming port, read it
-                                                    back and compare. --before saves what the radio had (8,192 bytes)
+                                                    back and compare. --before saves what the radio had (8,192 bytes).
+                                                    --dry-run only reads and reports; no write command is sent
 
 The CSV is CHIRP's format; only these columns are used (the rest are ignored, so a CHIRP export works as it is):
   Name       at most 12 printable ASCII characters (may be empty: the app then shows just the frequency)
@@ -204,7 +205,7 @@ def cmd_install(a):
 
     want = table + b"\xff" * HALF
     current = read_flash()
-    if a.before:
+    if a.before and not a.dry_run:
         if os.path.exists(a.before) and open(a.before, "rb").read() != current:
             cps.end()
             raise SystemExit(f"{a.before} exists and is not what the radio has now; choose a new file name. Nothing written.")
@@ -215,6 +216,8 @@ def cmd_install(a):
     print(f"the radio has {len(had[2]) if had else 'no'} stations; this table has {len(parsed[1])}")
     if current == want:
         print("the radio already has this table; nothing written")
+    elif a.dry_run:
+        print("dry run: the radio has a different table; it would be replaced (nothing written)")
     else:
         for off in range(0, HALF, 512):
             cps.send(CMD_FM_WRITE, off, table[off:off + 512], erase_timeout if off == 0 else frame_timeout)
@@ -238,6 +241,7 @@ def main(argv=None):
     i = sub.add_parser("install")
     i.add_argument("port")
     i.add_argument("table")
+    i.add_argument("--dry-run", action="store_true", help="read and compare only; send no write command")
     i.add_argument("--before", help="save the radio's current table here first (8,192 bytes)")
     a = ap.parse_args(argv)
     try:

@@ -1,12 +1,13 @@
 """Install the channel extras table (each channel's Detail text) that channel_plan.py builds.
 
-  channel_extras.py PORT TABLE.extras [--before OLD.extras]
+  channel_extras.py PORT TABLE.extras [--before OLD.extras] [--dry-run]
 
 TABLE.extras is 20,480 bytes: a 20-byte record per channel slot (16 bytes of text, 3 reserved, 0xA5). The radio keeps
 it in the data region of its flash at 0x1E0000 and shows the text on the main screen in memory mode.
 Reads the table that is on the radio first (saved to --before if given), skips the write if it is already the same,
 writes the whole table (the first chunk erases the old one) and reads all of it back. Sends ONE handshake.
 Needs a core with the `X` port command (AUDIT 33); an older core answers with an error and nothing is written.
+--dry-run reads the table and says whether it would write; no write command is sent and --before is not written.
 Radio on, at its main frequency screen. UNVERIFIED on real hardware until AUDIT says otherwise.
 """
 import os, sys
@@ -18,7 +19,8 @@ assert "for _ in range(5):" in src
 exec(src.replace("for _ in range(5):", "for _ in range(1):", 1))
 
 EXTRA_WRITE, BASE, SIZE, RAW = 0x58, 0x1E0000, 20480, 64
-args = [a for a in sys.argv[1:] if a != "--before"]
+DRY = "--dry-run" in sys.argv
+args = [a for a in sys.argv[1:] if a not in ("--before", "--dry-run")]
 before = sys.argv[sys.argv.index("--before") + 1] if "--before" in sys.argv else None
 if before:
     args.remove(before)
@@ -40,7 +42,7 @@ def read_table():
 
 
 current = read_table()
-if before:
+if before and not DRY:
     if os.path.exists(before) and open(before, "rb").read() != current:
         cps.end()
         raise SystemExit(f"{before} exists and is not what the radio has now; choose a new file name. Nothing written.")
@@ -49,6 +51,8 @@ if before:
     print(f"saved the radio's current table to {before}")
 if current == table:
     print("the radio already has this table; nothing written")
+elif DRY:
+    print("dry run: the radio has a different table; it would be replaced (nothing written)")
 else:
     for off in range(0, SIZE, CHUNK):
         cps.send(EXTRA_WRITE, off, table[off:off + CHUNK], ERASE_TIMEOUT if off == 0 else FRAME_TIMEOUT)

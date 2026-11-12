@@ -32,7 +32,7 @@ mod fskprobe;
 mod spectrum;
 #[path = "../../firmware-source/apps/fm/src/logic.rs"]
 mod fm;
-#[path = "../../firmware-source/apps/chanmgr/src/main.rs"]
+#[path = "chanmgr_pkg.rs"]
 mod chanmgr;
 #[cfg(feature = "settings-menu")]
 pub const MY_SEG: u8 = 0;
@@ -363,12 +363,23 @@ fn nor_clear() {
     nor().iter_mut().for_each(|b| *b = 0xFF);
 }
 
+/// overlay.rs `in_chip`: the core refuses any range that is not wholly inside the 2 MB chip (it would wrap in the 24-bit
+/// SPI address and land in the channel table), for reads, writes and erases alike.
+fn in_chip(addr: u32, len: u32) -> bool {
+    addr as u64 + len as u64 <= 0x20_0000
+}
 extern "C" fn nor_read(addr: u32, out: *mut u8, len: u32) -> bool {
+    if out.is_null() || !in_chip(addr, len) {
+        return false;
+    }
     let s = &nor()[addr as usize..(addr + len) as usize];
     unsafe { std::ptr::copy_nonoverlapping(s.as_ptr(), out, len as usize) };
     true
 }
 extern "C" fn nor_write(addr: u32, data: *const u8, len: u32) -> bool {
+    if data.is_null() || !in_chip(addr, len) {
+        return false;
+    }
     // The only flash apps may write: TEXT's log, FSK PROBE's capture range and the FM station table.
     let end = addr as u64 + len as u64;
     assert!(
@@ -385,6 +396,9 @@ extern "C" fn nor_write(addr: u32, data: *const u8, len: u32) -> bool {
     true
 }
 extern "C" fn nor_erase(addr: u32) -> bool {
+    if !in_chip(addr, 1) {
+        return false;
+    }
     assert!(
         (0x1F_0000..0x1F_4000).contains(&addr)
             || (0x1B_0000..0x1D_0000).contains(&addr)
@@ -479,11 +493,10 @@ extern "C" fn fm_load(out: *mut u8, len: u16) -> bool {
 extern "C" fn fm_save(_: *const u8, _: u16) -> bool {
     panic!("the FM app saves its stations in its own flash table, not through fm_channels_save");
 }
-/// overlay.rs api_chan_read: false when the buffer is under 32 bytes or the slot is erased (all 0xFF). The real one does
-/// not check `num` against 999 (AUDIT, TEST-DOUBLES.md): slots past the table read whatever flash holds there; the mock
-/// answers false for them, as the owner would want.
+/// overlay.rs api_chan_read: false when the buffer is under 32 bytes, the channel is past 999 (checked since the audit:
+/// it used to read other flash as a channel) or the slot is erased (all 0xFF).
 extern "C" fn chan_read(num: u16, out: *mut u8, len: u16) -> bool {
-    if len < 32 || out.is_null() {
+    if len < 32 || out.is_null() || num > 999 {
         return false;
     }
     match sim().chans.get(&num).filter(|r| r.iter().any(|&b| b != 0xFF)) {
@@ -574,7 +587,11 @@ extern "C" fn chan_write(num: u16, buf: *const u8, len: u16) -> bool {
     }
     let mut r = [0u8; 32];
     unsafe { std::ptr::copy_nonoverlapping(buf, r.as_mut_ptr(), 32) };
-    sim().chans.insert(num, r);
+    if r.iter().all(|&b| b == 0xFF) {
+        sim().chans.remove(&num); // an all-0xFF record is an empty channel, as `is_channel_empty` has it
+    } else {
+        sim().chans.insert(num, r);
+    }
     true
 }
 extern "C" fn get_master_freq() -> u32 {
@@ -877,8 +894,14 @@ extern "C" fn side_write(b: *const u8, len: u16) -> bool {
     unsafe { std::ptr::copy_nonoverlapping(b, SIDE_CFG.as_mut_ptr(), 14) };
     true
 }
+/// Times an app asked for a factory reset. The real call reboots the radio and never returns; here the caller
+/// parks forever (a scenario runs key presses on a helper thread and watches this counter: `expect reset`).
+static FACTORY_CALLS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 extern "C" fn factory() -> ! {
-    panic!("factory reset called");
+    FACTORY_CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    loop {
+        std::thread::park();
+    }
 }
 extern "C" fn batt() -> u16 {
     0
@@ -1018,6 +1041,11 @@ pub(crate) fn keypad_repeat(id: u8) -> bool {
 fn key_events(app: Entry, id: u8, kinds: &[u8]) -> bool {
     let mut exit = false;
     for &kind in kinds {
+        // overlay.rs dispatch_key does not hand Press or Release to apps; SIM_RAW_KEYS=1 sends them anyway, to exercise
+        // the apps' own guards against them (run the scenarios both ways after touching an app's key handler).
+        if kind < K_SINGLE && std::env::var_os("SIM_RAW_KEYS").is_none() {
+            continue;
+        }
         exit = matches!(app(&API, AppEvent::Key { id, kind }), AppResult::Exit);
         if exit {
             break;
@@ -2956,6 +2984,8 @@ fn test_mock_fidelity() {
     check(!(API.chan_read)(6, out.as_mut_ptr(), 32), "chan_read is false for an empty slot");
     sim().chans.insert(7, [0xFF; 32]);
     check(!(API.chan_read)(7, out.as_mut_ptr(), 32), "a slot that holds only 0xFF is empty, not a channel");
+    sim().chans.insert(1000, [0x11; 32]);
+    check(!(API.chan_read)(1000, out.as_mut_ptr(), 32), "chan_read refuses channel 1000 as chan_write does (overlay.rs bound)");
 
     (API.fm_tune_khz)(94_550);
     check((API.fm_tuned_freq_khz)() == 94_500, "the FM tuner steps by 100 kHz: 94.55 reads back as 94.5");
@@ -2983,19 +3013,35 @@ fn test_mock_fidelity() {
 
     unsafe { SEEN.clear(); LEAVE_ON = None };
     press(recorder, 5);
-    check(seen() == [K_PRESS, K_SINGLE, K_RELEASE], "a short press is Press, Single, Release");
+    // The core's dispatch_key drops Press and Release; without SIM_RAW_KEYS the mock does the same.
+    let raw = std::env::var_os("SIM_RAW_KEYS").is_some();
+    let (pre, post): (&[u8], &[u8]) = if raw { (&[K_PRESS], &[K_RELEASE]) } else { (&[], &[]) };
+    let with = |mid: &[u8]| [pre, mid, post].concat();
+    let _ = seen();
+    press(recorder, 5);
+    check(seen() == with(&[K_SINGLE]), "a short press reaches the app as a Single");
     hold(recorder, 14);
-    check(seen() == [K_PRESS, K_LONG, K_RELEASE], "holding Up is Press, Long, Release");
+    check(seen() == with(&[K_LONG]), "holding Up is a Long");
     hold(recorder, 1);
-    check(seen() == [K_PRESS, K_SINGLE, K_RELEASE], "holding 1 never sends a Long: it is a Single on release");
+    check(seen() == with(&[K_SINGLE]), "holding 1 never sends a Long: it is a Single on release");
     hold(recorder, 12);
-    check(seen() == [K_PRESS, K_SINGLE, K_RELEASE], "holding MENU never sends a Long either");
+    check(seen() == with(&[K_SINGLE]), "holding MENU never sends a Long either");
     hold_repeat(recorder, 15, 3);
-    check(seen() == [K_PRESS, K_LONG, K_REPEAT, K_REPEAT, K_REPEAT, K_RELEASE], "holding Down past 1.5 s repeats");
+    check(seen() == with(&[K_LONG, K_REPEAT, K_REPEAT, K_REPEAT]), "holding Down past 1.5 s repeats");
     unsafe { LEAVE_ON = Some(K_SINGLE) };
     check(press(recorder, 13), "an app that leaves on Single ...");
-    check(seen() == [K_PRESS, K_SINGLE], "... gets no Release afterwards");
+    check(seen() == [pre, &[K_SINGLE][..]].concat(), "... gets no Release afterwards");
     unsafe { LEAVE_ON = None };
+
+    // flash bounds (overlay.rs in_chip): nothing that is not wholly inside the 2 MB chip
+    let mut b = [0u8; 4];
+    check(!(API.nor_read)(0x1F_FFFE, b.as_mut_ptr(), 4), "nor_read refuses a range that runs past the chip");
+    check(!(API.nor_read)(u32::MAX - 1, b.as_mut_ptr(), 4), "nor_read refuses an address sum that overflows u32");
+    check(!(API.nor_write)(0x20_0000, b.as_ptr(), 4), "nor_write refuses the first address past the chip (it would wrap to channel 0)");
+    check(!(API.nor_write)(0x1F_FFFE, b.as_ptr(), 4), "nor_write refuses a write that runs past the chip");
+    check(!(API.nor_erase_sector)(0x20_0000), "nor_erase_sector refuses an address past the chip");
+    check(!(API.nor_erase_sector)(0xFFFF_F000), "nor_erase_sector refuses a high address");
+    check((API.nor_read)(0x1F_FFFC, b.as_mut_ptr(), 4), "nor_read takes the last four bytes of the chip");
 }
 
 fn main() {

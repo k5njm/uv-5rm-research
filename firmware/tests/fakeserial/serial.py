@@ -25,6 +25,7 @@ Environment:
   FAKE_RADIO_IDLE_S    seconds of silence that restart the radio inside a session (default 2.0, the firmware's)
   FAKE_RADIO_BLOCK=1   read() waits out its timeout when nothing is queued, like a real port (default: returns at once)
 
+Every command that writes is also logged by kind: "A <slot>", "a <slot> <offset>", "X <offset>", "l <offset>", "F <offset>".
 Every command is appended to log.txt: "R/W/D <addr>" ("F <offset>" for the FM station table) so tests can assert
 exactly what a tool touched (e.g. calibration at 0xF000 is never written).
 
@@ -36,6 +37,10 @@ Fault injection ($FAKE_RADIO_DIR/faults.json, consumed once each unless noted):
   {"corrupt_logo_write": true}      flip one byte of the next full logo write
   {"corrupt_settings_write": true}  flip one byte of the next settings write
   {"silent": true}                  never answer the handshake
+  {"corrupt_app_write": true}       flip one byte of the next app write ('a')
+  {"corrupt_extra_write": true}     flip one byte of the next extras-table chunk ('X')
+  {"corrupt_fm_write": true}        flip one byte of the next FM station chunk ('F')
+  {"corrupt_read_once": true}       flip one byte of the next raw read ('D') reply: a read that does not repeat
   {"garble_next_frame": true}       the next frame arrives with a bad CRC (a flipped bit on the cable): the radio answers
                                     ERR 0x01 and does not act on it
   {"boot_delay_s": S}  (persistent) ignore everything until S seconds after the port was opened: the radio is
@@ -330,6 +335,7 @@ class Serial:
         if cmd == WRITE_LOGO:
             if addr % CHUNK or len(data) != CHUNK or addr + CHUNK > LOGO_SIZE:
                 return self._error(addr, ERR_BAD_ADDR)
+            self._note(f"l {addr:#x}")
             if addr == 0:                       # erases every logo sector, only here
                 self.logo[:] = b"\xff" * LOGO_SIZE
                 self._note("logo erase")
@@ -346,6 +352,7 @@ class Serial:
             if addr >= SLOT_COUNT:
                 self.app_slot = None
                 return self._error(addr, ERR_BAD_ADDR)
+            self._note(f"A {addr}")
             self._erase_range(SLOT_BASE + addr * SLOT_SIZE, SLOT_SIZE)
             self.app_slot = addr
             self._persist()
@@ -353,14 +360,19 @@ class Serial:
         if cmd == APP_WRITE:
             if self.app_slot is None or addr % CHUNK or len(data) != CHUNK or addr + CHUNK > SLOT_SIZE:
                 return self._error(addr, ERR_BAD_ADDR)
-            self._program(SLOT_BASE + self.app_slot * SLOT_SIZE + addr, data)
+            self._note(f"a {self.app_slot} {addr}")
+            blk = bytearray(data)
+            if _faults().get("corrupt_app_write"):
+                blk[7] ^= 0x10
+                _clear_fault("corrupt_app_write")
+                self._note("fault: corrupted app write")
+            self._program(SLOT_BASE + self.app_slot * SLOT_SIZE + addr, bytes(blk))
             self._persist()
             return self._reply(cmd, addr)
         if cmd in (SAT_WRITE, EXTRA_WRITE, FM_WRITE):
             base, size = {SAT_WRITE: (SAT_BASE, SAT_SIZE), EXTRA_WRITE: (EXTRA_BASE, EXTRA_SIZE),
                           FM_WRITE: (FMTAB_BASE, FMTAB_SIZE)}[cmd]
-            if cmd == FM_WRITE:
-                self._note(f"F {addr:#x}")
+            self._note(f"{'F' if cmd == FM_WRITE else 'X' if cmd == EXTRA_WRITE else 'S'} {addr:#x}")
             return self._table_write(cmd, addr, data, base, size)
         if cmd == READ_RAW:
             a = addr * 64
@@ -371,6 +383,10 @@ class Serial:
                 lo, hi = max(a, base), min(a + 64, base + len(blob))
                 if lo < hi:  # overlay the part of the chunk covered by that region
                     chunk[lo - a:hi - a] = blob[lo - base:hi - base]
+            if _faults().get("corrupt_read_once"):
+                chunk[0] ^= 0xFF
+                _clear_fault("corrupt_read_once")
+                self._note("fault: corrupted a raw read")
             return self._reply(cmd, addr, bytes(chunk))
         if cmd == END:
             self._reply(cmd, addr)
@@ -383,7 +399,13 @@ class Serial:
             return self._error(addr, ERR_BAD_ADDR)
         if addr == 0:
             self._erase_range(base, size)
-        self._program(base + addr, data)
+        data = bytearray(data)
+        key = {EXTRA_WRITE: ("corrupt_extra_write", 3, 0x01, "extras"), FM_WRITE: ("corrupt_fm_write", 5, 0x01, "fm")}.get(cmd)
+        if key and _faults().get(key[0]):
+            data[key[1]] ^= key[2]
+            _clear_fault(key[0])
+            self._note(f"fault: corrupted {key[3]} write")
+        self._program(base + addr, bytes(data))
         self._persist()
         self._reply(cmd, addr)
 

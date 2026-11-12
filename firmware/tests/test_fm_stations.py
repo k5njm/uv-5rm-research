@@ -213,12 +213,8 @@ class Install(Box):
     def test_a_corrupt_write_is_caught_by_the_read_back(self):
         self.radio_with()
         self.build()
-        # a fake that flips one byte of the second chunk as it stores it: patch the copy in the box
-        src = rb(os.path.join(self.box, "serial.py")).decode()
-        src = src.replace("self._program(base + addr, data)\n        self._persist()",
-                          "self._program(base + addr, data)\n        if addr == 512:\n            self.nor[base + addr] ^= 0xFF\n        self._persist()")
-        self.assertIn("addr == 512", src, "the fake changed: update this test")
-        wt(os.path.join(self.box, "serial.py"), src)
+        # the fake flips one byte of the next FM chunk as it stores it (fault corrupt_fm_write)
+        wt(os.path.join(self.radio, "faults.json"), '{"corrupt_fm_write": true}')
         p = self.tool("install", "FAKE", os.path.join(self.box, "s.fmst"), ok=False)
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("VERIFY FAILED", p.stderr)

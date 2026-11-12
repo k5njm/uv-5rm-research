@@ -1,0 +1,25 @@
+# CHAN MGR writes a channel's number the way the main screen does: its place in the group, two digits ("01").
+# REPEATERS starts at printed channel 234 (slot 233); in ALL the number is the printed one (234).
+chan 233 147120000 147720000 K5RWK
+chan 234 146940000 146340000 W5ABC
+group 1                   # the radio is in REPEATERS
+app chanmgr
+shot list_in_repeaters    # 01 K5RWK, 02 W5ABC
+key down
+key menu
+shot editor_in_repeaters  # REPEATERS 02
+key exit
+key down                  # + NEW
+key menu
+shot new_in_repeaters     # NEW REPEATERS 03
+key exit
+key up
+key menu                  # open W5ABC again
+key up                    # DELETE...
+key up                    # ...SAVE
+key menu                  # save it
+shot saved_notice         # SAVED 02
+key star                  # the group before REPEATERS: ALL
+shot list_in_all          # 234 K5RWK, 235 W5ABC
+key menu
+shot editor_in_all        # ALL 234
