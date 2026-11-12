@@ -9,8 +9,11 @@ must be arranged by hand before the run, so these are listed in the report, neve
 from dataclasses import dataclass
 
 KEYS = {"star": 10, "pound": 11, "menu": 12, "exit": 13, "up": 14, "down": 15, "ab": 17,
+        "side1": 19, "side2": 20,
         **{str(d): d for d in range(10)}}
-SIM_ONLY = {"coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore"}
+SIM_ONLY = {"coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore", "txshot"}
+# The injector has no wire to the side keys, and a rig cannot capture the screen mid-transmission.
+SIDE_KEYS = ("side1", "side2")
 
 
 @dataclass
@@ -33,7 +36,7 @@ def parse(text):
             raise ValueError(f"line {n}: wait needs seconds")
         if op == "shot" and len(args) != 1:
             raise ValueError(f"line {n}: shot needs a name")
-        if op not in ("app", "key", "hold", "wait", "shot", "expect", "allow", "coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore"):
+        if op not in ("app", "key", "hold", "wait", "shot", "expect", "allow", "coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore", "txshot"):
             raise ValueError(f"line {n}: unknown step {op!r}")
         steps.append(Step(n, op, args))
     return steps
@@ -44,4 +47,5 @@ def uses_tx(steps):
 
 
 def sim_only(steps):
-    return [s for s in steps if s.op in SIM_ONLY or (s.op == "expect" and s.args[:1] in (["backlight"], ["fmlive"], ["fmtable"]))]
+    return [s for s in steps if s.op in SIM_ONLY or (s.op in ("key", "hold") and s.args[0] in SIDE_KEYS)
+            or (s.op == "expect" and s.args[:1] in (["backlight"], ["fmlive"], ["fmtable"], ["vfo"]))]

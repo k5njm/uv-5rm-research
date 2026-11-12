@@ -88,8 +88,10 @@ class Vision(unittest.TestCase):
         for k, v in self.g.items():
             self.assertGreaterEqual(vision.similarity(self.cam[k], v), 0.80, k)
 
-    # Apps whose screens are the firmware's shared list (same title bar, same selection bar).
-    LIST_APPS = {"chanmgr", "settings", "fm"}   # fm: its station list is the shared list too
+    # Apps whose screens share the house chrome (light title bar, dark hint strip at the bottom): the firmware's shared
+    # list, and TEXT, SPECTRUM and BAND SWEEP, which were given the same bars (a quiet frame of any of them is mostly
+    # that chrome, so the webcam check cannot tell them apart; the simulator compares pixel-exactly).
+    LIST_APPS = {"chanmgr", "settings", "fm", "text", "spectrum", "bandsweep"}   # fm: its station list is the shared list too
 
     def test_wrong_tool_screen_is_rejected_with_margin(self):
         app = lambda k: k.split("/")[0].split("_")[0]          # hamtools, foxhunt, settings, ...

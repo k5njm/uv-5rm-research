@@ -30,6 +30,8 @@ def run(steps, golden_dir, name, injector, get_frame, corners, threshold, out_di
     skipped = sc.sim_only(steps)
     results = []
     for s in steps:
+        if s in skipped:
+            continue
         if s.op in ("key", "hold"):
             injector.press(s.args[0], 120 if s.op == "key" else 900)
         elif s.op == "wait":
