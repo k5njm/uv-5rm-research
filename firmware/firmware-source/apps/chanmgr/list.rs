@@ -182,6 +182,12 @@ fn open_editor(api: &Api, state: &State, num: u16, new: bool) -> AppResult {
 fn key(api: &Api, kind: u8, id: u8) -> AppResult {
     unsafe {
         let state = &mut *core::ptr::addr_of_mut!(STATE);
+        // The core also sends Press (0) and Release (1) around every Single (device/keypad.rs). Dismissing the notice
+        // on them removed SAVED CHnn on the Release that follows the Single that raised it, before it was ever drawn
+        // (found by making the simulator send them: docs/TEST-DOUBLES.md).
+        if kind < KIND_SINGLE {
+            return AppResult::Continue;
+        }
         dismiss_toast(api, state);
         if kind != KIND_SINGLE && kind != KIND_REPEAT {
             return AppResult::Continue;

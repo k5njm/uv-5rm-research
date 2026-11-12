@@ -137,7 +137,7 @@ and the bottom strip reads `MENU use     EXIT back`.
 |---|---|
 | `UP` / `DOWN` | Move through the groups. |
 | `MENU` | Use the highlighted group. The radio moves to the current channel if it is in the group, otherwise to the first stored channel of the group; if the group has none, the `NO CH IN` notice appears (below). |
-| Hold `MENU` | Use the group and start scanning it at once. |
+| Hold `MENU` | Does nothing extra: the keypad sends no long press for `MENU`, so holding it is the same as pressing it (use the group). The scan-at-once action exists in the firmware but cannot be reached. |
 | `EXIT` or `BAND` | Close the menu, no change. |
 
 The chosen group is remembered when the radio is switched off.
@@ -545,7 +545,7 @@ time). The bottom line reminds you of the keys.
 |---|---|
 | `UP` / `DOWN` | Select a hit in the list. |
 | `MENU` | Listen to the selected hit (`RX` line). `MENU` or `EXIT` goes back to the sweep. |
-| Hold `MENU` | Put the selected hit on the main screen's VFO and leave the app. |
+| Hold `MENU` | Does nothing extra: the keypad sends no long press for `MENU`, so this is the same as pressing it (listen). Putting a hit on the VFO from here is not possible yet. |
 | `A/B` | Next band (VHF, UHF, AIR, 220, 350). |
 | `1` | Switch the step between 25 and 12.5 kHz. |
 | `5` | Type a custom range: start, `MENU`, stop, `MENU` (six digits each, MHz with three decimals). |

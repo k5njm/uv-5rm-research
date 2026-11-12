@@ -2,14 +2,7 @@
 # keypad (3 is DEF: 3 twice is E), digits go straight in, # accepts a letter. The screen shows the stored position's
 # locator and, once four or six characters are in, the latitude and longitude it would set (the middle of the square).
 # Starts from a stored position (40.7100 N, 74.0100 W: FN20).
-setting 32 88
-setting 33 30
-setting 34 62
-setting 35 0
-setting 36 216
-setting 37 17
-setting 38 143
-setting 39 255
+setting 32 88 30 62 0 216 17 143 255
 handoff 0 3 3             # started from GRID LOCATOR (SYSTEM row 3)
 app settings
 shot start

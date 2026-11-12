@@ -23,10 +23,12 @@
 //!                       before or after `app`. The simulated tuner hears 90.1 94.5 98.1 101.1 104.5 MHz
 //!   fmtable bad         a table whose header is damaged: the FM app must ignore it
 //!   fmcore DECI...      the core's bare FM station list (what the FM app shows when there is no table)
-//!   setting OFFSET VALUE   one byte of the settings record the app reads (settings app; before `app`)
+//!   setting OFFSET V...   bytes of the settings record the app reads, written together through the core's clamp (settings app)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
-//!   key K               single press. K = 0-9 star pound menu exit up down ab
-//!   hold K              long press
+//!   key K               single press (Press, Single, Release). K = 0-9 star pound menu exit up down ab
+//!   hold K              long press: Press, Long, Release as the keypad sends them. Only up down exit star pound 0 have one
+//!                       (device/keypad.rs); any other key is an error here, because the radio would see a plain press
+//!   repeat K N          up or down held past 1.5 s: Press, Long, N Repeat events, Release
 //!   step MS             radio time advanced per tick by `wait` (default 5; larger = faster)
 //!   wait SECS           run ticks + draws for SECS of radio time
 //!   shot NAME           save NAME.png and compare with the golden of the same name
@@ -423,14 +425,22 @@ impl Run<'_> {
             }
             // one byte of the settings record (offsets as in `Settings` in flash_map.rs), to start from a record that is
             // not the simulator's all-zero one
-            ["setting", off, val] => match (off.parse::<usize>(), val.parse::<u8>()) {
-                (Ok(o), Ok(v)) if o < 168 => unsafe { SETTINGS[o] = v },
-                _ => self.check(false, "setting needs a byte offset (0-167) and a value (0-255)"),
+            ["setting", off, vals @ ..] if !vals.is_empty() => match (off.parse::<usize>(), vals.iter().map(|v| v.parse::<u8>()).collect::<Result<Vec<_>, _>>()) {
+                (Ok(o), Ok(v)) if o + v.len() <= 168 => unsafe {
+                    // the bytes go in together and through the same clamp as a committed record (Settings::from_bytes), so a
+                    // value the core would change is refused here (a position is four bytes: give them in one step)
+                    let mut rec = SETTINGS;
+                    rec[o..o + v.len()].copy_from_slice(&v);
+                    normalize_settings(&mut rec);
+                    self.check(rec[o..o + v.len()] == v[..], &format!("setting {o} {v:?}: the core would store {:?} (Settings::from_bytes clamps it)", &rec[o..o + v.len()]));
+                    SETTINGS = rec;
+                },
+                _ => self.check(false, "setting needs a byte offset and values (0-255) inside the 168-byte record"),
             },
-            ["coords", "none"] => { unsafe { COORDS = None }; self.redraw() }
+            ["coords", "none"] => { set_coords(None); self.redraw() }
             ["coords", la, lo] => match (la.parse::<f64>(), lo.parse::<f64>()) {
                 (Ok(a), Ok(o)) => {
-                    unsafe { COORDS = Some(((a * 1e5).round() as i32, (o * 1e5).round() as i32)) };
+                    set_coords(Some(((a * 1e5).round() as i32, (o * 1e5).round() as i32)));
                     self.redraw();
                 }
                 _ => self.check(false, "coords needs two decimal degrees"),
@@ -439,6 +449,10 @@ impl Run<'_> {
                 let (Some(app), Some(id)) = (self.app, key_id(k)) else {
                     return self.check(false, &format!("bad key step `{}`", t.join(" ")));
                 };
+                if t[0] == "hold" && !keypad_long(id) {
+                    // device/keypad.rs: this key never sends a Long event, so the radio would read the hold as a plain press
+                    return self.check(false, &format!("the keypad sends no long press for `{k}`: `{}`", t.join(" ")));
+                }
                 // The key runs on a helper thread: a factory reset never returns (it reboots the radio), so the
                 // simulated call parks its thread and this one carries on, having seen the call.
                 let before = crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst);
@@ -455,6 +469,15 @@ impl Run<'_> {
                     }
                     std::thread::sleep(std::time::Duration::from_micros(200));
                 }
+            }
+            ["repeat", k, n] => {
+                let (Some(app), Some(id), Ok(n)) = (self.app, key_id(k), n.parse::<u32>()) else {
+                    return self.check(false, &format!("bad repeat step `{}`", t.join(" ")));
+                };
+                if !keypad_repeat(id) {
+                    return self.check(false, &format!("the keypad repeats only up and down, not `{k}`"));
+                }
+                self.last_exit = hold_repeat(app, id, n);
             }
             ["step", ms] => self.step_ms = ms.parse().unwrap_or(5).max(1),
             ["wait", s] => match s.parse::<f64>() {

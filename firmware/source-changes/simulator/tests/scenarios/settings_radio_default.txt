@@ -1,6 +1,9 @@
 # Settings, RADIO: # while a value is being changed puts it back to its default without knowing what that was. The
 # change shows at once, MENU keeps it, EXIT puts the old value back. TX INHIBIT goes to ON, its default.
-# MODEL CAVEAT: all-zero settings record in the simulator, so every value starts away from its default.
+# MODEL: the simulated record starts as the core's Settings::DEFAULT (clamped like Settings::from_bytes); `setting` steps move what the scenario needs away from it.
+setting 0 0                 # squelch 0, TX limit off (the mock starts from the real defaults: set what the scenario changes)
+setting 3 0
+setting 8 0
 handoff 0 1
 app settings
 key menu                  # change SQUELCH (0)

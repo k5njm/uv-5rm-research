@@ -1,6 +1,8 @@
 # Settings, menu segment: # puts DISPLAY and AUDIO values back to their defaults. The key settings default to what a
 # new record holds (SIDE2 SHORT: LIGHT).
-# MODEL CAVEAT: all-zero settings record in the simulator.
+# MODEL: the simulated record starts as the core's Settings::DEFAULT (clamped like Settings::from_bytes); `setting` steps move what the scenario needs away from it.
+setting 16 0                # backlight ALWAYS ON, SIDE2 SHORT NONE: away from their defaults
+setting 25 0
 handoff 2 1
 app settings
 key menu                  # BACKLIGHT (ALWAYS ON)

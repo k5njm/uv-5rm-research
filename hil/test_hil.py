@@ -174,7 +174,25 @@ print(vision.similarity(vision.rectify(f, c), real))
         hil_run.run([s for s in steps if s.op != "shot"], GOLDEN, "hamtools_idtimer", fake,
                     None, None, 0.8, tempfile.mkdtemp(), sleep=waits.append)
         self.assertEqual(waits, [599.0, 2.0, 30.0, 0.2])   # the waits the scenario asks for, not slept
-        self.assertEqual(fake.log, [("star", 120), ("menu", 120), ("down", 120), ("exit", 120), ("exit", 900)])
+        self.assertEqual(fake.log, [("star", 120), ("menu", 120), ("down", 120), ("exit", 120), ("exit", 1300)])
+
+    def test_hold_is_longer_than_the_radios_long_press_and_shorter_than_its_repeat(self):
+        import hil_run, re
+        kp = _read(os.path.join(os.path.dirname(HERE), "firmware", "firmware-source", "src", "device", "keypad.rs"))
+        long_ms = int(re.search(r"const LONG_PRESS_TICKS: u32 = ([\d_]+);", kp).group(1).replace("_", "")) // 10
+        rep_ms = int(re.search(r"const REPEAT_FIRE_TICKS: u32 = ([\d_]+);", kp).group(1).replace("_", "")) // 10
+        self.assertGreater(hil_run.HOLD_MS, long_ms + 100)      # 900 ms (the first version) is a Single on the radio
+        self.assertLess(hil_run.HOLD_MS, rep_ms)
+
+    def test_hold_is_only_allowed_on_keys_the_keypad_can_long_press(self):
+        import re
+        kp = _read(os.path.join(os.path.dirname(HERE), "firmware", "firmware-source", "src", "device", "keypad.rs"))
+        body = kp[kp.index("fn supports_long"):kp.index("fn supports_repeat")]
+        names = set(re.findall(r"KeyId::(\w+)", body))
+        ours = {"up": "Up", "down": "Down", "exit": "Exit", "star": "Asterisk", "pound": "Pound", "0": "Digit0"}
+        self.assertEqual({ours[k] for k in sc.LONG_KEYS}, names - {"Vm", "Band", "Side1", "Side2"})
+        with self.assertRaises(ValueError):
+            sc.parse("hold menu\n")
 
 
 if __name__ == "__main__":

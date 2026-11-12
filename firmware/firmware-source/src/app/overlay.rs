@@ -457,6 +457,11 @@ fn enter_with(app: &mut App, syst: &mut SYST, slot: u8, handoff: u16) {
 }
 
 pub(crate) fn dispatch_key(app: &mut App, syst: &mut SYST, ev: KeyEvent) {
+    // 0 = Press, 1 = Release: the keypad's bookkeeping around a Single/Long. Apps act on Single (2), Long (3) and
+    // Repeat (4); handing them the others cleared notices on the Release that follows the Single that raised them.
+    if (ev.kind as u8) < 2 {
+        return;
+    }
     let event = AppEvent::Key {
         id: ev.key as u8,
         kind: ev.kind as u8,
@@ -783,9 +788,14 @@ extern "C" fn api_fm_channels_save(buf: *const u8, len: u16) -> bool {
     true
 }
 
+/// A range wholly inside the 2 MB chip (no wrap in the 24-bit SPI address, no u32 overflow).
+fn in_chip(addr: u32, len: u32) -> bool {
+    addr as u64 + len as u64 <= 0x20_0000
+}
+
 #[inline(never)]
 extern "C" fn api_nor_read(addr: u32, buf: *mut u8, len: u32) -> bool {
-    if buf.is_null() {
+    if buf.is_null() || !in_chip(addr, len) {
         return false;
     }
     let slice = unsafe { core::slice::from_raw_parts_mut(buf, len as usize) };
@@ -795,7 +805,10 @@ extern "C" fn api_nor_read(addr: u32, buf: *mut u8, len: u32) -> bool {
 
 #[inline(never)]
 extern "C" fn api_nor_write(addr: u32, buf: *const u8, len: u32) -> bool {
-    if buf.is_null() || addr < self::addr::OVERLAY_APP_ADDR {
+    if buf.is_null()
+        || addr < self::addr::OVERLAY_APP_ADDR
+        || !in_chip(addr, len)
+    {
         return false;
     }
     let slice = unsafe { core::slice::from_raw_parts(buf, len as usize) };
@@ -805,7 +818,7 @@ extern "C" fn api_nor_write(addr: u32, buf: *const u8, len: u32) -> bool {
 
 #[inline(never)]
 extern "C" fn api_nor_erase_sector(addr: u32) -> bool {
-    if addr < self::addr::OVERLAY_APP_ADDR {
+    if addr < self::addr::OVERLAY_APP_ADDR || !in_chip(addr, 1) {
         return false;
     }
     app_ref().storage_mut().norflash.erase_sector(addr);
@@ -842,7 +855,10 @@ extern "C" fn api_fmt_freq(hz: u32, out: *mut u8) -> u16 {
 
 #[inline(never)]
 extern "C" fn api_chan_read(num: u16, out: *mut u8, out_len: u16) -> bool {
-    if out.is_null() || (out_len as u32) < addr::CHAN_SIZE {
+    if out.is_null()
+        || (out_len as u32) < addr::CHAN_SIZE
+        || num > super::MAX_CHANNEL_NUM
+    {
         return false;
     }
     let storage = app_ref().storage_mut();

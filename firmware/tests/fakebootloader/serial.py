@@ -10,6 +10,22 @@ Faults in $FAKE_BL_DIR/faults.json (persistent):
   {"silent": true}                   never answers (radio not in flash mode / cable out)
   {"die_after_packages": N}          stops answering after N accepted packages (cable pulled)
   {"flash_fail_at": SEQ}             answers E3 for that package
+  {"no_end_reply": true}             takes END and never answers it (the radio reboots first: flash_bf.py tolerates it)
+  {"lose_ack_at": SEQ}               takes package SEQ but its ACK never reaches the host (once)
+  {"duplicate_package": "e2"|"ack"}  what a repeat of the last accepted package gets. UNKNOWN for the real bootloader:
+                                     "e2" (default) answers a sequence error, "ack" answers ACK and ignores it.
+                                     flash_bf.py retries the same frame, so the two policies decide whether a lost ACK
+                                     ends a flash that is in fact going fine (the host can simply start over: the
+                                     handshake restarts the transfer)
+
+Every command that reaches the model is appended to $FAKE_BL_DIR/log.txt as "cmd 0x01" (handshake), "cmd 0x04" (package
+count), "cmd 0x03 <seq>" (a package: a flash write) and "cmd 0x45" (end), so a test can show that nothing but
+handshakes were sent.
+
+What is known (six real flashes with flash_bf.py): the happy path above. Not known, and not modelled: error behaviour in
+general, flash write/erase time (the host allows 2 s per package), a package size other than 1 KB, a file longer than
+the application area, a handshake in the middle of a transfer (this fake restarts it), what END does to a transfer that
+is not complete (this fake answers E2).
 """
 import json, os, struct
 
@@ -95,6 +111,8 @@ class Serial:
             return
         if "die_after_packages" in f and self.state["got"] >= f["die_after_packages"] and cmd == CMD_UPDATE:
             return
+        with open(os.path.join(_d(), "log.txt"), "a") as lg:
+            lg.write(f"cmd {cmd:#04x}" + (f" {self.state['got']}" if cmd == CMD_UPDATE else "") + "\n")
         if cmd == CMD_HANDSHAKE:
             if data != b"BOOTLOADER":
                 return self._reply(0xE1, 0)
@@ -105,16 +123,26 @@ class Serial:
                 return self._reply(0xE1, 0)
             self.state["total"] = data[0]
         elif cmd == CMD_UPDATE:
+            if (self.state["total"] is not None and len(data) == CHUNK and self.state["got"] > 0
+                    and args == ((self.state["got"] - 1) & 0xFF) and f.get("duplicate_package") == "ack"):
+                return self._reply(cmd)                      # a repeat of the last package: acknowledged, not stored again
             if self.state["total"] is None or len(data) != CHUNK or args != (self.state["got"] & 0xFF):
                 return self._reply(0xE2, 0)
             if f.get("flash_fail_at") == self.state["got"]:
                 return self._reply(0xE3, 0)
             self.flash += data
             self.state["got"] += 1
+            if f.get("lose_ack_at") == self.state["got"] - 1 and not self.state.get("ack_lost"):
+                self.state["ack_lost"] = True
+                self._save()
+                return
         elif cmd == CMD_END:
             if self.state["got"] != self.state["total"]:
                 return self._reply(0xE2, 0)
             self.state["ended"] = True
+            if f.get("no_end_reply"):
+                self._save()
+                return
         else:
             return self._reply(0xE5, 0)
         self._save()

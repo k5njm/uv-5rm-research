@@ -1,7 +1,10 @@
 # Settings, SYSTEM: # puts a value back to its default. It never loosens a transmit restriction: TX BANDS goes back
-# to FCC HAM only from FCC HAM or ALL; from any narrower choice (here CE HAM, the simulator's all-zero record) it says
+# to FCC HAM only from FCC HAM or ALL; from any narrower choice (here CE HAM, set by the scenario) it says
 # to choose by hand, and nothing changes.
-# MODEL CAVEAT: all-zero settings record in the simulator: TX BANDS starts at CE HAM.
+# MODEL: the simulated record starts as the core's Settings::DEFAULT (clamped like Settings::from_bytes); `setting` steps move what the scenario needs away from it.
+setting 29 0                # TX BANDS CE HAM
+setting 32 88 30 62 0 216 17 143 255   # a stored position, so the default (no position) is a change
+setting 21 0 0              # battery calibration away from the default
 handoff 5 1
 app settings
 key menu                  # change TX BANDS (CE HAM)

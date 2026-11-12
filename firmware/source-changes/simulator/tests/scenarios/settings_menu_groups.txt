@@ -1,6 +1,5 @@
 # Settings, menu segment: the group list, then the DISP items and an edit.
-# MODEL CAVEAT: the simulator starts from an all-zero settings record, not the firmware's real defaults
-# (e.g. the real TXINH default is ON). These frames check layout and navigation, not default values.
+# MODEL: the simulated record starts as the core's Settings::DEFAULT.
 app settings
 shot groups
 key down

@@ -1,0 +1,20 @@
+# Holding UP or DOWN past 1.5 s: the keypad sends Press, Long, then a Repeat every 100 ms, then Release (device/keypad.rs).
+# The list moves once per Repeat; the Long (at 1 s) and the Release do nothing. A scenario that only sent Single never ran this path.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 917 KKXT Adult Album Alt
+fmstation 933 WBAP News/Talk
+fmstation 963 KSCS Country
+fmstation 1011 WRR Classical
+fmstation 1045 KKDA Hip-Hop
+handoff fm 881
+app fm
+wait 0.5
+key menu
+shot at_top
+repeat down 3
+shot three_down
+repeat up 2
+shot two_up

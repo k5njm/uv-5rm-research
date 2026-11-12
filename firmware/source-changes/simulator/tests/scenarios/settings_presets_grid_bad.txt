@@ -1,6 +1,7 @@
 # Settings, segment PRESETS, locator entry: keys a place does not take are ignored, an entry that is not four or six
 # characters is refused with a line in the strip, EXIT deletes, and EXIT on an empty entry goes back without changing
-# anything. No position stored (the all-zero record reads as 0 N 0 E in the simulator).
+# anything. A stored position of 0 N 0 E.
+setting 32 0 0 0 0 0 0 0 0   # a stored position of 0 N 0 E
 handoff 0 3 3
 app settings
 shot start

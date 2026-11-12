@@ -1,6 +1,7 @@
 # Settings, RADIO: the strip under the list explains the selected setting in plain words; while a value is being
 # changed it shows the keys instead. A few lines follow the value (BATTERY SAVE, TX INHIBIT).
-# MODEL CAVEAT: all-zero settings record in the simulator (TX INHIBIT starts OFF here; it is ON on a real radio).
+# MODEL: the simulated record starts as the core's Settings::DEFAULT (clamped like Settings::from_bytes); `setting` steps move what the scenario needs away from it.
+setting 3 0                 # TX INHIBIT off
 handoff 0 1
 app settings
 shot sql_help

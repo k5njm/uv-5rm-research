@@ -1136,6 +1136,11 @@ fn enter(api: &Api) -> AppResult {
 }
 
 fn key(api: &Api, kind: u8, id: u8) -> AppResult {
+    // Press and Release come around every Single on the keypad (the core drops them today; an app must not depend on it:
+    // a notice raised by a Single would be cleared by the Release that follows it)
+    if kind < KIND_SINGLE {
+        return AppResult::Continue;
+    }
     unsafe {
         // the screens change their state where it is (an ItemsState is a couple of hundred bytes: moving it in and out
         // of every handler costs more code than the handlers); a handler that leaves the screen returns the next one

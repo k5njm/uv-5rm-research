@@ -1,7 +1,7 @@
 # Settings, SYSTEM: MENU on VERSION hands over to segment PRESETS, which shows the about view (RF CHIP ID does the same on
 # its own row, GRID LOCATOR hands over to the locator entry: settings_system_chain.txt). The handoff buffer holds
 # [magic A5, the row the view starts on, action (2 about), the SYSTEM row to return to].
-# MODEL CAVEAT: all-zero settings record in the simulator.
+# MODEL: the simulated record starts as the core's Settings::DEFAULT (clamped like Settings::from_bytes); `setting` steps move what the scenario needs away from it.
 handoff 5 1
 app settings
 key down
