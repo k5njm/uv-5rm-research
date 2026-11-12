@@ -1,12 +1,22 @@
-# CHAN MGR: the DELETE row is armed first, says what MENU will do, and EXIT keeps the channel. Never presses Menu twice on DELETE.
+# CHAN MGR, DELETE: it is not next to SAVE (a blank row between them), MENU only arms it, a second MENU does
+# nothing, and only holding # for a second deletes. EXIT cancels. Another channel stays to show the list afterwards.
 chan 0 147120000 147720000 K5RWK
+chan 1 146940000 146340000 RPT-A
 app chanmgr
-key menu                  # open CH001
-key up                    # DELETE
+key menu                  # open channel 01
+key up                    # wraps to DELETE, past the blank row
 shot delete_row
+key up                    # SAVE: the blank row is skipped
+shot save_row_hint
+key down                  # DELETE again
 key menu                  # arm
 shot delete_armed
+key menu                  # a second short press: nothing
+shot second_press_ignored
+key pound                 # a short # is not the long one
+shot short_hash_ignored
 key exit                  # keep it
 shot kept
-key up                    # SAVE
-shot save_row_hint
+key menu                  # arm again
+hold pound                # the deliberate act
+shot deleted              # back in the list; K5RWK is gone

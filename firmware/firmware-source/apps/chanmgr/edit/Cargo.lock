@@ -7,7 +7,7 @@ name = "bf5rh-abi"
 version = "0.1.0"
 
 [[package]]
-name = "chanmgr"
+name = "edit"
 version = "0.1.0"
 dependencies = [
  "bf5rh-abi",

@@ -1,9 +1,18 @@
-# Settings, SYSTEM: the reset row says what MENU will do and the hint offers a way out; TX BANDS reads as what may transmit.
+# Settings, SYSTEM: RESET ALL says what it will do and how to confirm it. MENU only arms it; a second MENU (or a
+# short #) does nothing, EXIT cancels, and only holding # for a second resets. TX BANDS reads as what may transmit.
 handoff 5 1
 app settings
 key up                    # wraps to the last item, RESET ALL
 shot reset_row
 key menu                  # arm it (nothing is wiped yet)
 shot reset_armed
+key menu                  # a second short press
+shot reset_second_press_ignored
+key pound
+expect noreset
 key exit                  # cancel
 shot reset_cancelled
+expect noreset
+key menu                  # arm again
+hold pound                # the deliberate act
+expect reset

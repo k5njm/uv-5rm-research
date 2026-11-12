@@ -1,0 +1,34 @@
+# CHAN MGR, unsaved edits: EXIT from the editor leaves at once when nothing changed. After a change it asks first
+# (DISCARD CHANGES?): MENU discards, EXIT keeps editing, and neither SAVE nor the channel is touched by asking.
+chan 0 147120000 147720000 K5RWK
+chan 1 146940000 146340000 RPT-A
+app chanmgr
+key menu                  # open channel 01
+shot clean_hint           # nothing changed: EXIT says "back"
+key exit
+shot left_at_once         # straight back to the list, row 1 still selected
+key menu
+key down
+key down
+key down
+key down
+key down                  # TX POWER
+key menu
+key up                    # change it (HIGH -> LOW)
+key menu                  # accept
+shot changed_hint         # EXIT now says "discard"
+key exit
+shot discard_prompt       # the selected row asks; MENU discards, EXIT keeps
+key exit
+shot kept_editing         # back in the editor, the change still there
+key exit
+shot asked_again
+key menu                  # discard: back to the list
+shot discarded
+key menu                  # open it again
+key down
+key down
+key down
+key down
+key down
+shot unchanged_after_discard
