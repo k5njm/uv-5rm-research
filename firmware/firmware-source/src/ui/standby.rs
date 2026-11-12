@@ -13,7 +13,28 @@ use embedded_graphics::text::Text;
 
 const BG: Rgb565 = Rgb565::BLACK;
 const FG: Rgb565 = Rgb565::WHITE;
-const ACCENT: Rgb565 = Rgb565::new(24, 8, 4);
+// The accent says what you are tuned with: blue = VFO, green = a memory channel, red = transmitting.
+// Red is kept for transmit and warnings only.
+const VFO_ACCENT: Rgb565 = Rgb565::new(8, 36, 31);
+const MEM_ACCENT: Rgb565 = Rgb565::new(6, 50, 10);
+
+fn accent_for(transmitting_here: bool, channel_mode: bool) -> Rgb565 {
+    if transmitting_here {
+        ALERT
+    } else if channel_mode {
+        MEM_ACCENT
+    } else {
+        VFO_ACCENT
+    }
+}
+
+/// Accent of side `i` (0 = A, 1 = B).
+fn accent(app: &app::App, i: usize) -> Rgb565 {
+    accent_for(
+        app.is_transmitting() && i == app.master_index(),
+        app.side_is_channel_mode(i),
+    )
+}
 const STATUS_BG: Rgb565 = Rgb565::BLACK;
 const AMBER: Rgb565 = Rgb565::new(31, 50, 0);
 const ALERT: Rgb565 = Rgb565::new(31, 8, 4);
@@ -232,7 +253,7 @@ where
 {
     fill(lcd, 0, 0, SCREEN_W, SCREEN_H, BG);
     fill(lcd, 0, 0, SCREEN_W, STATUS_HEIGHT, STATUS_BG);
-    fill(lcd, 0, STATUS_HEIGHT, SCREEN_W, 1, ACCENT);
+    fill(lcd, 0, STATUS_HEIGHT, SCREEN_W, 1, accent(app, snap.master_index));
     fill(lcd, 0, BAND_TOP1 - 1, SCREEN_W, 1, HAIR);
     fill(lcd, MARGIN, METER_RULE_Y, SCREEN_W - 2 * MARGIN, 1, HAIR);
 
@@ -284,15 +305,22 @@ where
             || p.no_channels_notice != snap.no_channels_notice
     });
     let first_frame = cache.structural.is_none();
+    let accent_changed = cache.structural.as_ref().map_or(false, |p| {
+        p.is_transmitting != snap.is_transmitting
+            || p.master_index != snap.master_index
+            || p.sides[0].is_channel_mode != snap.sides[0].is_channel_mode
+            || p.sides[1].is_channel_mode != snap.sides[1].is_channel_mode
+    });
 
     let did_full_redraw = if overlay_active {
         first_frame || !prev_overlay_active || overlay_content_changed
     } else {
-        first_frame || prev_overlay_active
+        first_frame || prev_overlay_active || accent_changed
     };
 
     if did_full_redraw {
         full_redraw(lcd, app, &snap);
+        cache.tx_elapsed = None; // the timer was just painted from scratch
     } else if !overlay_active {
         let prev = cache.structural.as_ref().unwrap(); // Some, since !first_frame here
 
@@ -439,7 +467,7 @@ where
     } else {
         for (on, label, color) in [
             (app.power_save_active(), "PS", DIM),
-            (app.dual_standby_enabled(), "DWR", ACCENT),
+            (app.dual_standby_enabled(), "DWR", accent(app, app.master_index())),
         ] {
             if on {
                 text(lcd, label, &FONT_5X8, x, baseline, color);
@@ -461,7 +489,7 @@ where
         &FONT_5X8,
         FLAGS_W - short.len() as i32 * TINY_W - 2,
         baseline,
-        ACCENT,
+        accent(app, app.master_index()),
     );
 }
 
@@ -554,10 +582,8 @@ where
     D: DrawTarget<Color = Rgb565>,
 {
     let master = i == snap.master_index;
-    let color = if snap.is_transmitting && master {
-        ALERT
-    } else if master {
-        ACCENT
+    let color = if master {
+        accent_for(snap.is_transmitting, snap.sides[i].is_channel_mode)
     } else {
         HAIR
     };
@@ -644,7 +670,7 @@ where
         &FONT_6X10,
         LABEL_X,
         baseline,
-        if is_master { ACCENT } else { DIM },
+        if is_master { accent(app, i) } else { DIM },
     );
 
     if app.channel_display_mode() == ChannelDisplayMode::Frequency {
@@ -867,7 +893,7 @@ where
         (power, FG),
         (
             tone_mode_label(app.side_subaudio_tx(i), app.side_subaudio_rx(i)),
-            ACCENT,
+            accent(app, i),
         ),
         (dir, DIM),
         (if app.side_wide_band(i) { "WIDE" } else { "NAR" }, DIM),
