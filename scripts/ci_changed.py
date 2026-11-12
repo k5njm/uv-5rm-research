@@ -43,7 +43,9 @@ RULES = [
     ("firmware/firmware-source/abi/**", ALL),
 
     # --- core firmware: build_core.sh builds firmware-source (src, abi, at32f421-pac via path deps, memory.x via build.rs)
-    ("firmware/firmware-source/src/**", {"images", "web"}),
+    # The simulator includes some of these by #[path] (fmtlite, ui/list, ui/toast, app/group_table, fault_text, ...)
+    # and that list grows; naming them one by one went stale within a day, so any core source also runs `sim`.
+    ("firmware/firmware-source/src/**", {"sim", "images", "web"}),
     ("firmware/firmware-source/build.rs", {"images", "web"}),
     ("firmware/firmware-source/memory.x", {"images", "web"}),
     ("firmware/firmware-source/Cargo.toml", {"images", "web"}),
@@ -61,7 +63,8 @@ RULES = [
 
     # --- overlay apps: mkapp.py builds apps/<name> (+ abi); the images job builds hamtools x4 styles and fskprobe --
     # Every app directory counts, including ones the CI step does not build today, so adding one to CI cannot be missed.
-    ("firmware/firmware-source/apps/**", {"images", "web"}),
+    # Same for apps: which ones the simulator includes changes as apps are added or split.
+    ("firmware/firmware-source/apps/**", {"sim", "images", "web"}),
     ("firmware/firmware-source/tools/mkapp.py", {"images", "web"}),
     ("firmware/firmware-source/tools/*.py", set()),                           # the other push/flash helpers: no CI step
     # The simulator #[path]-includes these app sources (the other apps are not simulated).
