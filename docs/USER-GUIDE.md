@@ -723,7 +723,13 @@ four bars at the right of the title bar are the signal strength (their threshold
 ![Typing a frequency: 98 so far in amber, the strip 0-9 type, EXIT clear.](img/fm-typing.png)
 
 **The station list** (title `STATIONS`, `MENU`) is a list like the others: blue is your row, a speaker marks the station that is
-playing, the frequency is on the right, and it opens on the station that is playing.
+playing, the station's genre (its detail text) is in grey between the name and the frequency, the frequency is on the right, and it opens
+on the station that is playing. The genre has 12 characters of room when the name is 4 or fewer (call letters), and less after a longer
+name: a genre that does not fit is cut at a word (`Adult Album Alt` shows as `Adult Album`), or cut inside a long word with a `.` at the
+end; after a name of 12 characters there is no room and it is left out, as it is for a station with no detail. The tuner screen always
+shows the whole detail.
+
+![A list with long names and genres: the genre moves right after a longer name, a long word is cut with a dot, and a name of 12 characters has no genre.](img/fm-list-long.png)
 
 ![The station list: the playing station has a speaker mark and is selected; strip MENU play, * delete.](img/fm-list.png)
 

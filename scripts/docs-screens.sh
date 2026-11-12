@@ -59,6 +59,7 @@ FRAMES=(
   "fm_save/save_row                          fm-save"
   "fm_type/typing_two                        fm-typing"
   "fm_list/armed_delete                      fm-delete-armed"
+  "fm_list_long/long_name_selected           fm-list-long"
   "fm_seek/seeking                           fm-seek"
   "hamtools_idtimer/armed_10_00              hamtools-idtimer"
   "hamtools_stopwatch/running_two_laps       hamtools-stopwatch"

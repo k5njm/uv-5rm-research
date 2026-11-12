@@ -1,0 +1,32 @@
+# The station list with other people's lists: names from 3 to 12 characters, genres up to 16. The genre starts in a
+# column of its own, is cut at a word (or marked with a dot), and goes when the name leaves it fewer than 5 cells; an
+# unnamed station and one without a genre still read cleanly.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 WFAA-HD2 Public Radio
+fmstation 901 TWELVECHARS1 Adult Album Alt
+fmstation 917 ELEVENCHARS Rock
+fmstation 925 KZPS Classic Rock
+fmstation 933 MIDNIGHT Superlongwordgenre
+fmstation 963 KSCS
+fmstation 1011 WRR Classical
+fmstation 1045 KKDA Hip-Hop
+handoff fm 893
+app fm
+wait 0.5
+key menu
+shot top
+key down
+key down
+shot long_name_selected
+key down
+key down
+shot eleven
+key down
+shot no_detail
+key star
+shot armed_no_detail
+key exit
+key down
+key down
+shot end
