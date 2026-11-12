@@ -54,6 +54,10 @@ use fmtlite::Sink;
 #[path = "../../firmware-source/src/fault_text.rs"]
 #[allow(dead_code)]
 mod fault_text;
+/// The main screen's battery reading filter (pure); its unit tests run here.
+#[path = "../../firmware-source/src/app/battery_filter.rs"]
+#[allow(dead_code)]
+mod battery_filter;
 mod scenario;
 mod bootcard;
 

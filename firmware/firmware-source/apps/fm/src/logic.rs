@@ -872,6 +872,66 @@ fn draw_marker(api: &Api, deci: u16) {
     }
 }
 
+/// Characters of the list widget's row that label and value may share: the label starts 4 px in, the value ends 4 px
+/// from the right edge, so 25 six-pixel cells fit between them (a 26th would touch).
+pub const ROW_CHARS: usize = 25;
+const FREQ_W: usize = 5;
+/// The genre column starts here at the earliest (2 for the speaker, a 4-character name, one space).
+const GENRE_COL: usize = 7;
+
+/// One station row for the list: the label is two blanks for the speaker, then the name (`(unnamed)` when it has none);
+/// the value is the genre, left-aligned in a column of its own, then the frequency right-aligned in five cells.
+/// The genre column starts at column 7 (names up to 4 characters, as call letters are) or one space after a longer
+/// name; a genre wider than the column is cut at a word boundary, or, inside a long word, one cell early with a `.`;
+/// where fewer than 5 cells are left for it (names of 12) it is left out. A station without a detail shows only its
+/// frequency. Label length plus value length never exceeds `ROW_CHARS`. Returns (label length, value length).
+pub fn fmt_row(name: &[u8], detail: &[u8], deci: u16, label: &mut [u8; 16], value: &mut [u8; 18]) -> (usize, usize) {
+    label.fill(0);
+    value.fill(0);
+    label[..2].copy_from_slice(b"  ");
+    let mut n = copy_text(&mut label[2..14], name);
+    if n == 0 {
+        label[2..11].copy_from_slice(b"(unnamed)");
+        n = 9;
+    }
+    let ln = 2 + n;
+    let mut f = [0u8; 6];
+    let fl = fmt_deci(deci, &mut f);
+    let mut g = [0u8; 16];
+    let mut gl = copy_text(&mut g, detail);
+    while gl > 0 && g[gl - 1] == b' ' {
+        gl -= 1;
+    }
+    let start = GENRE_COL.max(ln + 1);
+    let vn = ROW_CHARS - start;
+    let gw = vn.saturating_sub(FREQ_W + 1);
+    if gl == 0 || gw < 5 {
+        value[..fl].copy_from_slice(&f[..fl]);
+        return (ln, fl);
+    }
+    if gl > gw {
+        // cut at the last blank that leaves at least 4 characters, else inside the word with a marker
+        let mut cut = 0;
+        for i in 4..=gw {
+            if g[i] == b' ' {
+                cut = i;
+            }
+        }
+        if cut == 0 {
+            cut = gw;
+            g[gw - 1] = b'.';
+        }
+        gl = cut;
+        while gl > 0 && g[gl - 1] == b' ' {
+            gl -= 1;
+        }
+    }
+    value[..gl].copy_from_slice(&g[..gl]);
+    value[gl..vn].fill(b' ');
+    value[vn - fl..vn].copy_from_slice(&f[..fl]);
+    (ln, vn)
+}
+
 fn draw_list(api: &Api, a: &mut App) {
     static mut ROWS: [ListRow; VIS] = [ListRow { label: [0; 16], value: [0; 18], has_value: false, cursor: 0 }; VIS];
     let lead = lead(a);
@@ -894,19 +954,18 @@ fn draw_list(api: &Api, a: &mut App) {
         } else {
             let i = g - lead;
             let r = read_rec(&mut nor, &a.st, i);
-            row.label[..2].copy_from_slice(b"  ");
-            let n = copy_text(&mut row.label[2..14], &r[2..14]);
-            if n == 0 {
-                row.label[2..11].copy_from_slice(b"(unnamed)");
-            }
+            let (_, vn) = fmt_row(&r[2..14], &r[14..30], a.st.fq[i], &mut row.label, &mut row.value);
+            row.has_value = vn > 0;
             if a.st.fq[i] == a.deci {
                 playing = Some(slot as i16);
             }
             a.st.fq[i]
         };
-        let n = fmt_deci(f, &mut t);
-        row.value[..n].copy_from_slice(&t[..n]);
-        row.has_value = true;
+        if g < lead {
+            let n = fmt_deci(f, &mut t);
+            row.value[..n].copy_from_slice(&t[..n]);
+            row.has_value = true;
+        }
         if g == sel && a.armed {
             row.cursor = bf5rh_abi::ROW_ARMED;
         }
@@ -1251,5 +1310,68 @@ mod tests {
         let mut d = [0u8; 6];
         assert_eq!(copy_text(&mut d, b"A\x01B\xff"), 3);
         assert_eq!(&d[..3], b"A?B");
+    }
+
+    /// The row as the widget draws it: label from the left, value right-aligned, in `ROW_CHARS` cells.
+    fn row(name: &[u8], detail: &[u8], deci: u16) -> String {
+        let (mut l, mut v) = ([0u8; 16], [0u8; 18]);
+        let (ln, vn) = fmt_row(name, detail, deci, &mut l, &mut v);
+        assert!(ln + vn <= ROW_CHARS, "{} + {}", ln, vn);
+        assert!(l[ln..].iter().all(|&b| b == 0) && v[vn..].iter().all(|&b| b == 0));
+        let mut s = String::from_utf8(l[..ln].to_vec()).unwrap();
+        while s.len() + vn < ROW_CHARS {
+            s.push(' ');
+        }
+        s.push_str(std::str::from_utf8(&v[..vn]).unwrap());
+        assert_eq!(s.len(), ROW_CHARS);
+        s
+    }
+
+    #[test]
+    fn row_short_names() {
+        assert_eq!(row(b"KERA", b"Public Radio", 901), "  KERA Public Radio  90.1");
+        assert_eq!(row(b"WRR", b"Classical", 1011), "  WRR  Classical    101.1");
+        assert_eq!(row(b"KERA", b"Adult Album Alt", 917), "  KERA Adult Album   91.7");
+        assert_eq!(row(b"KERA", b"Classic Hits", 881), "  KERA Classic Hits  88.1");
+        assert_eq!(row(b"KKDA", b"Hip-Hop", 1045), "  KKDA Hip-Hop      104.5");
+        assert_eq!(row(b"KERA", b"Rock", 881), "  KERA Rock          88.1");
+    }
+
+    #[test]
+    fn row_no_detail_shows_only_the_frequency() {
+        assert_eq!(row(b"KERA", b"", 881), "  KERA               88.1");
+        assert_eq!(row(b"KERA", &[0xFF; 16], 1045), "  KERA              104.5");
+        assert_eq!(row(b"KERA", b"        ", 881), "  KERA               88.1");
+        assert_eq!(row(b"", b"", 1045), "  (unnamed)         104.5");
+        assert_eq!(row(b"", b"News", 1045), "  (unnamed) News    104.5");
+    }
+
+    #[test]
+    fn row_long_names_push_the_genre_right_and_then_drop_it() {
+        assert_eq!(row(b"WFAA-HD2", b"Public Radio", 901), "  WFAA-HD2 Public    90.1");
+        assert_eq!(row(b"WFAA-HD2", b"Talk", 901), "  WFAA-HD2 Talk      90.1");
+        assert_eq!(row(b"TWELVECHARS1", b"Public Radio", 1045), "  TWELVECHARS1      104.5");
+        assert_eq!(row(b"ELEVENCHARS", b"Rock", 881), "  ELEVENCHARS Rock   88.1");
+        assert_eq!(row(b"TWELVECHARS1", b"", 881), "  TWELVECHARS1       88.1");
+    }
+
+    #[test]
+    fn row_never_exceeds_its_fields() {
+        let names: [&[u8]; 6] = [b"", b"ABC", b"ABCD", b"ABCDEFGH", b"ABCDEFGHIJKL", b"A\x01B"];
+        let details: [&[u8]; 8] = [b"", b"Rock", b"Alt Rock", b"Classic Hits", b"Public Radio", b"Adult Album Alt",
+            b"Adult Alternative", b"Superlongwordgenre"];
+        for n in names {
+            for d in details {
+                for f in [LO, 881, 1000, 1045, HI] {
+                    let r = row(n, d, f);
+                    assert!(r.is_ascii());
+                    assert!(r.ends_with(&format!("{}.{}", f / 10, f % 10)));
+                    // the frequency is the last five cells, flush right
+                    assert_eq!(r.as_bytes()[ROW_CHARS - 1], b'0' + (f % 10) as u8);
+                }
+            }
+        }
+        // a genre with no word break is cut one cell early and marked
+        assert_eq!(row(b"KERA", b"Superlongwordgenre", 881), "  KERA Superlongwo.  88.1");
     }
 }

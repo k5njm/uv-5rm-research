@@ -76,7 +76,7 @@ of the layout, not a screenshot (here a `PS` flag shares the status line with th
 | **Accent colour** | Blue in VFO mode, green on a memory channel, red while transmitting. The line under the status bar and the left stripe of the active side use it. The side that does not have the keys has a dark stripe |
 | **Status bar, left** | `PS` (battery save is working), `DWR` (dual watch is on), `SCAN UP EXIT` or `SCAN DN EXIT` while scanning (`SCAN UP` or `SCAN DN` when a `PS`, `DWR` or `VOX` flag shares the line), `VOX`, and a padlock while the keypad is locked. While transmitting, a red `MM:SS` timer replaces `PS` and `DWR` |
 | **Status bar, tag** | In memory mode the short name of the channel group (`RPT`, `WX`, `ALL`, ...; see [Channel groups](#channel-groups)). In VFO mode the band the frequency is in (`AIR`, `2M`, `MURS`, `MARINE`, `WX`, `1.25M`, `70CM`, `GMRS`) or nothing |
-| **Status bar, right** | Battery voltage and a battery icon (red at one bar or none, amber at two, green above) |
+| **Status bar, right** | Battery voltage and a battery icon (red at one bar or none, amber at two, green above). The number is an average that follows a change over several seconds, so it stays steady while you receive; while you transmit it follows the battery within a second, so the sag under load shows, and it eases back over about two seconds after you release `PTT`. The firmware does not warn about, or act on, a low battery |
 | **Two blocks** | The upper block is side A and the lower block is side B. `A/B` moves the keys to the other side. The active side is bright, the other is dimmer. With DUAL WATCH on, the coloured line at the left edge runs across both sides. **Each side keeps its own channel group** |
 | **Row 1** | `VFO`, or the channel's number in the current group (`01`; the radio's own number in group ALL, and also for a channel that is outside the group). On the right, the channel's detail text (a place or a note) when CH DISPLAY is NAME or NAME+FREQ, or the channel's name in small letters when CH DISPLAY is FREQUENCY |
 | **Marker** (left of row 1) | `RX` (green, steady) while the squelch is open on that side, `TX` (red) while transmitting, `>>` (amber) on the side that heard the last signal |
@@ -556,7 +556,10 @@ is the range you type with `5`.
 ![BAND SWEEP over 2 m: a graph on top, a list of hits with strength and sighting count, and the strip MENU hear, VFO/MR tune.](img/bandsweep.png)
 
 The title bar shows the start and stop of the band and its name. The line under the list shows the step (`ST25K` or `ST12.5K`),
-`T+` (detection margin), `D` (dwell) and `P` (pass number and time). The selected hit is blue and the trace is green. An empty list
+`T+` (detection margin), `D` (dwell) and `P` (pass number and time). The selected hit is blue and the trace is green. **An amber pointer on the graph marks the selected hit**: a small triangle at the top edge
+and a thin line down to the trace, at the hit's own column (as SPECTRUM marks its peak), so you can see where in the band the blue row is.
+It moves as `UP` and `DOWN` change the selection and stays while you listen. A hit at the very start or end of the band has the triangle
+kept whole beside the line. With no hits there is no pointer. An empty list
 reads `NO SIGNALS YET`, and the strip then reads `BAND next  1 step  5 range`.
 
 **`MENU` hears the selected hit** (an `RX` line with its frequency and level). **`MENU` again stops listening and the sweep carries on**;
@@ -723,7 +726,13 @@ four bars at the right of the title bar are the signal strength (their threshold
 ![Typing a frequency: 98 so far in amber, the strip 0-9 type, EXIT clear.](img/fm-typing.png)
 
 **The station list** (title `STATIONS`, `MENU`) is a list like the others: blue is your row, a speaker marks the station that is
-playing, the frequency is on the right, and it opens on the station that is playing.
+playing, the station's genre (its detail text) is in grey between the name and the frequency, the frequency is on the right, and it opens
+on the station that is playing. The genre has 12 characters of room when the name is 4 or fewer (call letters), and less after a longer
+name: a genre that does not fit is cut at a word (`Adult Album Alt` shows as `Adult Album`), or cut inside a long word with a `.` at the
+end; after a name of 12 characters there is no room and it is left out, as it is for a station with no detail. The tuner screen always
+shows the whole detail.
+
+![A list with long names and genres: the genre moves right after a longer name, a long word is cut with a dot, and a name of 12 characters has no genre.](img/fm-list-long.png)
 
 ![The station list: the playing station has a speaker mark and is selected; strip MENU play, * delete.](img/fm-list.png)
 
