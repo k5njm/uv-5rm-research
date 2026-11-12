@@ -8,7 +8,8 @@
 //!   master HZ           the radio's tuned frequency when the app starts (default 146520000)
 //!   signal HZ LEVEL TONE always | duty ON PERIOD   a transmitter on the air: raw RSSI LEVEL, CTCSS index TONE
 //!                       (-1 none), either always on or on for ON s of every PERIOD s of radio time
-//!   chan N RXHZ [TXHZ] [NAME]   a stored channel (blank TX = receive-only)
+//!   chan N RXHZ [TXHZ] [NAME]   a stored channel (blank TX = receive-only). NAME `@ff` is the stock/CHIRP blank
+//!                       name (twelve 0xFF bytes); no NAME leaves twelve zero bytes
 //!                       master/signal/chan may appear before or after `app`; they are applied after the reset
 //!   air HEX [HEX...]   the simulated FSK modem hears a sync, then these 16-bit words (hex), one per poll
 //!   handoff GROUP ACTION   preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items)
@@ -203,6 +204,10 @@ fn channel_record(rx: u32, tx: Option<u32>, name: &str) -> [u8; 32] {
     let mut r = [0u8; 32];
     r[0..4].copy_from_slice(&bcd(rx / 10));
     r[4..8].copy_from_slice(&tx.map_or([0xFF; 4], |t| bcd(t / 10)));
+    if name == "@ff" {
+        r[20..32].fill(0xFF); // what stock firmware and CHIRP store for an unnamed channel
+        return r;
+    }
     for (i, c) in name.bytes().take(12).enumerate() {
         r[20 + i] = c;
     }

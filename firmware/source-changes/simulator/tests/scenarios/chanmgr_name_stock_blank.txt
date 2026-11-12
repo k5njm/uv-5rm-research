@@ -1,0 +1,28 @@
+# Naming a channel whose name is the stock/CHIRP blank (twelve 0xFF bytes), as on a radio that came from stock firmware.
+# Found on hardware (2026-11-11): the cursor showed but digits only beeped. Never presses Menu on DEL.
+chan 0 147120000 147720000 @ff
+app chanmgr
+key menu                  # open channel 0
+key up                    # wraps to DEL
+key up                    # SAVE
+key up                    # NAME
+shot name_row
+key menu                  # edit the name
+key 5
+key 5                     # K
+wait 1
+key 5
+key 5
+key 5
+key 5
+key 5
+key 5
+key 5                     # 5
+wait 1
+key 7
+key 7
+key 7                     # R
+wait 1
+shot typed_k5r
+key menu                  # accept the name
+shot accepted

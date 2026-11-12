@@ -189,8 +189,10 @@ impl<const N: usize> NameEdit<N> {
     }
 
     fn start(&mut self, initial: [u8; N]) {
-        self.buf = initial;
-        self.cursor = initial.iter().position(|&b| b == 0).unwrap_or(N);
+        // Stock firmware and CHIRP pad names with 0xFF. Left as they are, no zero is found, the cursor starts
+        // past the end and every key is refused (seen on a radio that came from stock firmware).
+        self.buf = initial.map(|b| if b == 0xFF { 0 } else { b });
+        self.cursor = self.buf.iter().position(|&b| b == 0).unwrap_or(N);
         self.pending = None;
         self.idle_100us = 0;
     }
