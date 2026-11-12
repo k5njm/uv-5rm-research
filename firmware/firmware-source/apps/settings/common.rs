@@ -1,4 +1,6 @@
-#![allow(dead_code)]
+// One source, built once per segment with only that segment's groups (cargo features): what a segment does not
+// show is unused there.
+#![allow(dead_code, unused_imports, unused_variables, unreachable_code)]
 
 use bf5rh_abi::{Api, AppEvent, AppResult, ListRow};
 
@@ -34,14 +36,16 @@ pub const SUBAUDIO_MAX_INDEX: i32 = 259;
 pub const SEG_MENU: u8 = 0;
 pub const SEG_RADIO: u8 = 1;
 pub const SEG_SYSTEM: u8 = 2;
+pub const SEG_PRESETS: u8 = 3;
 
-pub const GROUP_SEG: [u8; 6] = [
+pub const GROUP_SEG: [u8; 7] = [
     SEG_RADIO,  // Radio
     SEG_MENU,   // Sig
     SEG_MENU,   // Display
     SEG_MENU,   // Keys
     SEG_MENU,   // Ani
     SEG_SYSTEM, // System
+    SEG_PRESETS, // Presets
 ];
 
 /// `true` when this segment compiled the items of group `gi`.
@@ -52,7 +56,8 @@ const fn have_group(gi: usize) -> bool {
         2 => cfg!(feature = "g_disp"),
         3 => cfg!(feature = "g_keys"),
         4 => cfg!(feature = "g_ani"),
-        _ => cfg!(feature = "g_system"),
+        5 => cfg!(feature = "g_system"),
+        _ => cfg!(feature = "g_presets"),
     }
 }
 
@@ -421,6 +426,12 @@ pub enum SettingItem {
     Info,
     ChipId,
     Reset,
+    // the rows of the PRESETS group
+    PresetQuiet,
+    PresetBattery,
+    PresetScan,
+    PresetRepeater,
+    PresetDefaults,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -431,15 +442,17 @@ pub enum SettingsGroup {
     Keys,
     Ani,
     System,
+    Presets,
 }
 
-pub const SETTINGS_GROUPS: [SettingsGroup; 6] = [
+pub const SETTINGS_GROUPS: [SettingsGroup; 7] = [
     SettingsGroup::Radio,
     SettingsGroup::Sig,
     SettingsGroup::Display,
     SettingsGroup::Keys,
     SettingsGroup::Ani,
     SettingsGroup::System,
+    SettingsGroup::Presets,
 ];
 
 impl SettingsGroup {
@@ -451,6 +464,7 @@ impl SettingsGroup {
             SettingsGroup::Keys => "KEYS",
             SettingsGroup::Ani => "ANI / DTMF",
             SettingsGroup::System => "SYSTEM",
+            SettingsGroup::Presets => "PRESETS",
         }
     }
 
@@ -480,6 +494,8 @@ impl SettingsGroup {
                 FLock, Lat, Lon, BattCal, BootMode, BootSnd, Info, ChipId,
                 Reset,
             ],
+            #[cfg(feature = "g_presets")]
+            SettingsGroup::Presets => &[PresetQuiet, PresetBattery, PresetScan, PresetRepeater, PresetDefaults],
             #[allow(unreachable_patterns)]
             _ => &[],
         }
@@ -585,6 +601,17 @@ impl SettingItem {
             ChipId => "RF CHIP ID",
             #[cfg(feature = "g_system")]
             Reset => "RESET ALL",
+
+            #[cfg(feature = "g_presets")]
+            PresetQuiet => "QUIET",
+            #[cfg(feature = "g_presets")]
+            PresetBattery => "BATTERY SAVER",
+            #[cfg(feature = "g_presets")]
+            PresetScan => "SCANNING",
+            #[cfg(feature = "g_presets")]
+            PresetRepeater => "REPEATER",
+            #[cfg(feature = "g_presets")]
+            PresetDefaults => "DEFAULTS",
 
             #[allow(unreachable_patterns)]
             _ => "",
@@ -825,6 +852,17 @@ fn help_into(item: SettingItem, v: i32, out: &mut [u8]) -> usize {
         #[cfg(feature = "g_system")]
         Reset => "Erases settings and VFOs",
 
+        #[cfg(feature = "g_presets")]
+        PresetQuiet => "No beeps, short light",
+        #[cfg(feature = "g_presets")]
+        PresetBattery => "Sleeps more, light short",
+        #[cfg(feature = "g_presets")]
+        PresetScan => "Scanning: stays on a call",
+        #[cfg(feature = "g_presets")]
+        PresetRepeater => "Polite repeater operating",
+        #[cfg(feature = "g_presets")]
+        PresetDefaults => "Defaults, except TX limits",
+
         #[allow(unreachable_patterns)]
         _ => "",
     };
@@ -952,6 +990,11 @@ pub struct ItemsState {
     defaulted: bool,
     /// a line for the strip instead of the keys, until the next key: 0 none, 1 default refused
     note: u8,
+    /// PRESETS only: 0 = the list of presets, else the preview of preset `view - 1`; `pidx` is the row selected there
+    view: u8,
+    pidx: usize,
+    /// PRESETS only: the "applied" notice is on the screen
+    toast: bool,
 }
 
 impl ItemsState {
@@ -972,6 +1015,9 @@ impl ItemsState {
             lon_neg: false,
             defaulted: false,
             note: 0,
+            view: 0,
+            pidx: 0,
+            toast: false,
         }
     }
 
@@ -1107,6 +1153,14 @@ fn dispatch_groups(api: &Api, kind: u8, id: u8, index: usize) -> Phase {
 fn dispatch_items(api: &Api, kind: u8, id: u8, mut st: ItemsState) -> Phase {
     let item = st.item();
     st.note = 0;
+
+    #[cfg(feature = "g_presets")]
+    if st.group == SettingsGroup::Presets {
+        return match dispatch_presets(api, kind, id, &mut st) {
+            Some(phase) => phase,
+            None => Phase::Items(st),
+        };
+    }
 
     if st.editing && kind == KIND_SINGLE && id == KEY_POUND {
         back_to_default(api, &mut st, item);
@@ -1372,6 +1426,251 @@ fn commit_coord_input(api: &Api, is_lat: bool, st: &mut ItemsState) {
         st.lon_input.clear();
     }
     st.editing = false;
+}
+
+// presets (segment PRESETS): several settings changed together, shown first, applied on confirmation
+
+/// The settings a preset may change. Not in this list, so never touched by a preset: TX INHIBIT, TX BANDS, the saved
+/// position, the key assignments, the battery calibration, the boot text and tune, and everything kept in the VFO.
+/// A host test checks the bytes of the record.
+#[cfg(feature = "g_presets")]
+#[derive(Clone, Copy, PartialEq)]
+enum PF {
+    Sql,
+    Tdr,
+    Save,
+    Busy,
+    Tot,
+    Scan,
+    Beep,
+    Vox,
+    Tail,
+    Roge,
+    Abr,
+    BootSnd,
+}
+
+#[cfg(feature = "g_presets")]
+impl PF {
+    fn name(self) -> &'static str {
+        match self {
+            PF::Sql => "SQUELCH",
+            PF::Tdr => "DUAL WATCH",
+            PF::Save => "BATTERY SAVE",
+            PF::Busy => "BUSY LOCKOUT",
+            PF::Tot => "TX TIMEOUT",
+            PF::Scan => "SCAN RESUME",
+            PF::Beep => "KEY BEEP",
+            PF::Vox => "VOX",
+            PF::Tail => "SQ TAIL ELIM",
+            PF::Roge => "ROGER BEEP",
+            PF::Abr => "BACKLIGHT",
+            PF::BootSnd => "BOOT SOUND",
+        }
+    }
+
+    fn get(self, s: &Settings) -> i32 {
+        match self {
+            PF::Sql => s.sql_level as i32,
+            PF::Tdr => s.dual_standby as i32,
+            PF::Save => s.save_level as i32,
+            PF::Busy => s.busy_lock as i32,
+            PF::Tot => s.tot_level as i32,
+            PF::Scan => s.scan_mode as i32,
+            PF::Beep => s.beeps_switch as i32,
+            PF::Vox => s.vox_switch as i32,
+            PF::Tail => s.tail_elimination as i32,
+            PF::Roge => s.roger_tone as i32,
+            PF::Abr => s.backlight_time as i32,
+            PF::BootSnd => s.boot_sound_enabled as i32,
+        }
+    }
+
+    fn set(self, s: &mut Settings, v: i32) {
+        match self {
+            PF::Sql => s.sql_level = v as u8,
+            PF::Tdr => s.dual_standby = v != 0,
+            PF::Save => s.save_level = v as u8,
+            PF::Busy => s.busy_lock = v != 0,
+            PF::Tot => s.tot_level = v as u8,
+            PF::Scan => s.scan_mode = v as u8,
+            PF::Beep => s.beeps_switch = v != 0,
+            PF::Vox => s.vox_switch = v != 0,
+            PF::Tail => s.tail_elimination = v != 0,
+            PF::Roge => s.roger_tone = v as u8,
+            PF::Abr => s.backlight_time = v as u8,
+            PF::BootSnd => s.boot_sound_enabled = v != 0,
+        }
+    }
+
+    /// The value in a preview row, where it shares 26 characters with the name and the value it replaces
+    /// (otherwise as the settings list shows it).
+    fn text(self, v: i32, out: &mut [u8]) -> usize {
+        let words: &[&str] = match self {
+            PF::Sql => {
+                let mut w = Out::new(out);
+                w.u32(v as u32, 1);
+                return w.len;
+            }
+            PF::Tot => {
+                if v == 0 {
+                    return write_str(out, "OFF");
+                }
+                let mut w = Out::new(out);
+                w.u32(v as u32 * 15, 1);
+                w.str("S");
+                return w.len;
+            }
+            PF::Save => &["OFF", "1", "2", "3", "4"],
+            PF::Scan => &["TIMED", "CARRIER", "STOP"],
+            PF::Roge => &["OFF", "ROGER", "MDC1200"],
+            PF::Abr => &["ALWAYS", "5 SEC", "10 SEC", "15 SEC", "20 SEC"],
+            _ => &["OFF", "ON"],
+        };
+        write_str(out, words[(v.max(0) as usize).min(words.len() - 1)])
+    }
+}
+
+/// Most settings one preset changes.
+#[cfg(feature = "g_presets")]
+const PRESET_MAX: usize = 9;
+
+/// In the order of the PRESETS list (QUIET, BATTERY SAVER, SCANNING, REPEATER, DEFAULTS): what each sets.
+#[cfg(feature = "g_presets")]
+static PRESETS: [&[(PF, u8)]; 5] = [
+    // quiet: no beeps, no tone at the end of a transmission, short light
+    &[(PF::Beep, 0), (PF::Roge, 0), (PF::BootSnd, 0), (PF::Abr, 1)],
+    // battery saver: receiver naps (0.3 s), light short, no dual watch, no VOX
+    &[(PF::Save, 3), (PF::Abr, 1), (PF::Tdr, 0), (PF::Vox, 0)],
+    // scanning: stay on a call until it ends, a notch less noise, light 15 s
+    &[(PF::Scan, 1), (PF::Sql, 4), (PF::Abr, 3)],
+    // repeater: polite: busy lockout, no squelch crash, one minute limit, no VOX
+    &[(PF::Busy, 1), (PF::Tail, 1), (PF::Tot, 4), (PF::Vox, 0)],
+    // defaults: the values of a new record for everything a preset may change except the boot sound
+    &[
+        (PF::Sql, 3),
+        (PF::Tdr, 0),
+        (PF::Save, 0),
+        (PF::Beep, 1),
+        (PF::Abr, 2),
+        (PF::Scan, 1),
+        (PF::Vox, 0),
+        (PF::Tail, 1),
+        (PF::Roge, 0),
+    ],
+];
+
+/// The settings preset `p` would change now (those not already at its value), in table order.
+#[cfg(feature = "g_presets")]
+fn preset_changes(s: &Settings, p: usize, out: &mut [(PF, u8); PRESET_MAX]) -> usize {
+    let mut n = 0;
+    for &(f, v) in PRESETS[p] {
+        if f.get(s) != v as i32 {
+            out[n] = (f, v);
+            n += 1;
+        }
+    }
+    n
+}
+
+#[cfg(feature = "g_presets")]
+fn dispatch_presets(api: &Api, kind: u8, id: u8, st: &mut ItemsState) -> Option<Phase> {
+    if st.toast {
+        (api.toast)(core::ptr::null(), 0); // the list repaints over it
+        st.toast = false;
+    }
+    if kind != KIND_SINGLE && kind != KIND_REPEAT {
+        return None;
+    }
+    let mut ch = [(PF::Sql, 0u8); PRESET_MAX];
+    let preview = st.view != 0;
+    let n = if preview { preset_changes(&st.settings, st.view as usize - 1, &mut ch) } else { PRESETS.len() };
+    let at = if preview { st.pidx } else { st.index };
+    let moved = match id {
+        KEY_UP if n > 0 => (at + n - 1) % n,
+        KEY_DOWN if n > 0 => (at + 1) % n,
+        _ => at,
+    };
+    if preview {
+        st.pidx = moved;
+    } else {
+        st.index = moved;
+    }
+    match id {
+        KEY_MENU if kind == KIND_SINGLE => {
+            if !preview {
+                st.view = st.index as u8 + 1;
+                st.pidx = 0;
+            } else if n > 0 {
+                for &(f, v) in &ch[..n] {
+                    f.set(&mut st.settings, v as i32);
+                }
+                preview_settings(api, &st.settings);
+                commit_settings(api, &st.settings);
+                st.view = 0;
+                st.toast = true;
+            }
+        }
+        KEY_EXIT if kind == KIND_SINGLE => {
+            if preview {
+                st.view = 0;
+            } else {
+                return Some(back_to_groups(api, st.group_pos()));
+            }
+        }
+        _ => {}
+    }
+    None
+}
+
+/// The preview of preset `st.view - 1`: one row per setting it would change, `OLD>NEW`.
+#[cfg(feature = "g_presets")]
+fn draw_preview(api: &Api, st: &ItemsState) {
+    let mut ch = [(PF::Sql, 0u8); PRESET_MAX];
+    let p = st.view as usize - 1;
+    let n = preset_changes(&st.settings, p, &mut ch);
+    let sel = st.pidx.min(n.saturating_sub(1));
+    let total = n.max(1);
+    let top = scroll_top(total, sel);
+    unsafe {
+        let rows = &mut *core::ptr::addr_of_mut!(ROWS);
+        for i in 0..VISIBLE_ROWS {
+            rows[i] = BLANK_ROW;
+            let gi = top + i;
+            if n == 0 && gi == 0 {
+                write_str(&mut rows[i].label, "ALREADY SET");
+            } else if gi < n {
+                let (f, v) = ch[gi];
+                write_str(&mut rows[i].label, f.name());
+                let a = f.text(f.get(&st.settings), &mut rows[i].value);
+                rows[i].value[a] = b'>';
+                f.text(v as i32, &mut rows[i].value[a + 1..]);
+                rows[i].has_value = true;
+            }
+        }
+    }
+    let mut title = [0u8; 26];
+    let mut w = Out::new(&mut title);
+    w.str(SETTINGS_GROUPS[6].items()[p].label());
+    w.str(": ");
+    if n == 0 {
+        w.str("NO");
+    } else {
+        w.u32(n as u32, 1);
+    }
+    w.str(if n == 1 { " CHANGE" } else { " CHANGES" });
+    let hint: &[u8] = if n > 0 { b"MENU apply  EXIT cancel" } else { b"EXIT back" };
+    (api.list_hint)(hint.as_ptr(), hint.len() as u16);
+    (api.draw_list)(
+        title.as_ptr(),
+        26,
+        core::ptr::addr_of!(ROWS) as *const ListRow,
+        VISIBLE_ROWS as u16,
+        top as u16,
+        sel as u16,
+        total as u16,
+        false,
+    );
 }
 
 // value logic
@@ -2063,6 +2362,9 @@ fn value_text_for(
             }
         }
 
+        #[cfg(feature = "g_presets")]
+        PresetQuiet | PresetBattery | PresetScan | PresetRepeater | PresetDefaults => 0,
+
         #[allow(unreachable_patterns)]
         _ => {
             let mut w = Out::new(out);
@@ -2084,15 +2386,24 @@ fn scroll_top(total: usize, selected: usize) -> usize {
     }
 }
 
-fn draw(api: &Api) -> AppResult {
-    static mut ROWS: [ListRow; VISIBLE_ROWS] = [ListRow {
-        label: [0; 16],
-        value: [0; 18],
-        has_value: false,
-        cursor: -1,
-    }; VISIBLE_ROWS];
+const BLANK_ROW: ListRow = ListRow {
+    label: [0; 16],
+    value: [0; 18],
+    has_value: false,
+    cursor: -1,
+};
+static mut ROWS: [ListRow; VISIBLE_ROWS] = [BLANK_ROW; VISIBLE_ROWS];
 
+fn draw(api: &Api) -> AppResult {
     let state = unsafe { &*core::ptr::addr_of!(STATE) };
+
+    #[cfg(feature = "g_presets")]
+    if let Phase::Items(st) = &state.phase {
+        if st.group == SettingsGroup::Presets && st.view != 0 {
+            draw_preview(api, st);
+            return AppResult::Continue;
+        }
+    }
 
     let (total, selected, show_arrows) = match &state.phase {
         Phase::Groups { index } => (SETTINGS_GROUPS.len(), *index, false),
@@ -2117,12 +2428,7 @@ fn draw(api: &Api) -> AppResult {
     unsafe {
         let rows = &mut *core::ptr::addr_of_mut!(ROWS);
         for i in 0..VISIBLE_ROWS {
-            rows[i] = ListRow {
-                label: [0; 16],
-                value: [0; 18],
-                has_value: false,
-                cursor: -1,
-            };
+            rows[i] = BLANK_ROW;
             let gi = window_start + i;
             if gi >= total {
                 continue;
@@ -2155,7 +2461,7 @@ fn draw(api: &Api) -> AppResult {
         }
     }
 
-    let mut title_buf = [0u8; 16];
+    let mut title_buf = [0u8; 26];
     match &state.phase {
         Phase::Groups { .. } => {
             write_str(&mut title_buf, "SETTINGS");
@@ -2192,7 +2498,7 @@ fn draw(api: &Api) -> AppResult {
     let rows_ptr = core::ptr::addr_of!(ROWS) as *const ListRow;
     (api.draw_list)(
         title_buf.as_ptr(),
-        16,
+        26,
         rows_ptr,
         VISIBLE_ROWS as u16,
         window_start as u16,
@@ -2200,6 +2506,13 @@ fn draw(api: &Api) -> AppResult {
         total as u16,
         show_arrows,
     );
+
+    #[cfg(feature = "g_presets")]
+    if let Phase::Items(st) = &state.phase {
+        if st.toast {
+            (api.toast)(b"PRESET APPLIED".as_ptr(), 14);
+        }
+    }
 
     AppResult::Continue
 }
@@ -2356,8 +2669,167 @@ mod tests {
     fn only_display_items_have_no_default() {
         for g in SETTINGS_GROUPS {
             for &item in g.items() {
-                let shows_only = matches!(item, SettingItem::Info | SettingItem::ChipId | SettingItem::Reset);
+                let shows_only = matches!(
+                    item,
+                    SettingItem::Info
+                        | SettingItem::ChipId
+                        | SettingItem::Reset
+                        | SettingItem::PresetQuiet
+                        | SettingItem::PresetBattery
+                        | SettingItem::PresetScan
+                        | SettingItem::PresetRepeater
+                        | SettingItem::PresetDefaults
+                );
                 assert_eq!(default_of(item).is_none(), shows_only, "{}", item.label());
+            }
+        }
+    }
+
+    /// Where each preset-able setting lives in the 168-byte record.
+    #[cfg(feature = "g_presets")]
+    fn pf_byte(f: PF) -> usize {
+        match f {
+            PF::Sql => 0,
+            PF::Tail => 1,
+            PF::Busy => 2,
+            PF::Tdr => 5,
+            PF::Vox => 6,
+            PF::Tot => 8,
+            PF::Beep => 9,
+            PF::Roge => 10,
+            PF::Scan => 13,
+            PF::Save => 15,
+            PF::Abr => 16,
+            PF::BootSnd => 31,
+        }
+    }
+
+    #[cfg(feature = "g_presets")]
+    fn pf_core_field(f: PF) -> &'static str {
+        match f {
+            PF::Sql => "sql_level",
+            PF::Tail => "tail_elimination",
+            PF::Busy => "busy_lock",
+            PF::Tdr => "dual_standby",
+            PF::Vox => "vox_switch",
+            PF::Tot => "tot_level",
+            PF::Beep => "beeps_switch",
+            PF::Roge => "roger_tone",
+            PF::Scan => "scan_mode",
+            PF::Save => "save_level",
+            PF::Abr => "backlight_time",
+            PF::BootSnd => "boot_sound_enabled",
+        }
+    }
+
+    #[cfg(feature = "g_presets")]
+    fn pf_max(f: PF) -> i32 {
+        match f {
+            PF::Sql => 9,
+            PF::Tot => 12,
+            PF::Save | PF::Abr => 4,
+            PF::Scan | PF::Roge => 2,
+            _ => 1,
+        }
+    }
+
+    /// A settings record with a different, in-range value in every byte a preset might touch and in every byte it
+    /// must not (including the two transmit restrictions, the position, the keys and the calibration).
+    #[cfg(feature = "g_presets")]
+    fn sample_record(seed: u8) -> [u8; SETTINGS_BYTES] {
+        let mut b = [0u8; SETTINGS_BYTES];
+        for (i, x) in b.iter_mut().enumerate() {
+            *x = (i as u8).wrapping_mul(31).wrapping_add(seed) % 2;
+        }
+        b[0] = seed % 10; // squelch
+        b[8] = seed % 13; // tx timeout
+        b[10] = seed % 3; // roger
+        b[13] = seed % 3; // scan
+        b[15] = seed % 5; // battery save
+        b[16] = seed % 5; // backlight
+        b[3] = 0; // TX INHIBIT off: the preset must not turn it on or off
+        b[29] = 9; // TX BANDS = ALL
+        b[32..40].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
+        b[21] = 0x34;
+        b[22] = 0x12;
+        b
+    }
+
+    /// A preset changes only the settings it lists: every other byte of the record (TX INHIBIT, TX BANDS, the
+    /// position, the key assignments, the battery calibration, the boot text and tune) comes out as it went in.
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn presets_change_only_what_they_list() {
+        for p in 0..PRESETS.len() {
+            for seed in 0..40u8 {
+                let before = sample_record(seed);
+                let mut s = Settings::from_bytes(&before);
+                for &(f, v) in PRESETS[p] {
+                    f.set(&mut s, v as i32);
+                }
+                let after = s.to_bytes();
+                for i in 0..SETTINGS_BYTES {
+                    if after[i] != before[i] {
+                        assert!(PRESETS[p].iter().any(|&(f, _)| pf_byte(f) == i), "preset {p} changed byte {i}");
+                    }
+                }
+                for must_keep in [3, 29, 21, 22, 23, 24, 25, 26, 27, 28] {
+                    assert_eq!(after[must_keep], before[must_keep], "preset {p} touched byte {must_keep}");
+                }
+                assert_eq!(&after[32..], &before[32..], "preset {p}");
+            }
+        }
+    }
+
+    /// Applying a preset leaves nothing for it to change; every value is one the setting can have.
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn presets_are_valid_and_idempotent() {
+        for p in 0..PRESETS.len() {
+            let mut s = Settings::from_bytes(&sample_record(7));
+            for &(f, v) in PRESETS[p] {
+                assert!((v as i32) <= pf_max(f), "{}: {v} out of range", f.name());
+                f.set(&mut s, v as i32);
+            }
+            let mut ch = [(PF::Sql, 0u8); PRESET_MAX];
+            assert_eq!(preset_changes(&s, p, &mut ch), 0, "preset {p} not idempotent");
+            assert!(PRESETS[p].len() <= PRESET_MAX);
+            // no setting listed twice
+            for (i, &(a, _)) in PRESETS[p].iter().enumerate() {
+                for &(b, _) in &PRESETS[p][i + 1..] {
+                    assert!(a != b, "preset {p} lists {} twice", a.name());
+                }
+            }
+        }
+    }
+
+    /// DEFAULTS sets what the core's `Settings::DEFAULT` holds.
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn defaults_preset_matches_the_core() {
+        let core = core_defaults();
+        for &(f, v) in PRESETS[4] {
+            let want = core.iter().find(|(n, _)| n == pf_core_field(f)).expect("core field").1;
+            assert_eq!(v as i64, want, "{}", f.name());
+        }
+    }
+
+    /// A preview row is `OLD>NEW` in 18 characters, and its label in 16, for any pair of values.
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn preview_rows_fit() {
+        for f in [
+            PF::Sql, PF::Tdr, PF::Save, PF::Busy, PF::Tot, PF::Scan, PF::Beep, PF::Vox, PF::Tail, PF::Roge, PF::Abr,
+            PF::BootSnd,
+        ] {
+            assert!(f.name().len() <= 16);
+            for a in 0..=pf_max(f) {
+                for b in (0..=pf_max(f)).filter(|&b| b != a) {
+                    let (mut x, mut y) = ([0u8; 32], [0u8; 32]);
+                    let (n, m) = (f.text(a, &mut x), f.text(b, &mut y));
+                    assert!(n > 0 && m > 0 && n + 1 + m <= 18, "{} {a}>{b} is {} characters", f.name(), n + 1 + m);
+                    assert!(f.name().len() + n + 1 + m <= 24, "{} {a}>{b} crowds its label", f.name());
+                }
             }
         }
     }

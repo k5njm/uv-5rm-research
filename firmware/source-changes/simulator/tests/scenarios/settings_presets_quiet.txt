@@ -1,0 +1,41 @@
+# Settings, PRESETS: a preset shows exactly what it will change before anything is applied; MENU on the preview applies
+# it, EXIT cancels. Starts from a record like a new radio's (TX INHIBIT on, TX BANDS FCC HAM, squelch 3, key beep on,
+# 120 s limit, light 10 s, boot sound on, the SIDE2 key on LIGHT).
+setting 0 3
+setting 1 1
+setting 3 1
+setting 8 8
+setting 9 1
+setting 13 1
+setting 16 2
+setting 25 8
+setting 29 1
+setting 30 2
+setting 31 1
+handoff 6 1
+app settings
+shot list_quiet
+key down
+shot list_battery
+key down
+shot list_scan
+key down
+shot list_repeater
+key down
+shot list_defaults
+key down                  # wraps to the first
+key menu
+shot quiet_preview        # KEY BEEP ON>OFF, BOOT SOUND ON>OFF, BACKLIGHT 10 SEC>5 SEC
+key exit
+shot quiet_cancelled      # back on the list, nothing changed
+key menu
+key menu                  # apply
+shot quiet_applied
+key menu                  # open it again: nothing left to change
+shot quiet_again
+key exit
+key down
+key menu
+shot battery_preview
+key down
+shot battery_second_row

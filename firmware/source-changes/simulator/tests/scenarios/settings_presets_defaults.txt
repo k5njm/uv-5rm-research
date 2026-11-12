@@ -1,0 +1,46 @@
+# Settings, PRESETS: DEFAULTS changes many settings at once, so its preview scrolls. It leaves TX INHIBIT, TX BANDS and the
+# rest of the record alone (the unit tests check every byte); the other presets are previewed from a record that
+# differs from them in every setting they set.
+# Start: squelch 7, dual watch on, battery save 4, key beep off, light always on, scan TIMED, VOX on, tail elim off,
+# roger beep on (a mess), TX INHIBIT on, TX BANDS GMRS/FRS.
+setting 0 7
+setting 1 0
+setting 3 1
+setting 5 1
+setting 6 1
+setting 8 2
+setting 9 0
+setting 10 1
+setting 13 0
+setting 15 4
+setting 16 0
+setting 29 6
+handoff 6 1
+app settings
+key down
+key down
+key down
+key down                  # DEFAULTS
+shot defaults_selected
+key menu
+shot defaults_preview
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+shot defaults_scrolled    # the last rows
+key menu                  # apply
+shot defaults_applied
+key menu
+shot defaults_again       # nothing left to change
+key exit
+key up
+key menu                  # REPEATER: BUSY LOCKOUT, TX TIMEOUT 120>60, VOX ...
+shot repeater_preview
+key exit
+key up
+key menu
+shot scanning_preview

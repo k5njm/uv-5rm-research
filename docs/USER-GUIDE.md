@@ -181,9 +181,9 @@ Apps must be built for the same core firmware that is on the radio, or the list 
 
 ## SETTINGS
 
-SETTINGS is app 1. It has six groups. Use `UP` and `DOWN` and `MENU` to open one; `EXIT` leaves.
+SETTINGS is app 1. It has seven groups. Use `UP` and `DOWN` and `MENU` to open one; `EXIT` leaves.
 
-![The SETTINGS list: RADIO, AUDIO, DISPLAY, KEYS, ANI / DTMF and SYSTEM.](img/settings-groups.png)
+![The SETTINGS list: RADIO, AUDIO, DISPLAY, KEYS, ANI / DTMF, SYSTEM and PRESETS.](img/settings-groups.png)
 
 ### Changing a value
 
@@ -238,12 +238,40 @@ Names and choices are from the source. What each one does on the air has not bee
 | DISPLAY | BACKLIGHT (ALWAYS ON, 5, 10, 15, 20 SEC); AUTO KEYLOCK (OFF, 5, 10, 15 SEC) |
 | KEYS | SIDE1 SHORT, SIDE1 LONG, SIDE2 SHORT, SIDE2 LONG, BAND LONG, VFO/MR LONG: see [below](#assigning-the-side-keys-band-and-vfomr-long-press) |
 | ANI / DTMF | ANI ON PTT; ANI CALL |
+| PRESETS | QUIET; BATTERY SAVER; SCANNING; REPEATER; DEFAULTS: see [Presets](#presets) |
 | SYSTEM | **TX BANDS** (the transmit-range lock); LATITUDE; LONGITUDE (used by HAM TOOLS' grid locator); BATTERY CAL; BOOT SCREEN (OFF, LOGO); BOOT SOUND; VERSION (`MENU`, then `UP`/`DOWN` flips between `UV-5RM OPEN FW` and `SEE BOOT SCREEN`); RF CHIP ID; RESET ALL |
 
 Defaults of a new settings record, from the source: TX INHIBIT on, TX BANDS `FCC HAM`, SQUELCH 3, TX TIMEOUT 120 s
 (8 steps), CH DISPLAY NAME+FREQ, backlight 10 SEC, key beep on, boot screen LOGO.
 
 ![The SYSTEM group. The simulator starts from an empty settings record, so TX BANDS shows CE HAM here; a real radio's default is FCC HAM.](img/settings-system.png)
+
+### Presets
+
+SETTINGS > PRESETS changes several settings at once. Pressing `MENU` on a preset does **not** apply it: it opens a preview that
+lists exactly the settings it would change, each as `OLD>NEW` (a setting that already has the preset's value is left out).
+`MENU` applies the preset (the notice `PRESET APPLIED` shows); `EXIT` cancels and nothing changes. A preset that has nothing
+to change says `ALREADY SET`. Applying one is a one-time change: the settings are then ordinary settings you can change
+one by one, and applying a preset again later is the only way to get them back.
+
+![The QUIET preview: three settings would change.](img/settings-preset-preview.png)
+
+| Preset | Sets |
+|---|---|
+| QUIET | KEY BEEP off, ROGER BEEP off, BOOT SOUND off, BACKLIGHT 5 SEC |
+| BATTERY SAVER | BATTERY SAVE 3 (the receiver listens 0.1 s and sleeps 0.3 s once idle), BACKLIGHT 5 SEC, DUAL WATCH off, VOX off |
+| SCANNING | SCAN RESUME CARRIER (stay on a call until it ends), SQUELCH 4, BACKLIGHT 15 SEC |
+| REPEATER | BUSY LOCKOUT on, SQ TAIL ELIM on, TX TIMEOUT 60 SEC, VOX off |
+| DEFAULTS | SQUELCH 3, DUAL WATCH off, BATTERY SAVE off, KEY BEEP on, BACKLIGHT 10 SEC, SCAN RESUME CARRIER, VOX off, SQ TAIL ELIM on, ROGER BEEP off |
+
+A preset **never** changes TX INHIBIT, TX BANDS, your saved position (LATITUDE, LONGITUDE), the key assignments (SIDE1,
+SIDE2, BAND, VFO/MR), BATTERY CAL, the boot text and start-up tune, or what belongs to the frequency on the main screen
+(FREQ STEP, BANDWIDTH, TX POWER, tones, repeater shift and offset). Only the settings listed in the table can change: a unit test
+checks every byte of the settings record. DEFAULTS is the "factory" preset for these settings only; RESET ALL is the one that
+erases everything.
+
+Presets are applied by you, when you open this screen. Presets that follow what the radio is doing (battery saver when the battery is
+low, quiet on the charger) would need the radio's own firmware to apply them, because this app only runs while it is open.
 
 ## CHAN MGR (the channel manager)
 

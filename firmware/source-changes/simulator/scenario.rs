@@ -20,6 +20,7 @@
 //!                       before or after `app`. The simulated tuner hears 90.1 94.5 98.1 101.1 104.5 MHz
 //!   fmtable bad         a table whose header is damaged: the FM app must ignore it
 //!   fmcore DECI...      the core's bare FM station list (what the FM app shows when there is no table)
+//!   setting OFFSET VALUE   one byte of the settings record the app reads (settings app; before `app`)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
 //!   key K               single press. K = 0-9 star pound menu exit up down ab
 //!   hold K              long press
@@ -58,7 +59,7 @@ fn lookup(name: &str) -> Option<Entry> {
             a,
             e,
         ),
-        #[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system"))]
+        #[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system", feature = "settings-presets"))]
         "settings" => |a, e| settings::app_entry(a, e),
         _ => return None,
     })
@@ -412,6 +413,12 @@ impl Run<'_> {
             ["handoff", group, action] => match (group.parse::<u8>(), action.parse::<u8>()) {
                 (Ok(g), Ok(a)) => unsafe { HANDOFF = vec![0xA5, g, a] }, // start a later settings segment as Chain would
                 _ => self.check(false, "handoff needs GROUP ACTION numbers"),
+            },
+            // one byte of the settings record (offsets as in `Settings` in flash_map.rs), to start from a record that is
+            // not the simulator's all-zero one
+            ["setting", off, val] => match (off.parse::<usize>(), val.parse::<u8>()) {
+                (Ok(o), Ok(v)) if o < 168 => unsafe { SETTINGS[o] = v },
+                _ => self.check(false, "setting needs a byte offset (0-167) and a value (0-255)"),
             },
             ["coords", "none"] => { unsafe { COORDS = None }; self.redraw() }
             ["coords", la, lo] => match (la.parse::<f64>(), lo.parse::<f64>()) {

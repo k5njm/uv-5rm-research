@@ -5,7 +5,7 @@ fw_root, elf_dir, out_dir = sys.argv[1:4]
 MAGIC, NAME_LEN, MAX_SEGMENTS, HEADER_SIZE = b"OVL1", 16, 4, 108
 ARENA_SIZE, ARENA_MAX, SLOT_SIZE, ORIGIN = 8192, 12288, 32 * 1024, 0x200002D0
 PKG_FMT, SEG_FMT = f"<4sIB3x{NAME_LEN}s", "<IIIII"
-APPS = [("SETTINGS", ["menu", "radio", "system"]), ("CHAN MGR", ["chanmgr"]), ("SEARCH", ["search"]),
+APPS = [("SETTINGS", ["menu", "radio", "system", "presets"]), ("CHAN MGR", ["chanmgr"]), ("SEARCH", ["search"]),
         ("SCANQT", ["scanqt"]), ("SPECTRUM", ["spectrum"]), ("FM", ["fm"]),
         ("RPT FINDER", ["rptfind"]), ("BAND SWEEP", ["bandsweep"]), ("FOX HUNT", ["foxhunt"]),
         ("SEARCH/QT SCAN", ["qtscan2", "search2"]),

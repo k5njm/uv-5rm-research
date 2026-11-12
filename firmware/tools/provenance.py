@@ -20,7 +20,7 @@ PACKAGES = {
     "scanqt.app": ("SCANQT", ["apps/scanqt"]),
     "search.app": ("SEARCH", ["apps/search"]),
     "searchqt.app": ("SEARCH/QT SCAN", ["apps/qtscan2", "apps/search2"]),
-    "settings.app": ("SETTINGS", ["apps/settings/menu", "apps/settings/radio", "apps/settings/system"]),
+    "settings.app": ("SETTINGS", ["apps/settings/menu", "apps/settings/radio", "apps/settings/system", "apps/settings/presets"]),
     "spectrum.app": ("SPECTRUM", ["apps/spectrum"]),
     "text.app": ("TEXT", ["apps/textapp"]),
 }
