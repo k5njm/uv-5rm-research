@@ -14,6 +14,7 @@
 //!                       master/signal/chan may appear before or after `app`; they are applied after the reset
 //!   air HEX [HEX...]   the simulated FSK modem hears a sync, then these 16-bit words (hex), one per poll
 //!   handoff GROUP ACTION   preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items)
+//!   handoff fm DECI        preload it as the core does for a broadcast frequency typed on the main screen (tenths of MHz)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
 //!   key K               single press. K = 0-9 star pound menu exit up down ab
 //!   hold K              long press
@@ -24,6 +25,7 @@
 //!   expect backlight on|off   the app's backlight-hold request
 //!   expect cues N       speaker-only cue sequences played so far (api.play_cue); never keys PTT, checked automatically
 //!   expect rfrefused N  RF register writes the core's allow-list refused
+//!   expect captured N   records FSK PROBE left in its flash capture range
 //!   expect rxonly       (default on) fails the scenario if the app keyed PTT or the tone function
 //!   allow tx            disables the rx-only safety check for this scenario
 //! The same file is meant to drive the real radio through hil/ (keys via the injector,
@@ -349,6 +351,10 @@ impl Run<'_> {
                 if self.app.is_some() { f(); }
                 self.setup.push(f);
             }
+            ["handoff", "fm", deci] => match deci.parse::<u16>() {
+                Ok(d) => unsafe { HANDOFF = d.to_le_bytes().to_vec() }, // as the core does for a typed broadcast frequency
+                _ => self.check(false, "handoff fm needs tenths of a MHz"),
+            },
             ["handoff", group, action] => match (group.parse::<u8>(), action.parse::<u8>()) {
                 (Ok(g), Ok(a)) => unsafe { HANDOFF = vec![0xA5, g, a] }, // start a later settings segment as Chain would
                 _ => self.check(false, "handoff needs GROUP ACTION numbers"),
@@ -383,6 +389,16 @@ impl Run<'_> {
             ["expect", "cues", n] => {
                 let got = unsafe { CUES.len() };
                 self.check(n.parse::<usize>().ok() == Some(got), &format!("{n} speaker cue(s) played (got {got})"));
+            }
+            ["expect", "captured", n] => {
+                // FSK PROBE's capture as probe_capture.py would read it: a header, then records until an erased one
+                let nor = nor();
+                let got = if &nor[0x1B_0000..0x1B_0008] == b"FSKCAP1\0" {
+                    nor[0x1B_0100..0x1D_0000].chunks(8).take_while(|r| r[6] != 0xFF).count()
+                } else {
+                    usize::MAX
+                };
+                self.check(n.parse::<usize>().ok() == Some(got), &format!("{n} captured record(s) in flash (got {got})"));
             }
             ["expect", "rfrefused", n] => {
                 let got = unsafe { RF_WRITES_REFUSED };

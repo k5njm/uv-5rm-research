@@ -1,0 +1,5 @@
+# A broadcast frequency typed on the main screen opens the FM app already on it (98.1 MHz here).
+handoff fm 981
+app fm
+wait 2
+shot tuned

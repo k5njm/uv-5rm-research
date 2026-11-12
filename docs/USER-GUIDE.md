@@ -166,10 +166,10 @@ The slot numbers matter because a programmable key can open "APP n". The release
 | 5 | BAND SWEEP |
 | 6 | FOX HUNT |
 | 7 | RPT FINDER |
-| 8 | TEXT |
+| 8 | FSK PROBE |
 | 9 | FM |
 
-HAM TOOLS and FSK PROBE are built with the release but are **not** in a slot by default (they are listed as "extras" in the
+HAM TOOLS and TEXT are built with the release but are **not** in a slot by default (they are listed as "extras" in the
 release's `layout.json`). They are installed only if you put them in a slot; see `firmware/source-changes/install_apps.py`.
 Apps must be built for the same core firmware that is on the radio, or the list shows them as `EMPTY`.
 
@@ -564,7 +564,9 @@ Messages are kept in the radio's flash memory until overwritten or erased. Notic
 
 ### FM
 
-The FM broadcast receiver, 87.5 to 108.0 MHz, with a list of 30 saved stations. The simulator does not model that tuner, so the picture shows no stations. Nothing about this app has been checked on this
+The FM broadcast receiver, 87.5 to 108.0 MHz, with a list of 30 saved stations. Broadcast FM uses a separate tuner chip, so
+it is an app and not a VFO band; typing a frequency in that range on the main screen in VFO mode (`0981` and so on) opens
+this app already tuned to it, and `EXIT` returns to the main screen. The simulator does not model that tuner, so the picture shows no stations. Nothing about this app has been checked on this
 radio.
 
 ![FM in VFO mode. The simulator has no FM tuner, so no stations are heard.](img/fm.png)
@@ -602,18 +604,32 @@ leave.
 
 A bring-up tool: does the radio chip's FSK modem hear anything, and what do its registers say? It only receives and is for
 people debugging the radio, not for ordinary use. Its source says the crystal, the sync words and whether the modem hears a
-real signal at all are all unverified on this radio. It is not in a slot by default.
+real signal at all are all unverified on this radio. It starts on 404.800 MHz at 4800 baud with the RS41 radiosonde's
+frame header as the sync word.
 
 ![FSK PROBE with the modem on and a quiet channel.](img/fskprobe.png)
 
 | Key | Action |
 |---|---|
 | `MENU` | Modem on or off. |
-| `*` | Next frequency (144.390, 146.520, 446.000, 434.714 MHz). |
+| `*` | Next frequency (404.800, 144.390, 146.520, 446.000, 434.714 MHz). |
 | `1` to `4` | Baud rate: 450, 1200, 2400, 4800. |
-| `5` to `7` | Sync word: 7E7E, 2DD4, AAAA. |
+| `5` to `9` | Sync word: 7E7E, 2DD4, AAAA, RS41 header (`8`), RS41 header in the other bit order (`9`). |
+| `#` | Start a capture, or stop the one running. |
 | `UP` / `DOWN` | Pick the register shown at the bottom. |
-| `EXIT` | Turns the modem off and leaves. |
+| `EXIT` | Turns the modem off (ending any capture) and leaves. |
+
+**Capture.** `#` records every word the modem delivers, with the time, sync flag and signal strength, so a decoder can be
+designed from real data. The screen shows `ERASING` for a moment, then `REC` with a count, and `SAVED` with the total
+after `#`, `MENU` or `EXIT` ends it. The frequency, baud rate and sync word cannot be changed while it runs. It holds
+16,352 records (about 55 seconds of continuous 4800 baud data), then shows `REC FULL` and records no more; it cannot
+write outside its own 128 KB of the radio's flash (0x1B0000 to 0x1D0000). Each new capture replaces the last. To copy
+one to the computer, leave the app (the radio must be on its main screen) and run:
+
+    python3 firmware/source-changes/probe_capture.py PORT my-capture.bin
+
+It prints a summary (records, sync count, time between words, signal strength) and writes `my-capture.csv` beside the
+file. The tool only reads, and only that range.
 
 ## Loading channel lists from a computer
 

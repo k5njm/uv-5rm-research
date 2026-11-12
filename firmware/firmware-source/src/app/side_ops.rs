@@ -107,13 +107,12 @@ pub(super) fn commit_input(app: &mut App, syst: &mut SYST) {
                 app.save_vfo();
                 sync_watching_to_master(app, syst);
             } else {
+                // A broadcast frequency opens the FM app on it (EXIT comes back here).
                 let fm = super::group_table::FM_BROADCAST;
-                app.notice_kind = if (fm.0..fm.1).contains(&hz) {
-                    super::NOTICE_FM_BROADCAST
-                } else {
-                    super::NOTICE_OUT_OF_RANGE
-                };
-                app.no_channels_ticks = NO_CHANNELS_HOLD_TICKS;
+                if !((fm.0..=fm.1).contains(&hz) && super::overlay::enter_fm(app, syst, (value / 100) as u16)) {
+                    app.notice_kind = super::NOTICE_OUT_OF_RANGE;
+                    app.no_channels_ticks = NO_CHANNELS_HOLD_TICKS;
+                }
             }
         }
     }

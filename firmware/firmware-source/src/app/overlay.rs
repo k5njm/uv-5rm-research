@@ -410,6 +410,23 @@ fn handle_result(app: &mut App, syst: &mut SYST, result: AppResult) {
 }
 
 pub(crate) fn enter(app: &mut App, syst: &mut SYST, slot: u8) {
+    enter_with(app, syst, slot, 0);
+}
+
+/// Opens the FM app on `deci_mhz` (tenths of a MHz), as a key would. False when no FM app is installed.
+pub(crate) fn enter_fm(app: &mut App, syst: &mut SYST, deci_mhz: u16) -> bool {
+    for slot in 0..addr::OVERLAY_SLOT_COUNT {
+        if slot_valid(app, slot) && peek_header(app, slot).name_str() == "FM" {
+            app.app_from_menu = false;
+            enter_with(app, syst, slot, deci_mhz);
+            return true;
+        }
+    }
+    false
+}
+
+/// `handoff`, when not 0, is left in the handoff buffer (two bytes) for the app's `Enter`.
+fn enter_with(app: &mut App, syst: &mut SYST, slot: u8, handoff: u16) {
     match load_segment(app, slot, 0) {
         Ok(entry) => {
             unsafe {
@@ -419,6 +436,9 @@ pub(crate) fn enter(app: &mut App, syst: &mut SYST, slot: u8) {
                 LIST_CACHE = None;
                 LIST_HINT = (0, [0; 26]);
                 HANDOFF_LEN = 0;
+                if handoff != 0 {
+                    api_handoff_write(handoff.to_le_bytes().as_ptr(), 2);
+                }
                 APP_TX_ENABLED = false;
                 APP_HOLDS_RX = false;
                 APP_BACKLIGHT_HOLD = false;

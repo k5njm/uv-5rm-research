@@ -127,8 +127,14 @@ pub extern "C" fn app_entry(api: &Api, ev: AppEvent) -> AppResult {
 }
 
 fn enter(api: &Api) -> AppResult {
+    // A broadcast frequency typed on the main screen arrives here as two bytes (tenths of a MHz).
+    let mut want = [0u8; 2];
+    let start = match (api.handoff_read)(want.as_mut_ptr(), 2) {
+        2 if (FREQ_LO_DECI_MHZ..=FREQ_HI_DECI_MHZ).contains(&u16::from_le_bytes(want)) => u16::from_le_bytes(want),
+        _ => FM_DEFAULT_DECI_MHZ,
+    };
     // park for fm
-    (api.fm_tune_khz)(FM_DEFAULT_DECI_MHZ as u32 * 100);
+    (api.fm_tune_khz)(start as u32 * 100);
 
     // read channels
     let mut ch = EMPTY_CHANNELS;
@@ -141,7 +147,7 @@ fn enter(api: &Api) -> AppResult {
     unsafe {
         STATE = State {
             mode: Mode::Vfo,
-            deci_mhz: FM_DEFAULT_DECI_MHZ,
+            deci_mhz: start,
             channel_index: 0,
             phase: Phase::Tuning,
             rssi: 0,

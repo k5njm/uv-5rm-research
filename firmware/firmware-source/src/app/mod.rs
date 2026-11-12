@@ -1,7 +1,6 @@
 /// Amber notices on the main screen (`App::notice_kind`).
 pub(crate) const NOTICE_NO_CHANNELS: u8 = 0;
 pub(crate) const NOTICE_OUT_OF_RANGE: u8 = 1;
-pub(crate) const NOTICE_FM_BROADCAST: u8 = 2;
 
 /// Reasons a PTT press is refused (`App::tx_block`).
 pub(crate) const TX_BLOCK_INHIBIT: u8 = 1;

@@ -1,0 +1,12 @@
+# Leaving FSK PROBE in the middle of a capture still writes out what was recorded.
+master 404800000
+signal 404800000 90 -1 always
+app fskprobe
+key pound
+wait 1
+air 086D 5388 4469
+wait 1
+shot recording
+key exit
+expect exit
+expect captured 4

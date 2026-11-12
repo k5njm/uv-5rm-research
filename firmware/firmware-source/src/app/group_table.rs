@@ -114,7 +114,8 @@ pub(crate) const RX_BANDS: [(u32, u32); 3] = [
     (200_000_000, 260_000_000),
     (350_000_000, 520_000_000),
 ];
-pub(crate) const FM_BROADCAST: (u32, u32) = (76_000_000, 108_000_000);
+/// What the FM app tunes: a frequency typed in this range on the main screen opens it there.
+pub(crate) const FM_BROADCAST: (u32, u32) = (87_500_000, 108_000_000);
 
 pub(crate) fn rx_allowed(freq_hz: u32) -> bool {
     RX_BANDS.iter().any(|&(lo, hi)| (lo..=hi).contains(&freq_hz))

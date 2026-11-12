@@ -365,9 +365,13 @@ extern "C" fn nor_read(addr: u32, out: *mut u8, len: u32) -> bool {
     true
 }
 extern "C" fn nor_write(addr: u32, data: *const u8, len: u32) -> bool {
-    assert!((0x1F_0000..0x1F_4000).contains(&addr), "TEXT wrote outside its log: {addr:#x}");
-    assert!(addr as u64 + len as u64 <= 0x1F_4000);
-    assert!(addr / 256 == (addr + len - 1) / 256, "this test expects records inside one page");
+    // The only flash apps may write: TEXT's log and FSK PROBE's capture range.
+    let end = addr as u64 + len as u64;
+    assert!(
+        (addr >= 0x1F_0000 && end <= 0x1F_4000) || (addr >= 0x1B_0000 && end <= 0x1D_0000),
+        "an app wrote outside its flash range: {addr:#x}+{len}"
+    );
+    assert!(addr / 256 == (addr + len - 1) / 256, "a write must stay inside one flash page");
     let d = unsafe { std::slice::from_raw_parts(data, len as usize) };
     for (i, &b) in d.iter().enumerate() {
         nor()[addr as usize + i] &= b;
@@ -375,7 +379,10 @@ extern "C" fn nor_write(addr: u32, data: *const u8, len: u32) -> bool {
     true
 }
 extern "C" fn nor_erase(addr: u32) -> bool {
-    assert!((0x1F_0000..0x1F_4000).contains(&addr), "TEXT erased outside its log: {addr:#x}");
+    assert!(
+        (0x1F_0000..0x1F_4000).contains(&addr) || (0x1B_0000..0x1D_0000).contains(&addr),
+        "an app erased outside its flash range: {addr:#x}"
+    );
     assert!(addr % 4096 == 0);
     unsafe { NOR_ERASES += 1 };
     nor()[addr as usize..addr as usize + 4096].iter_mut().for_each(|b| *b = 0xFF);

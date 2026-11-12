@@ -1,0 +1,18 @@
+# FSK PROBE capture: # erases its flash range, records what the modem delivers, and # again saves and stops.
+master 404800000
+signal 404800000 90 -1 always
+app fskprobe
+key pound
+wait 0.05
+shot erasing
+wait 1
+air 086D 5388 4469 481F 1234
+wait 1
+shot recording
+key 1                     # settings are locked while recording: still 4800 baud
+key pound
+shot saved
+expect captured 6
+expect rfrefused 0
+key exit
+expect exit

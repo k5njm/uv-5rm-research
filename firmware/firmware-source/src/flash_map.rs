@@ -73,6 +73,12 @@ pub mod addr {
     pub const OVERLAY_DATA_ADDR: u32 =
         OVERLAY_APP_ADDR + OVERLAY_SLOT_SIZE * OVERLAY_SLOT_COUNT as u32;
 
+    /// Layout of that region (nothing in the firmware enforces it; each user checks its own range):
+    ///   0x194000  satellite table (5120 bytes, `CMD_SAT_WRITE`)
+    ///   0x1B0000  FSK PROBE capture, 128 KB (the app; read back by `probe_capture.py`)
+    ///   0x1E0000  channel extras (below)
+    ///   0x1F0000  TEXT message log, 16 KB (the app)
+    ///
     /// Channel extras: one 20-byte record per channel slot, in the data region (clear of the satellite table at its
     /// start and the TEXT log at 0x1F0000). Record: 16 bytes of ASCII detail (a location or description, padded
     /// with 0xFF), 2 bytes reserved for group tags, 1 reserved, and `CHAN_EXTRA_MARK` in the last byte. A record
