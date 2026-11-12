@@ -1,6 +1,7 @@
 /// Amber notices on the main screen (`App::notice_kind`).
 pub(crate) const NOTICE_NO_CHANNELS: u8 = 0;
 pub(crate) const NOTICE_OUT_OF_RANGE: u8 = 1;
+pub(crate) const NOTICE_LOW_BATTERY: u8 = 2;
 
 /// Reasons a PTT press is refused (`App::tx_block`).
 pub(crate) const TX_BLOCK_INHIBIT: u8 = 1;
@@ -52,6 +53,10 @@ const DUAL_STANDBY_HOLD_TICKS: u16 = 10;
 const TICKS_PER_SECOND: u16 = 100;
 
 const NO_CHANNELS_HOLD_TICKS: u16 = 200;
+/// The LOW BATTERY notice stays 4 s (10 ms ticks).
+const LOW_BATTERY_HOLD_TICKS: u16 = 400;
+/// Descending three-tone chime, (Hz / 10, ms): 880, 700, 550 Hz.
+const LOW_BATTERY_CHIME: [(u16, u32); 3] = [(88, 140), (70, 140), (55, 260)];
 
 const DTMF_DIAL_MAX_DIGITS: usize = 16;
 
@@ -190,6 +195,7 @@ pub struct App<'a> {
 
     battery_cal: [u8; addr::DEV_BATT_LEN],
     battery: battery_filter::BatteryFilter,
+    lowbat: battery_filter::LowBattery,
     battery_samples: [u16; 4],
     battery_sample_idx: usize,
 
@@ -386,6 +392,7 @@ impl<'a> App<'a> {
             dtmf_dial: None,
             battery_cal,
             battery: battery_filter::BatteryFilter::new(),
+            lowbat: battery_filter::LowBattery::new(),
             battery_samples: [0; 4],
             battery_sample_idx: 0,
             rssi_raw: 0,
@@ -752,17 +759,36 @@ impl<'a> App<'a> {
     }
 
     // battery
-    pub fn poll_battery(&mut self) {
+    pub fn poll_battery(&mut self, syst: &mut SYST) {
         let raw12 = self.radio.read_battery_raw();
 
         // Ring buffer write
         self.battery_samples[self.battery_sample_idx] = raw12;
         self.battery_sample_idx = (self.battery_sample_idx + 1) & 3; // wrap at 4
 
-        // What the screen shows: a slow average while receiving, a live one while transmitting (battery_filter.rs)
+        // What the screen shows, and the resting value the low-battery warning reads (battery_filter.rs)
         let tx = self.is_transmitting();
-        let live = self.battery_raw12_avg();
-        self.battery.update(crate::hal::uptime::now32(), live, tx, &self.battery_cal);
+        let now = crate::hal::uptime::now32();
+        self.battery.update(now, self.battery_raw12_avg(), tx);
+        if tx {
+            return;
+        }
+        let cv = self.battery_cv(self.battery.resting());
+        self.lowbat.step(now, cv);
+        // The chime waits while a signal is heard (play_cue would refuse); it is the same speaker-only path as the key
+        // beep and follows KEY BEEP (muted: nothing plays, the notice still shows). It also waits while an app runs:
+        // the tone generator shares registers with the FSK modem, and an app (a capture in FSK PROBE, a sweep) owns
+        // the RF chip. A key beep there is the user's own doing; a chime out of nowhere is not.
+        if self.lowbat.chime_due() && !self.audio_open() && matches!(self.mode, Mode::Standby) {
+            self.radio.play_cue(syst, &LOW_BATTERY_CHIME);
+            self.lowbat.chimed(now);
+        }
+        // The notice needs the main screen and a free box; otherwise it waits.
+        if self.lowbat.note_due() && matches!(self.mode, Mode::Standby) && self.no_channels_ticks == 0 {
+            self.notice_kind = NOTICE_LOW_BATTERY;
+            self.no_channels_ticks = LOW_BATTERY_HOLD_TICKS;
+            self.lowbat.noted();
+        }
     }
 
     pub fn init_battery_samples(&mut self) {
@@ -771,7 +797,7 @@ impl<'a> App<'a> {
         }
         self.battery_sample_idx = 0;
         let first = self.battery_raw12_avg();
-        self.battery.init(first, crate::hal::uptime::now32(), &self.battery_cal);
+        self.battery.init(first, crate::hal::uptime::now32());
     }
 
     /// The raw ring average of the last four readings: what apps and BATTERY CAL use (responsive, not smoothed).
@@ -781,13 +807,17 @@ impl<'a> App<'a> {
     }
 
     pub fn battery_bars(&self) -> u8 {
-        self.battery.bars()
+        self.battery.bars(&self.battery_cal)
+    }
+
+    /// Centivolts for a 12-bit reading through BATTERY CAL.
+    fn battery_cv(&self, raw12: u16) -> u32 {
+        raw12 as u32 * BATTERY_CAL_REFERENCE_CV as u32 / self.settings.battery_cal_raw.max(1) as u32
     }
 
     /// The voltage the main screen and boot message show (the filtered reading, battery_filter.rs).
     pub fn battery_voltage_cv(&self) -> u16 {
-        (self.battery.raw12() as u32 * BATTERY_CAL_REFERENCE_CV as u32
-            / self.settings.battery_cal_raw.max(1) as u32) as u16
+        self.battery_cv(self.battery.raw12()) as u16
     }
 
     pub fn set_rssi_raw(&mut self, val: u8) {

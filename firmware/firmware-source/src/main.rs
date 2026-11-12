@@ -435,7 +435,7 @@ fn main() -> ! {
                 app.set_mic_level(mic);
                 app.poll_vox(&mut cp.SYST, mic, rx_active);
             }
-            app.poll_battery();
+            app.poll_battery(&mut cp.SYST);
 
             let now10 = hal::uptime::now();
             let dt10 = now10.wrapping_sub(overlay_tick_last);

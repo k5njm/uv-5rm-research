@@ -283,7 +283,9 @@ where
         draw_overlay(lcd, why, ALERT);
     } else if app.no_channels_notice() {
         // Name the group: with a group other than ALL selected, channels outside its number range are skipped.
-        if app.notice_kind() == app::NOTICE_OUT_OF_RANGE {
+        if app.notice_kind() == app::NOTICE_LOW_BATTERY {
+            draw_overlay(lcd, "LOW BATTERY", ALERT);
+        } else if app.notice_kind() == app::NOTICE_OUT_OF_RANGE {
             draw_overlay(lcd, "OUT OF RX RANGE", AMBER);
         } else if app.chan_mode_index() == 0 {
             draw_overlay(lcd, "NO CHANNELS", AMBER);
