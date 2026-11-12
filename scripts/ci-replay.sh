@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 # Replay GitHub Actions jobs locally in a clean, runner-like x86_64 Ubuntu container (Docker/OrbStack).
-#   scripts/ci-replay.sh verify     every `run:` step of the verify job
-#   scripts/ci-replay.sh web        build the images like CI, then the web job's steps
+#   scripts/ci-replay.sh JOB      JOB is one of: gate sim tools hil images web all
+#     gate    release gate on the committed .BF/.app files          sim     simulator, unit tests, scenarios (all styles)
+#     tools   host tool tests (incl. the release bundle and CI filter tests)    hil   HIL pipeline against a synthetic camera
+#     images  overlay builds, core firmware (both variants), size budgets, pinned hashes
+#     web     the images job's builds, then the browser test        all     every job above, in that order
+# With no argument it prints this and exits (a replay takes minutes and downloads a toolchain; it must be asked for).
 # It runs the workflow's own commands (parsed from .github/workflows/ci.yml with ruby, which macOS ships), against a
 # copy of the working tree, with Rust `stable` and NO thumbv7em target like a runner. `uses:` steps (checkout, artifact
-# upload/download) are emulated or skipped. Not the repro job: that needs Docker inside Docker; use scripts/dev.sh repro.
+# upload/download) are emulated or skipped, and the `changes` filter and `if:` gates are not evaluated (the job you name
+# runs; scripts/ci_changed.py is tested by firmware/tests/test_ci_filters.py). Not the repro or release workflows: those
+# need Docker inside Docker; use scripts/dev.sh repro / bundle. The copy has no version-control history, so a test that
+# needs it skips itself. DRY_RUN=1 only writes build-out/ci/job.sh (the steps it would run) and stops.
 set -euo pipefail
-JOB="${1:-verify}"
+usage() { sed -n '2,14p' "$0"; }
+if [ $# -ne 1 ]; then usage; exit 2; fi
+JOB="$1"
+case "$JOB" in gate|sim|tools|hil|images|web|all) ;; *) echo "unknown job '$JOB'" >&2; usage; exit 2 ;; esac
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/build-out/ci"; mkdir -p "$OUT"
 ruby -ryaml -e '
@@ -19,17 +29,22 @@ add = lambda do |s|
   out << "cd \"$GITHUB_WORKSPACE/#{s["working-directory"] || "."}\""
   out << "(\n#{s["run"]}\n)"
 end
-if job == "verify"
-  y["jobs"]["verify"]["steps"].each { |s| add.call(s) }
-elsif job == "web"
-  y["jobs"]["verify"]["steps"].each { |s| add.call(s) if (s["name"] || "") =~ /Pinned Rust|HAM TOOLS overlay|Core firmware builds/ }
+all_steps = lambda { |name| y["jobs"][name]["steps"].each { |s| add.call(s) } }
+web = lambda do |images_already_built|
+  unless images_already_built
+    y["jobs"]["images"]["steps"].each { |s| add.call(s) if (s["name"] || "") =~ /Pinned Rust|overlays build|Core firmware builds/ }
+  end
   out << "echo; echo \"##### emulating download-artifact: /tmp/out -> /tmp/dl\"; mkdir -p /tmp/dl && cp /tmp/out/* /tmp/dl/"
-  y["jobs"]["web"]["steps"].each { |s| add.call(s) }
-else
-  abort "unknown job #{job}: use verify or web"
+  all_steps.call("web")
+end
+case job
+when "web" then web.call(false)
+when "all" then (%w[gate sim tools hil images].each { |j| all_steps.call(j) }; web.call(true))
+else all_steps.call(job)
 end
 File.write("build-out/ci/job.sh", out.join("\n") + "\n")
 ' "$JOB"
+[ -z "${DRY_RUN:-}" ] || { echo "wrote $OUT/job.sh"; exit 0; }
 cat > "$OUT/replay-inner.sh" <<'INNER'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive PIP_BREAK_SYSTEM_PACKAGES=1

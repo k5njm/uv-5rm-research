@@ -1,0 +1,87 @@
+name: release
+# Builds and publishes the install bundle for a version tag (v*), or rehearses it on demand.
+#
+# It runs `scripts/dev.sh bundle` in the pinned dev container, exactly the path repro.yml and a local build use, instead
+# of native runner steps like ci.yml: the requirement is that the bytes equal what the pinned local build produces, and
+# the container is the one place that is proven to (the core is built under linux/amd64, which is this runner's own
+# architecture, so no emulation is involved). The bundle script refuses to continue if the built core's sha256 differs
+# from firmware/expected-hashes.json, so a tag on a commit whose core was never approved by `scripts/dev.sh check`
+# produces no release. What goes in the bundle is defined in firmware/tools/bundle_release.py, shared with the local
+# command. Nothing here has run on GitHub yet (AUDIT 43).
+#
+# Run it by hand (Actions > release > Run workflow): dry_run (the default) builds everything and uploads it as a
+# workflow artifact and publishes nothing. Publishing needs a tag ref AND dry_run unticked (or a pushed tag).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and upload the files as a workflow artifact; do not publish a release"
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # tags and history, for the release notes
+      - name: Version
+        id: v
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="$GITHUB_REF_NAME"; else v="dev-$(git rev-parse --short HEAD)"; fi
+          echo "version=$v" | tee -a "$GITHUB_OUTPUT"
+      - name: Bundle (core, nine launcher apps, extras, host tools, channels, runbook; release gate and pin check inside)
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          WITH_BROWSER: "0"   # no Chromium layer: this job never runs the browser test
+        run: scripts/dev.sh bundle
+      - name: Release notes (commits since the previous tag, SHA256SUMS, the experimental/at-your-own-risk statement)
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          # a tag is its own range end; a dry run on a branch lists up to HEAD
+          if [ "$GITHUB_REF_TYPE" = tag ]; then head="$VERSION"; else head=HEAD; fi
+          python3 firmware/tools/bundle_release.py notes --version "$VERSION" --head "$head" --repo "$GITHUB_REPOSITORY" \
+            --sums build-out/bundle/assets/SHA256SUMS --zip-sum "build-out/bundle/assets/uv5rm-$VERSION.zip.sha256" \
+            -o "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md"
+      - name: Summary
+        run: |
+          { echo '### Release files'; echo '```'; (cd build-out/bundle/assets && sha256sum *); echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: build-out/bundle/assets/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes.md
+          if-no-files-found: error
+  publish:
+    needs: build
+    # a pushed tag, or a manual run started from a tag with dry_run unticked
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.dry_run == false)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: release-assets, path: assets }
+      - uses: actions/download-artifact@v4
+        with: { name: release-notes, path: notes }
+      - name: Create the release (a tag with a hyphen, such as v0.2.0-rc1, is marked pre-release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          pre=""; case "$TAG" in *-*) pre="--prerelease" ;; esac
+          gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --verify-tag $pre \
+            --title "UV-5RM open firmware $TAG" --notes-file notes/release-notes.md
