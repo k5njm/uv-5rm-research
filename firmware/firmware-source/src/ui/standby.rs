@@ -676,7 +676,7 @@ where
     let mut label: TextBuf<8> = TextBuf::new();
     if app.side_is_channel_mode(i) {
         // the channel's number within the current group (the group is named in the status bar)
-        app.put_channel_number(app.side_channel_num(i), &mut label);
+        app.put_channel_number(i, app.side_channel_num(i), &mut label);
     } else {
         label.put_str("VFO");
     }

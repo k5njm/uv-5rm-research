@@ -32,6 +32,16 @@ pub(super) fn vm_long(settings: &Settings) -> u8 {
     }
 }
 
+/// Side B's group (side A's is `restore`'s): byte 12 of the same record, 0 (ALL) when never stored.
+pub(super) fn restore_side_b(settings: &Settings) -> u8 {
+    let b = &settings.boot_text_line2;
+    if b[0] == STORE_MAGIC && b[12] <= CUSTOM {
+        b[12]
+    } else {
+        0
+    }
+}
+
 pub(super) fn restore(settings: &Settings) -> (u8, u32, u32) {
     let b = &settings.boot_text_line2;
     if b[0] != STORE_MAGIC || b[1] > CUSTOM {
@@ -49,7 +59,8 @@ pub(super) fn restore(settings: &Settings) -> (u8, u32, u32) {
 fn persist(app: &mut App) {
     let b = &mut app.settings.boot_text_line2;
     b[0] = STORE_MAGIC;
-    b[1] = app.chan_mode;
+    b[1] = app.side_groups[0];
+    b[12] = app.side_groups[1];
     b[2..6].copy_from_slice(&app.range_lo_hz.to_le_bytes());
     b[6..10].copy_from_slice(&app.range_hi_hz.to_le_bytes());
     app.save_settings();
@@ -97,6 +108,7 @@ fn play_mode_cue(app: &mut App, syst: &mut SYST) {
 
 fn select(app: &mut App, syst: &mut SYST, index: usize, then_scan: bool) {
     app.chan_mode = index as u8;
+    app.side_groups[app.master] = app.chan_mode; // the group belongs to the side it was chosen on
     persist(app);
     app.mode = Mode::Standby;
     app.reset_key_idle();

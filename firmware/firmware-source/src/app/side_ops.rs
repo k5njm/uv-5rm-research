@@ -147,6 +147,8 @@ pub(super) fn toggle_vfo_channel(app: &mut App, syst: &mut SYST) {
 
 pub(super) fn switch_side(app: &mut App, syst: &mut SYST) {
     app.master = 1 - app.master;
+    // each side has its own channel group: scanning and stepping follow the side that now has the keys
+    app.chan_mode = app.side_groups[app.master];
     app.input.clear();
     app.ani_target_override = None;
     sync_watching_to_master(app, syst);

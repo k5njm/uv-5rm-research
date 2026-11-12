@@ -129,7 +129,10 @@ pub struct App<'a> {
     sides: [side::Side; 2],
     settings: flash_map::Settings,
     launcher_index: usize,
+    /// The channel group of the side that has the keys (the master). Each side keeps its own in `side_groups`;
+    /// this mirrors the master's so the rest of the code can ask one question.
     chan_mode: u8,
+    side_groups: [u8; 2],
     mode_menu_index: usize,
     range_lo_hz: u32,
     range_hi_hz: u32,
@@ -344,6 +347,7 @@ impl<'a> App<'a> {
             settings,
             launcher_index: 0,
             chan_mode,
+            side_groups: [chan_mode, modes::restore_side_b(&settings)],
             mode_menu_index: chan_mode as usize,
             range_lo_hz,
             range_hi_hz,
@@ -940,8 +944,8 @@ impl<'a> App<'a> {
 
     /// The number shown for channel slot `num`: its position in the current group, at least two digits ("01"; in
     /// ALL the printed channel number). The main screen, the scan screen and CHAN MGR use the same number.
-    pub fn put_channel_number(&self, num: u16, w: &mut dyn crate::fmtlite::Sink) {
-        let pos = group_table::group_pos(self.chan_mode, num).unwrap_or(num + 1);
+    pub fn put_channel_number(&self, side: usize, num: u16, w: &mut dyn crate::fmtlite::Sink) {
+        let pos = group_table::group_pos(self.side_groups[side], num).unwrap_or(num + 1);
         w.put_u32_w(pos as u32, 2, b'0');
     }
 
