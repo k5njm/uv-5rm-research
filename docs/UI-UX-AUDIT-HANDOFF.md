@@ -1,5 +1,11 @@
 # Baofeng UV-5RM Custom Firmware: UI/UX Audit & Agent Handoff
 
+> **Status 2026-11-12: a historical review, partly out of date.** It was written by another model from concept images, not from the code, and
+> [AUDIT.md](../AUDIT.md) row 42 reviews it against the code. Several findings below are fixed (an armed DELETE or RESET ALL is amber, lists
+> show a scroll mark, the wording, `EXIT` in the channel editor asks `DISCARD CHANGES?`, DELETE and RESET ALL need a held `#`: rows 42 and 47) and
+> some are not as described (RESET ALL and DELETE never acted on one press: they took two). Read rows 42 and 47 before acting on anything here;
+> the [user guide](USER-GUIDE.md) says what the screens do now.
+
 **Target Hardware:** Baofeng UV-5RM (`5RHNRFB-YP07`, AT32F421 MCU, ST7735 160×128 RGB565 LCD)  
 **Audit Scope:** UI/UX concepts in `build-out/concept/`, shared list widget (`list.rs`), Channel Manager (`chanmgr`), Settings (`settings`), Standby/Core screens, and specialized apps.  
 **Benchmark:** Transition from "budget Chinese radio UI" to "premium handheld transceiver" (Radio Foundry / Kenwood TH-D74 / Yaesu FT-5D aesthetic).

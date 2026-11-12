@@ -9,7 +9,10 @@
 # macOS only: it uses `sips`, the image tool that ships with macOS. Nothing else is needed.
 #
 # To add a screenshot: add one "scenario/shot  output-name" line to FRAMES below, then refer to
-# `img/<output-name>.png` from docs/USER-GUIDE.md or README.md.
+# `img/<output-name>.png` from docs/USER-GUIDE.md (or `docs/img/<output-name>.png` from README.md).
+# Every picture in docs/img comes from a golden frame through this table, never drawn by hand; firmware/tests/test_docs.py
+# fails when an image is not in the table, is not used by a document, or names a frame that does not exist.
+# The simulator cannot draw the core's own screens (main screen, APPS list, CH GROUPS menu), so none has a picture.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -30,13 +33,19 @@ FRAMES=(
   "settings_menu_groups/groups               settings-groups"
   "settings_menu_groups/autolk_editing       settings-editing"
   "settings_menu_keys/vm_long_app4           settings-keys"
-  "settings_system_items/system_items        settings-system"
   "settings_system_help/txbands_fcc_help     settings-help"
   "settings_presets_quiet/quiet_preview      settings-preset-preview"
+  "settings_radio_items/radio_items          settings-radio"
+  "settings_system_guards/reset_armed        settings-reset-armed"
+  "settings_presets_about/about              settings-about"
+  "settings_presets_grid/six_complete        settings-grid"
   # Apps
   "spectrum_two_signals/waterfall_filled     spectrum"
   "spectrum_no_signal/no_signal_toast        spectrum-no-signal"
+  "spectrum_auto_listen/auto_listening       spectrum-auto-listen"
   "bandsweep_vhf/after_first_pass            bandsweep"
+  "bandsweep_tune/listening                  bandsweep-listening"
+  "bandsweep_input/start_typing              bandsweep-range"
   "foxhunt_signal/meter_steady               foxhunt"
   "foxhunt_signal/distance_entry             foxhunt-distance"
   "rptfind_repeater/waiting_for_traffic      rptfinder"
@@ -49,10 +58,15 @@ FRAMES=(
   "fm_list/playing_selected                  fm-list"
   "fm_save/save_row                          fm-save"
   "fm_type/typing_two                        fm-typing"
+  "fm_list/armed_delete                      fm-delete-armed"
+  "fm_seek/seeking                           fm-seek"
   "hamtools_idtimer/armed_10_00              hamtools-idtimer"
+  "hamtools_stopwatch/running_two_laps       hamtools-stopwatch"
   "hamtools_wavelength/typed_446_000         hamtools-wavelength"
+  "hamtools_grid/new_york                    hamtools-grid"
   "fskprobe_idle/on_quiet                    fskprobe"
   "fskprobe_options/all_changed              fskprobe-options"
+  "fskprobe_capture/recording                fskprobe-capture"
 )
 
 command -v sips >/dev/null || { echo "error: sips not found (this script only runs on macOS)" >&2; exit 1; }

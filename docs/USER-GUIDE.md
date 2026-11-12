@@ -1,170 +1,232 @@
 # User guide
 
-This guide describes the custom firmware for the Baofeng UV-5RM (board `5RHNRFB-YP07`) as it is in this repository today: the
-screens, the keys, the settings and the apps. It is written for a licensed radio amateur, not a programmer.
+This guide is for someone who owns a Baofeng UV-5RM (board `5RHNRFB-YP07`) running this project's open firmware and did not
+write it. It says what each screen shows, what each key does, what each setting means, and how to load channels, FM
+stations and apps from a computer. It was checked against the firmware source and the simulator's golden frames on
+2026-11-12; where it could not be checked it says so.
 
-Contents: [Status](#status-read-this-first) | [Keys](#the-keys) | [Main screen](#the-main-screen) |
-[Channel groups](#channel-groups-the-band-key) | [APPS list](#the-apps-list-menu) | [SETTINGS](#settings) |
-[CHAN MGR](#chan-mgr-the-channel-manager) | [Programmable keys](#assigning-the-side-keys-band-and-vfomr-long-press) |
-[Transmit safety](#transmit-safety) | [Apps](#the-apps) | [Channel lists](#loading-channel-lists-from-a-computer) |
-[Backup and flashing](#backing-up-and-flashing)
+Contents: [Status](#status-what-has-and-has-not-been-seen-on-a-radio) | [Reading this guide](#reading-this-guide) |
+[Main screen](#the-main-screen) | [Colours and hints](#colours-hints-and-the-scroll-mark) |
+[Channel groups](#channel-groups) | [Scanning](#scanning) | [APPS list](#the-apps-list) |
+[SETTINGS](#settings) | [CHAN MGR](#chan-mgr) | [SEARCH/QT SCAN](#searchqt-scan) | [SPECTRUM](#spectrum) |
+[BAND SWEEP](#band-sweep) | [FOX HUNT](#fox-hunt) | [RPT FINDER](#rpt-finder) | [FSK PROBE](#fsk-probe) | [FM](#fm) |
+[HAM TOOLS](#ham-tools) | [TEXT](#text) | [Settings reference](#settings-reference) |
+[Transmit safety](#transmit-safety) | [Loading from a computer](#loading-from-a-computer) |
+[Backup and recovery](#backup-and-recovery) | [Troubleshooting](#troubleshooting)
 
-## Status: read this first
+## Status: what has and has not been seen on a radio
 
-The firmware is an experiment. Only a small part of it has run on a real radio.
+This is an experiment on **one radio**. Nothing has been transmitted with it. The record is [AUDIT.md](../AUDIT.md), rows 25
+to 51; the checklist for the next flash is [RADIO-CHECKLIST.md](RADIO-CHECKLIST.md).
 
-* **Run on a radio** (2026-11-11, one radio, the `aaa3e04` build, which is essentially the upstream mod's source built by this
-  project's CI): it flashes, boots, receives (NOAA weather on 162.400 MHz was heard), and refuses to transmit by default,
-  showing `TX PROHIBITED` when PTT is pressed (later builds give the reason instead, see below). The nine launcher apps were written to the radio and read back correctly.
-* **Not yet run on a radio:** everything built since. That covers the readable setting names, the colour list style, the hint
-  strip at the bottom of lists, channel groups in CHAN MGR, the VFO/MR long-press, the `SAVED` notice, the renamed TX BANDS setting and its `ALL` choice, and the channel lists in `channels/`. These pass the simulator and the tool tests on a computer. The
-  simulator is a model: a screen that looks right in it can still look or behave differently on the radio.
-* **Never tested on the air:** transmitting of any kind, including the TEXT app. The `AUDIT.md` rows 25 to 28 are the record.
-
-Pictures in this guide are rendered by the simulator from the same screen-drawing code the radio uses. They are not
-photographs of the radio. Where the simulator starts from an empty settings record, values in a picture (for example `CE HAM`
-for TX BANDS) are not what a real radio shows; the text says so where it matters.
-
-Some screens belong to the core firmware (the main screen, the APPS list, the CH GROUPS menu and the notices on the main
-screen). The simulator does not draw them, so they have no picture here. They are described from the source code.
-
-> **Wording in this guide follows the source in the working tree on 2026-11-11 (some of it not yet committed). Text on screen can change; the pictures are regenerated with `scripts/docs-screens.sh`.**
-
-> **You are responsible for what you transmit.** The settings below can limit the transmitter, but they do not make a
-> transmission legal. You need the right licence for the band and the right to operate on the channel. This radio is not
-> certified for FRS, GMRS or MURS. See [Transmit safety](#transmit-safety).
-
-## The keys
-
-The radio's keys, as this firmware names them:
-
-| Key | Notes |
-|---|---|
-| `MENU`, `EXIT` | Select and back, in every list. |
-| `UP`, `DOWN` | Move in lists; step the frequency or channel on the main screen. Lists wrap around. |
-| `0` to `9`, `*`, `#` | Digits, and the two keys at the bottom of the pad. |
-| `VFO/MR` | Switch between VFO (frequency) mode and memory (channel) mode. |
-| `A/B` | Switch between the two frequencies shown on the main screen. |
-| `BAND` | Open the channel group menu (CH GROUPS). |
-| `SIDE1`, `SIDE2` | The two small keys on the side. The source names them after the stock radio's FM and flashlight keys. |
-| `PTT` | Transmit. |
-
-A *short press* is an ordinary press; a *long press* is a press and hold. Beeps play on short and long presses unless
-KEY BEEP is off.
-
-### Keys on the main screen
-
-| Key | Short press | Long press |
+| | What | Where it is recorded |
 |---|---|---|
-| `0` to `9` | Type a number. In memory mode: a channel number, accepted on the third digit, or press `MENU` after fewer digits. In VFO mode: a frequency of six digits, MHz with three decimals (`146520` is 146.520 MHz), accepted on the sixth digit. | |
-| `UP` / `DOWN` | VFO mode: one frequency step. Memory mode: the next stored channel in the current group. Holding repeats. | |
-| `EXIT` | Clears a half-typed number. | |
-| `MENU` | Opens the APPS list (or accepts a channel number you have typed in memory mode). | |
-| `VFO/MR` | Toggle VFO and memory mode. | Runs the function assigned to VFO/MR LONG (default: none). |
-| `A/B` | Switch between the two frequencies. | |
-| `BAND` | Opens the CH GROUPS menu. | Runs the function assigned to BAND LONG (default: none). |
-| `*` | Starts typing a DTMF string to send with the next PTT. Hold `EXIT` to cancel. | Locks or unlocks the keypad. |
-| `#` | | Starts scanning. |
-| `SIDE1`, `SIDE2` | Run the function assigned to SIDE1 SHORT or SIDE2 SHORT. | Run the function assigned to SIDE1 LONG or SIDE2 LONG. |
+| Seen on the radio | The core flashes and boots; the calibration page is byte-identical before and after every flash; the nine launcher apps install and read back; the radio receives (NOAA weather on 162.400 MHz); PTT with TX INHIBIT on shows `TX INHIBIT IS ON`; the CH GROUPS menu and its hint strip; SPECTRUM opens and runs; CHAN MGR works; 116 channels load and verify through the programming port; the channel detail table and a boot screen are written and read back; each side (A and B) keeping its own channel group | AUDIT 26, 30, 32, 35, 37, 39, 40 |
+| Built after the last flash, simulator and tests only | The FM tuner and station list; CHAN MGR in two parts with the discard question and the long-`#` delete; SETTINGS help strip, back-to-default, presets, about view, grid locator and the AUTO KEYLOCK timing fix; SPECTRUM's peak and BAND SWEEP's hear-then-tune; the shared title bar and hint strip in SPECTRUM, BAND SWEEP and TEXT; `SCAN UP EXIT`; VFO stepping and scans kept inside the receive bands; the fault screen; the FSK PROBE register fixes, options and capture | AUDIT 42 to 51 |
+| Never done | Transmitting with this firmware (including TEXT); `install.py` against a real radio (it has only met simulated ones); the FM station table on a radio; whether the receive limits are right for this radio (they are from its published specification, not measured) | AUDIT 40, 45, 48 |
 
-With the keypad locked, only `SIDE1`, `SIDE2` and a long press of `*` still work. AUTO KEYLOCK (SETTINGS > DISPLAY) can lock
-the keypad after 5, 10 or 15 seconds without a key press.
+The pictures in this guide are made by the host simulator from the same drawing code the radio uses and from scripted
+signals. **They are not photographs.** The simulator starts from its own state, so a value in a picture (for example `FREQ STEP
+2.50k`, which is the simulator's, not the radio's default) can differ from what a real radio shows; the text under a picture
+says so where it matters. The simulator cannot draw the core's own screens, so **there is no picture of the main screen, the
+APPS list or the CH GROUPS menu**. They are described from the source and drawn below as text schematics, which are not
+screenshots.
 
-While scanning, `UP` and `DOWN` change the scan direction, `BAND` stops the scan and opens CH GROUPS, and `EXIT` or a long
-press of `#` stops the scan. While it runs, the top left of the main screen reads `SCAN UP EXIT` or `SCAN DN EXIT` (just
-`SCAN UP` / `SCAN DN` when the PS, DWR or VOX flag leaves no room). There is no key that holds on a signal: what the scan does
-when it finds one is the SCAN RESUME setting (TIMED: stays 5 seconds then moves on; CARRIER: stays while the signal lasts, and
-5 seconds after; STOP: stops the scan on it). In memory mode the scan visits only the channels of the current group that have IN SCAN LIST set.
+> **You are responsible for what you transmit.** The firmware ships with transmit inhibited, and its settings can limit the
+> transmitter, but no setting makes a transmission legal. You need the right licence for the frequency and the right to use
+> the channel. This radio is not certified for FRS, GMRS or MURS. See [Transmit safety](#transmit-safety).
+
+## Reading this guide
+
+Keys are written the way they are labelled: `MENU`, `EXIT`, `UP`, `DOWN`, `A/B`, `BAND`, `VFO/MR`, `SIDE1`, `SIDE2`, `PTT`, the
+digits `0` to `9`, `*` and `#`. **Hold `#`** means press and keep pressed for about one second.
+
+* A key does its job **when you let go of it**. A key that has a hold function sends the hold after about one second, and then
+  does *not* send the ordinary press when you let go.
+* Keys that can be held (the keypad driver, `src/device/keypad.rs`): `UP`, `DOWN`, `VFO/MR`, `BAND`, `*`, `#`, `0`, `EXIT`,
+  `SIDE1`, `SIDE2`. `MENU` and `A/B` and the digits `1` to `9` cannot be held. **There is no hold on `MENU` anywhere**: nothing
+  in this firmware needs one, and this guide never asks for it.
+* Holding `UP` or `DOWN` repeats the step after about one and a half seconds, then about ten times a second.
+* Key beeps play on a press and on a hold unless KEY BEEP is off.
+* Beep and notice wording is quoted exactly. Text in capitals in a box or a strip is what the radio shows.
 
 ## The main screen
 
-*No picture yet: the simulator does not draw the main screen.*
+The main screen is part of the core firmware. No picture exists, because the simulator does not draw it. This is a schematic
+of the layout, not a screenshot:
 
-From the source, top to bottom:
+```
+ PS DWR SCAN UP EXIT      RPT     7.84V [#]   status bar: flags, group or band tag, battery
+ ------------------------------------------   thin line in the accent colour
+|RX 01                     Richardson          side A, row 1: marker, channel number, detail text
+|   K5RWK            147.12000                 side A, row 2: name and/or frequency
+|   FM LOW Tone - NAR                          side A, row 3: mode line
+ ------------------------------------------
+|    VFO                                       side B
+|        146.52000
+|   FM LOW NAR
+ ------------------------------------------
+ -61dBm S5        |.:ill||                     signal meter (microphone level while transmitting)
+```
 
-* **Status bar.** On the left, small flags: `PS` (battery save is active), `DWR` (dual watch is on), `VOX`, and a padlock when
-  the keypad is locked. While transmitting, a timer (`MM:SS`) replaces `PS` and `DWR`. To the right of the flags is the short
-  name of the current channel group (`ALL`, `WX`, `RPT` and so on). On the right: battery voltage and a battery icon.
-* **Two frequency blocks** (the two sides, switched with `A/B`). The one that is active has a red stripe at its left edge, and
-  the stripe turns brighter red while transmitting. Each block has three rows: the label (`VFO`, or the channel's number for a
-  memory channel: `01`) and the channel name; the frequency in large digits (with CH DISPLAY set to a name, the name instead of or
-  beside the frequency); and a small line with the mode (`FM`, `AM`), power (`LOW`, `MID`, `HIGH`), tone mode (`Tone`, `TSQL`,
-  `DTCS` and so on), repeater shift (`+` or `-`), bandwidth (`WIDE`, `NAR`) and `R` when reverse is on.
-* **Markers at the left of a block:** `RX` while receiving, `TX` while transmitting, `>>` for the side that heard the last signal.
-* **Signal meter** across the bottom: a bar of segments showing signal strength, or the microphone level while transmitting.
-* **Notices** in a box in the middle of the screen. A red box appears when PTT is pressed and the radio will not transmit. It
-  gives the reason: `TX INHIBIT IS ON`, `RX-ONLY CHANNEL`, `OUTSIDE TX BANDS` or `CHANNEL BUSY` (see
-  [Transmit safety](#transmit-safety)); the build tested on the radio showed `TX PROHIBITED` for all of them. `NO CH IN ...` and `NO CHANNELS` (amber) are described in the next section.
+| Element | What it shows |
+|---|---|
+| **Accent colour** | Blue in VFO mode, green on a memory channel, red while transmitting. The line under the status bar and the left stripe of the active side use it. The side that does not have the keys has a dark stripe |
+| **Status bar, left** | `PS` (battery save is working), `DWR` (dual watch is on), `SCAN UP EXIT` or `SCAN DN EXIT` while scanning (`SCAN UP` or `SCAN DN` when a `PS`, `DWR` or `VOX` flag shares the line), `VOX`, and a padlock while the keypad is locked. While transmitting, a red `MM:SS` timer replaces `PS` and `DWR` |
+| **Status bar, tag** | In memory mode the short name of the channel group (`RPT`, `WX`, `ALL`, ...; see [Channel groups](#channel-groups)). In VFO mode the band the frequency is in (`AIR`, `2M`, `MURS`, `MARINE`, `WX`, `1.25M`, `70CM`, `GMRS`) or nothing |
+| **Status bar, right** | Battery voltage and a battery icon (red at one bar or none, amber at two, green above) |
+| **Two blocks** | The upper block is side A and the lower block is side B. `A/B` moves the keys to the other side. The active side is bright, the other is dimmer. **Each side keeps its own channel group** |
+| **Row 1** | `VFO`, or the channel's number in the current group (`01`; the radio's own number in group ALL). On the right, the channel's detail text (a place or a note) when CH DISPLAY is NAME or NAME+FREQ, or the channel's name in small letters when CH DISPLAY is FREQUENCY |
+| **Marker** (left of row 1) | `RX` (green) while receiving on that side, `TX` (red) while transmitting, `>>` (amber) on the side that heard the last signal |
+| **Row 2** | The frequency in large digits. With CH DISPLAY NAME+FREQ and a named channel: the name (10 characters at most) and the frequency in small digits; with NAME: the name alone |
+| **Row 3** | Mode (`FM`, `AM`, `USB`), power (`LOW`, `MID`, `HIGH`), tone mode (`Tone`, `TSQL`, `DTCS`, `DTCS-R`, `TSQL-R`, `Cross`), shift (`+` or `-`), bandwidth (`WIDE`, `NAR`), and a red `R` when reverse is on |
+| **Meter** | While receiving, a bar of thirteen segments with the signal in dBm and S units (`-61dBm S5`, or `+10` over S9). After the signal ends it shows `LAST` and the last peak, dim. With dual watch on, `A` or `B` says which side. While transmitting, `MIC` and a red level bar |
+| **Notices** | A box in the middle of the screen; see below |
 
-**Channel numbers** are written one way everywhere: the channel's place in the current group, at least two digits, no prefix
-(`01`, `02`, ... `10`). The first channel of REPEATERS is `01` there even though it is slot 234 of the radio. In group ALL the
-number is the radio's own channel number (`01` to `1000`), so `234` is the same channel in ALL as `01` is in REPEATERS. The main
-screen, the channel list, the channel editor's title and the SAVED notice all use this number, and the number you type in memory
-mode is read the same way. A channel that was deleted leaves a gap in the numbering of its group (`01`, `02`, `04`). Two places
-still use the radio's own number, because they are about a slot and not about a group: RPT FINDER's save prompt (`CH n IN USE`)
-and the channel plan files.
+**Notices on the main screen**
 
-## Channel groups (the BAND key)
-
-A *channel group* is a named range of channel numbers. Choosing a group limits memory mode, `UP` and `DOWN` in memory mode, and
-scanning to the channels in that range. The radio has 1,000 channel slots; the groups are:
-
-| Group | Short name (shown on the main screen) | Channel numbers |
+| Box | Colour | Meaning |
 |---|---|---|
-| ALL | ALL | 1 to 1000 |
-| WEATHER | WX | 1 to 7 |
-| POLICE FIRE EMS | PD/FD | 14 to 105 |
-| FED & GOV | FED | 106 to 146 |
-| UTILITIES | UTIL | 147 to 157 |
-| RAILROAD | RAIL | 158 to 167 |
-| AIR TRAFFIC | AIR | 168 to 233 |
-| REPEATERS | RPT | 234 to 304 and 327 to 344 |
-| FRS | FRS | 305 to 326 |
-| GMRS | GMRS | 305 to 344 |
-| MURS | MURS | 345 to 349 |
-| FRS GMRS MURS | F/G/M | 305 to 349 |
-| CUSTOM RANGE | RANGE | 1 to 1000 for the channel list; see below |
+| `TX INHIBIT IS ON` | red | PTT was pressed with TX INHIBIT on |
+| `RX-ONLY CHANNEL` | red | PTT on a memory channel that has no transmit frequency |
+| `CHANNEL BUSY` | red | PTT with BUSY LOCKOUT on while a signal is present |
+| `OUTSIDE TX BANDS` | red | The transmit frequency is not in the TX BANDS choice, or the mode is not FM (AM and USB never transmit) |
+| `NO CH IN WX` (or another group's short name) | amber | The current group has no stored channel (see [Channel groups](#channel-groups)) |
+| `NO CHANNELS` | amber | The same, in group ALL |
+| `OUT OF RX RANGE` | amber | A frequency typed in VFO mode is outside what the receiver covers |
 
-Groups may overlap (a channel can be in several), and membership is **by channel number only**: a channel has no group field.
-These ranges come from the upstream mod author's channel plan. A channel stored at a number outside a group is simply not in
-that group. Channels 8 to 13 belong to no group except ALL. A radio that came from the factory has its channels in slots 1 to
-22, so most of them fall in WEATHER and POLICE FIRE EMS whatever they are. Design notes for changing this are in
+The red PTT boxes stay while `PTT` is held and go when it is released. The first one that applies wins, in the order of the
+table. PTT does nothing, and shows nothing, while the radio is scanning or in a menu or app (stop the scan first).
+
+**Channel numbers** are written one way everywhere: the channel's place in its group, at least two digits, no prefix (`01`,
+`02`, ... `10`). The first channel of REPEATERS is `01` even though it sits in slot 234 of the radio. In group ALL the number is
+the radio's own (`01` to `1000`). A channel deleted from the middle of a group leaves a gap in the numbers (`01`, `02`, `04`).
+RPT FINDER's save prompt asks for the radio's own number, and the channel plan files fill the radio's own slots.
+
+### Keys on the main screen
+
+| Key | Press | Hold |
+|---|---|---|
+| `0` to `9` | Type a number, shown in amber. **Memory mode:** a channel number in the current group, accepted at the third digit or with `MENU` after fewer. An empty or unknown number does nothing. **VFO mode:** six digits are MHz with three decimals (`146520` is 146.520 MHz), accepted at the sixth digit | |
+| `UP`, `DOWN` | VFO mode: one step of FREQ STEP, staying inside the receive bands (a step off the end of a band lands on the start of the next, and wraps round). Memory mode: the next stored channel of the current group (wraps) | repeats |
+| `EXIT` | Clears a half-typed number | |
+| `MENU` | Opens the [APPS list](#the-apps-list); in memory mode with digits typed, accepts the channel number instead | |
+| `VFO/MR` | Switches between VFO and memory mode. With no stored channel in the group, `NO CH IN ...` | The function set in VFO/MR LONG (default: none) |
+| `A/B` | Gives the keys to the other side | |
+| `BAND` | Opens the CH GROUPS menu | The function set in BAND LONG (default: none) |
+| `*` | Starts a DTMF entry: digits, `MENU`, `UP`, `DOWN`, `EXIT`, `*` and `#` stand for A, B, C, D, `*`, `#`; the string is sent with the next transmission, and a three-digit string is sent as an ANI id. Hold `EXIT` to cancel it | Locks or unlocks the keypad |
+| `#` | Nothing | Starts [scanning](#scanning) |
+| `SIDE1`, `SIDE2` | The function set in SIDE1 SHORT or SIDE2 SHORT (default SIDE2: the flashlight) | SIDE1 LONG, SIDE2 LONG |
+| `PTT` | Transmit, if every rule in [Transmit safety](#transmit-safety) allows it | |
+
+**Typed VFO frequencies** are limited to what the receiver covers: 108 to 174, 200 to 260 and 350 to 520 MHz (from the
+radio's published specification; not measured on this radio). Anything else shows `OUT OF RX RANGE`. **A frequency from 87.5
+to 108.0 MHz opens the [FM app](#fm) already tuned to it**, because broadcast FM is a different tuner chip; `EXIT` in the
+app returns to the main screen. If no app is named `FM` in the APPS list, the notice `OUT OF RX RANGE` appears instead.
+
+**Keypad lock.** Hold `*`. While locked, only `SIDE1`, `SIDE2` and a held `*` work, and a padlock shows in the status bar. The
+radio gives no message when it locks or unlocks. AUTO KEYLOCK (SETTINGS > DISPLAY) locks it after 5, 10 or 15 seconds without
+a key.
+
+## Colours, hints and the scroll mark
+
+Every list the firmware draws (SETTINGS, CHAN MGR, the FM station list, the APPS list, the CH GROUPS menu) uses one set of
+meanings, and three other apps share its title bar and hint strip:
+
+| What you see | What it means |
+|---|---|
+| Light grey title bar | The screen's name |
+| **Blue** row | The row you are on |
+| **Amber** row, usually with `^` and `v` around a value | You are changing this, or it is waiting for a confirming key (an armed DELETE or RESET ALL, a `DISCARD CHANGES?` question) |
+| Grey value | Shown, not being changed |
+| Dark strip at the bottom (the hint strip) | What the keys do right now. It changes with the state: browsing a setting it explains that setting |
+| Thin grey mark at the right edge | The list has more rows than fit (seven rows show); the mark shows where you are |
+| Green box | A short notice from an app (`SAVED 01`, `PRESET APPLIED`, `NO SIGNAL`) |
+| Red | Transmitting, or a refusal. Red is meant to mean only that |
+
+SPECTRUM, BAND SWEEP and TEXT use the same light title bar and hint strip. **FOX HUNT, RPT FINDER, HAM TOOLS and FSK PROBE
+have their own, older look with a dark red title bar that does not mean "transmitting"; SEARCH/QT SCAN is plain black.** Their
+pictures below show this. In the shared lists `UP` and `DOWN` wrap round at the ends.
+
+## Channel groups
+
+A *channel group* is a named set of the radio's 1,000 channel slots. Choosing a group limits memory mode, `UP` and `DOWN` in
+memory mode, typed channel numbers and scanning to that group. A group is only a range of slot numbers: a channel has no
+group field, groups may overlap, and a channel stored outside every range (slots 8 to 13, 350 and 421 and up) is in ALL only.
+**Each side (A and B) has its own group**; `A/B` brings the other side's group back. The groups are remembered when the radio
+is switched off.
+
+Press `BAND` on the main screen, then a digit key (`0` to `9`) to choose that group at once, or move with `UP` and `DOWN` and press
+`MENU`. Groups 10 to 15 have no digit.
+
+| # | Group | Short name | Channel numbers (the radio's own) |
+|---|---|---|---|
+| 0 | ALL | ALL | 1 to 1000 |
+| 1 | REPEATERS | RPT | 234 to 304 and 327 to 344 |
+| 2 | SIMPLEX | SMPLX | 351 to 380 |
+| 3 | GMRS | GMRS | 305 to 344 |
+| 4 | FRS | FRS | 305 to 326 |
+| 5 | MURS | MURS | 345 to 349 |
+| 6 | SATELLITES | SAT | 381 to 410 |
+| 7 | SONDE | SONDE | 411 to 420 |
+| 8 | WEATHER | WX | 1 to 7 |
+| 9 | AIR TRAFFIC | AIR | 168 to 233 |
+| 10 | RAILROAD | RAIL | 158 to 167 |
+| 11 | POLICE FIRE EMS | PD/FD | 14 to 105 |
+| 12 | FED & GOV | FED | 106 to 146 |
+| 13 | UTILITIES | UTIL | 147 to 157 |
+| 14 | FRS GMRS MURS | F/G/M | 305 to 349 |
+| 15 | CUSTOM RANGE | RANGE | any; see below |
+
+The ranges for groups 8 to 14 come from the upstream mod author's channel plan (a Las Vegas list: only WEATHER, FRS, GMRS and
+MURS are the same everywhere). A radio that came from the factory has its test channels in slots 1 to 22, so they fall in
+WEATHER and POLICE FIRE EMS whatever they are. The lists in `channels/` fill REPEATERS, SIMPLEX, GMRS, FRS, MURS, SATELLITES,
+SONDE and WEATHER; see [Loading from a computer](#loading-from-a-computer). Design notes for a different scheme are in
 [CHANNEL-GROUPS.md](CHANNEL-GROUPS.md); none of it is built.
 
-*No picture yet: the simulator does not draw the CH GROUPS menu.*
-
-**The CH GROUPS menu.** Press `BAND` on the main screen. The title is `CH GROUPS`, the current group has a `*` at the right,
-and the bottom strip reads `MENU use     EXIT back`.
+**The CH GROUPS menu** has the title `CH GROUPS`, the number of each group in front of its name, a `*` after the current group,
+and the strip `MENU or 0-9 use  EXIT back`.
 
 | Key | Action |
 |---|---|
-| `UP` / `DOWN` | Move through the groups. |
-| `MENU` | Use the highlighted group. The radio moves to the current channel if it is in the group, otherwise to the first stored channel of the group; if the group has none, the `NO CH IN` notice appears (below). |
-| Hold `MENU` | Does nothing extra: the keypad sends no long press for `MENU`, so holding it is the same as pressing it (use the group). The scan-at-once action exists in the firmware but cannot be reached. |
-| `EXIT` or `BAND` | Close the menu, no change. |
+| `UP`, `DOWN` | Move through the groups (wraps) |
+| `MENU` or a digit | Use the group. The radio stays on the current channel if it is in the group, otherwise goes to the group's first stored channel; if there is none, `NO CH IN ...` or `NO CHANNELS` shows |
+| `EXIT` or `BAND` | Close the menu, no change |
 
-The chosen group is remembered when the radio is switched off.
-
-**CUSTOM RANGE** asks for a start and a stop frequency (title `CUSTOM RANGE (MHZ)`; type six digits, MHz with three decimals,
-as on the main screen). `MENU` moves from START to STOP and then starts scanning that range in VFO mode; `UP` and `DOWN` change
-the step; `EXIT` clears what you typed, or goes back if nothing is typed. A range the radio cannot receive shows
+**CUSTOM RANGE** (group 15) opens a screen titled `CUSTOM RANGE (MHZ)` with START and STOP. Type six digits for each (MHz with
+three decimals), `MENU` moves from START to STOP and then starts scanning that range in VFO mode; `UP` and `DOWN` change the step;
+`EXIT` clears what you typed, or goes back. A range that is empty, backwards, or holds nothing the receiver covers shows
 `BAD RANGE, TRY AGAIN`.
 
-**The "NO CH IN ..." notice.** If you press `VFO/MR` to go to memory mode, or choose a group, and the current group has no stored
-channel, the radio stays where it is and shows a box with `NO CH IN WX` (or the short name of the group). For group ALL it reads
-`NO CHANNELS`. The box goes away by itself after a short time. It means "nothing is stored in this group's numbers", not a
-fault. Look in CHAN MGR (press `#` or `*` there to change group), or choose the group ALL.
+**`NO CH IN WX`** (or `NO CHANNELS` in ALL) is not a fault: nothing is stored in that group's numbers. Choose ALL, or look in
+[CHAN MGR](#chan-mgr). The box goes away by itself after a few seconds.
 
-## The APPS list (MENU)
+## Scanning
 
-*No picture yet: the simulator does not draw the APPS list.*
+Scanning happens on the main screen; there is no separate scan screen. The frequency or channel changes as it steps and the
+status bar reads `SCAN UP EXIT` or `SCAN DN EXIT` (`SCAN UP` / `SCAN DN` when another flag takes the room).
 
-Press `MENU` on the main screen. The title is `APPS`. Each row is a slot number and the app's name, for example `2 CHAN MGR`.
-An empty slot reads `EMPTY` with `----` at the right and cannot be opened. The bottom strip reads `MENU open    EXIT back`.
-If an app fails to load, a red box reads `APP DID NOT LOAD (n)`, where n is the loader's error code (the build tested on the
-radio showed a small red `LDERR n` at the bottom instead).
+* **Start:** hold `#`; or the SCAN key function (SETTINGS > KEYS); or finish typing a CUSTOM RANGE.
+* **Memory mode:** visits the stored channels of the current group that have IN SCAN LIST on. If there are none, the radio only beeps.
+* **VFO mode:** sweeps the band the frequency is in, not the synthesizer's whole range. The bands are AIR 118 to 137, 2M 144 to 148,
+  MURS 151.82 to 154.60, MARINE 156 to 162.025, WX 162.40 to 162.55, 1.25M 222 to 225, 70CM 420 to 450 and GMRS 462.55 to 467.725
+  MHz; elsewhere the megahertz the frequency is in. It never leaves the receive bands, skips the gaps, and wraps at the ends.
+  In CUSTOM RANGE it sweeps the range you typed.
+* **While it runs:** `UP` and `DOWN` set the direction and step at once. `EXIT` (pressed or held) or a held `#` stops it. `BAND` stops it and
+  opens the CH GROUPS menu. `PTT` does nothing until it has stopped.
+* **When it finds a signal** the SCAN RESUME setting decides: TIMED stays about 5 seconds and moves on; CARRIER stays while the signal
+  lasts and for about 5 seconds after; STOP holds about one second and then **ends the scan** on that channel. No key holds a
+  scan on a signal. No on-screen hint says which keys work while scanning.
 
-The slot numbers matter because a programmable key can open "APP n". The release build puts these apps in the slots:
+## The APPS list
+
+No picture exists (core screen). Press `MENU` on the main screen. The title is `APPS`; each row is the slot number and the
+app's name; a slot that holds no usable app reads `EMPTY` with `----` at the right and cannot be opened. The strip reads
+`MENU or 1-9 open  EXIT back`: a digit key opens the app in that slot. `EXIT` leaves an app and returns to where it was
+opened from: the APPS list when you opened it from there, the main screen when a key function opened it.
+
+The release puts these apps in the nine slots (`firmware/tools/build_release.py`). The slot number is also what a key function
+`APP n` refers to.
 
 | Slot | App |
 |---|---|
@@ -178,207 +240,165 @@ The slot numbers matter because a programmable key can open "APP n". The release
 | 8 | FSK PROBE |
 | 9 | FM |
 
-HAM TOOLS and TEXT are built with the release but are **not** in a slot by default (they are listed as "extras" in the
-release's `layout.json`). They are installed only if you put them in a slot; see `firmware/source-changes/install_apps.py`.
-Apps must be built for the same core firmware that is on the radio, or the list shows them as `EMPTY`.
+**HAM TOOLS and TEXT** are built with the release but are *extras*: they are not in a slot unless you put them there (the
+installer's app menu, or `install_apps.py` with an edited `layout.json`). TEXT gave slot 8 to FSK PROBE while the radio's
+modem is being characterised (it also transmits acknowledgements on its own).
+
+An app runs only if it was built for the same core. A mismatch reads `EMPTY`; see [Troubleshooting](#troubleshooting). If an
+app that looks valid fails while loading, a red box says `APP DID NOT LOAD (n)`: 1 bad package, 2 built for a different core
+(ABI hash), 3 bad segment, 4 too big, 5 checksum, 6 no stack, 7 the app memory is not where the app expects it.
 
 ## SETTINGS
 
-SETTINGS is app 1. It has seven groups. Use `UP` and `DOWN` and `MENU` to open one; `EXIT` leaves.
+SETTINGS (slot 1) has seven groups: RADIO, AUDIO, DISPLAY, KEYS, ANI / DTMF, SYSTEM and PRESETS. Every setting, its values and
+its default are in the [settings reference](#settings-reference). `UP`, `DOWN`, `MENU` open a group; `EXIT` leaves.
 
-![The SETTINGS list: RADIO, AUDIO, DISPLAY, KEYS, ANI / DTMF, SYSTEM and PRESETS.](img/settings-groups.png)
+![The SETTINGS list: RADIO, AUDIO, DISPLAY, KEYS, ANI / DTMF, SYSTEM and PRESETS, with the hint strip MENU open, EXIT back.](img/settings-groups.png)
+
+![The RADIO group: SQUELCH selected in blue, a scroll mark at the right edge, and the strip explaining the selected setting. The simulator's FREQ STEP is not the radio's default.](img/settings-radio.png)
 
 ### Changing a value
 
-1. Move to an item with `UP` and `DOWN`.
-2. Press `MENU`. The row turns amber and `^` and `v` appear around the value.
-3. `UP` and `DOWN` change the value. Pressing `0` sets it to its lowest choice (off, none, or the first in the list).
-   Pressing `#` puts it **back to its default**, the value a new settings record has, so you do not need to know what
-   it was (the strip says `#default`).
-4. Press `MENU` to **keep** the change, or `EXIT` to **undo** it and put the old value back. `#` is a change like any
-   other: it is not saved until you press `MENU`.
+1. Move to a setting with `UP` and `DOWN`. The strip under the list explains it in plain words, and for BATTERY SAVE, TX
+   INHIBIT, TX BANDS, ROGER BEEP, SCAN RESUME and the key settings it says what the *current value* does.
+2. Press `MENU`. The row turns amber with `^` and `v` around the value, and the strip shows `#default MENU ok EXIT undo`.
+3. `UP` and `DOWN` change the value. `0` sets the first choice (OFF, NONE, the lowest). `#` puts the value **back to its
+   default**.
+4. `MENU` keeps the change; `EXIT` undoes it and puts the old value back. The new value already works while you are choosing
+   it; `EXIT` restores the old one.
 
-A list longer than the screen has a small grey mark on its right edge showing how far down you are.
+![Changing AUTO KEYLOCK: the row is amber, the value has arrows, and the strip reads #default MENU ok EXIT undo.](img/settings-editing.png)
 
-**The strip at the bottom.** While you are only looking at a list, it explains the selected setting in plain words (for
-example `Higher mutes weak signals` under SQUELCH). A few lines follow the value: under BATTERY SAVE it says what the
-chosen step costs, under TX INHIBIT whether the radio can transmit, under TX BANDS which frequencies the chosen choice
-allows, and under a key setting what the assigned function does. (The keys are the same on every list: `MENU` changes the
-selected setting, `EXIT` goes back.) While a value is being changed the strip shows the keys instead:
-`#default MENU ok EXIT undo`. For numbers you type it reads `0-9 # default  MENU ok` (latitude and
-longitude: `0-9 * N/S # clear MENU ok` and `0-9 * E/W # clear MENU ok`); once you have pressed `#` it reads as for any other value.
+* `#` is itself a change: nothing is saved until `MENU`. It never loosens a transmit restriction. TX INHIBIT goes to ON. TX BANDS
+  goes back to FCC HAM only from FCC HAM or ALL; from any other choice the strip says `Choose TX BANDS by hand` and nothing changes.
+  BATTERY CAL goes back to the nominal 2537, which throws away a calibration you made with a voltmeter. `#` does nothing on VERSION,
+  RF CHIP ID, GRID LOCATOR and RESET ALL.
+* **`0` is not safe on TX INHIBIT:** while changing it, `0` selects OFF. `MENU` must still confirm, but take care.
+* Typed settings (RPT OFFSET, BATTERY CAL, LATITUDE, LONGITUDE): `MENU`, type digits, `MENU`. `EXIT` deletes a digit, and leaves
+  when nothing is typed. In LATITUDE and LONGITUDE `*` switches N and S, or E and W; latitude is two whole digits and four
+  decimals (`407100` is 40.7100 N), longitude three and four. BATTERY CAL asks for the true battery volts as three digits
+  (`785` is 7.85 V), and works out the calibration from them.
+* A scroll mark appears at the right edge of any list of more than seven rows.
+* FREQ STEP, BANDWIDTH, TX POWER, RX TONE, TX TONE, RPT SHIFT, RPT OFFSET and ANI CALL belong to the frequency on the main screen
+  (the source calls them RAM-only), not to the saved settings record.
+* **RESET ALL:** `MENU` turns the row amber and shows `HOLD #`. A second `MENU` does nothing, so a double press cannot reset the
+  radio. **Hold `#`** to erase the saved VFO data, the settings record, the saved channel state and the stock FM list, and restart. Channels, the channel
+  details and the FM station names are kept. After a reset TX INHIBIT is on again. `EXIT` cancels.
 
-![Changing AUTO KEYLOCK: the row is amber, the value has arrows, and the bottom strip reads UP/DN MENU save EXIT undo.](img/settings-editing.png)
+![RESET ALL armed: the row is amber and reads HOLD #, and the strip says HOLD # reset, EXIT cancel.](img/settings-reset-armed.png)
 
-![Browsing SETTINGS > SYSTEM: the strip under the list says what the selected TX BANDS choice allows.](img/settings-help.png)
-
-Notes:
-
-* The new value takes effect as soon as you change it, before you press `MENU`; `EXIT` restores the old value.
-* `#` works on every item that holds a value, including the numbers you type (RPT OFFSET, BATTERY CAL, LATITUDE and
-  LONGITUDE, where it means "no position"; the strip says `# clear`). It does nothing on VERSION, RF CHIP ID and RESET ALL.
-  **It never loosens a transmit restriction.** TX INHIBIT goes to ON. TX BANDS goes back to FCC HAM only when it is on FCC HAM
-  or ALL; from any narrower choice (CE HAM, GB HAM, PMR446, GMRS/FRS, CA HAM), from NONE and from the two 400-xxx choices the
-  strip says `Choose TX BANDS by hand` and nothing changes: pick it with `UP` and `DOWN`, as before. BATTERY CAL goes back
-  to the nominal 2537, which discards a calibration you made with a voltmeter.
-* Items that are numbers you type (RPT OFFSET, BATTERY CAL, LATITUDE, LONGITUDE): press `MENU`, type the digits, press `MENU`
-  to accept. `EXIT` deletes the last digit, and leaves the item when nothing is typed. In LATITUDE and LONGITUDE, `*`
-  switches between N and S, or E and W. Type latitude as four decimals after two integer digits (`407100` is 40.7100 N) and
-  longitude as three integer digits and four decimals.
-* Some RADIO items (FREQ STEP, BANDWIDTH, TX POWER, RX TONE, TX TONE, RPT SHIFT, RPT OFFSET) and ANI CALL change the frequency
-  currently on the main screen, not the stored settings. The source calls them "RAM-only".
-* RESET ALL: `MENU` turns the row amber and shows `HOLD #` (strip: `HOLD # reset  EXIT cancel`). A second `MENU` does nothing, so a double press cannot reset the radio; **holding `#` for about a second** erases the saved VFO data, the settings record, the saved channel state and the FM list and
-  restarts the radio. Channels are not erased. After a reset, TX INHIBIT is on again. Read from the source; not tried on a radio.
-
-### What is in each group
-
-Names and choices are from the source. What each one does on the air has not been checked on a radio.
-
-| Group | Items |
-|---|---|
-| RADIO | SQUELCH (0 to 9); FREQ STEP (2.50k to 100.00k); TX TIMEOUT (OFF, or 15 to 180 SEC in steps of 15); DUAL WATCH; BATTERY SAVE (OFF, 1 to 4); BUSY LOCKOUT; **TX INHIBIT**; BANDWIDTH (WIDE, NARROW); TX POWER (HIGH, LOW, MID); RX TONE; TX TONE; RPT SHIFT (OFF, +, -); RPT OFFSET; SCRAMBLER (OFF, 1 to 3); SCAN RESUME (TIMED, CARRIER, STOP); RIT (steps of 10 Hz, plus or minus 127); CH DISPLAY (FREQUENCY, NAME, NAME+FREQ) |
-| AUDIO | KEY BEEP; VOX; VOX LEVEL (1 to 9); VOX DELAY (0.5 to 2.0 S); TONE BURST (1000, 1450, 1750, 2100 Hz); SQ TAIL ELIM; RPT TAIL DLY (OFF, 100 to 1000 MS); ROGER BEEP (OFF, ROGER, MDC1200) |
-| DISPLAY | BACKLIGHT (ALWAYS ON, 5, 10, 15, 20 SEC); AUTO KEYLOCK (OFF, 5, 10, 15 SEC) |
-| KEYS | SIDE1 SHORT, SIDE1 LONG, SIDE2 SHORT, SIDE2 LONG, BAND LONG, VFO/MR LONG: see [below](#assigning-the-side-keys-band-and-vfomr-long-press) |
-| ANI / DTMF | ANI ON PTT; ANI CALL |
-| PRESETS | QUIET; BATTERY SAVER; SCANNING; REPEATER; DEFAULTS: see [Presets](#presets) |
-| SYSTEM | **TX BANDS** (the transmit-range lock); LATITUDE; LONGITUDE (used by HAM TOOLS' grid locator); GRID LOCATOR (type the position as a locator, see [below](#entering-your-position-as-a-grid-locator)); BATTERY CAL; BOOT SCREEN (OFF, LOGO); BOOT SOUND; VERSION (`MENU` opens the [about view](#about-version)); RF CHIP ID (opens the same view); RESET ALL |
-
-Defaults of a new settings record, from the source: TX INHIBIT on, TX BANDS `FCC HAM`, SQUELCH 3, TX TIMEOUT 120 s
-(8 steps), CH DISPLAY NAME+FREQ, backlight 10 SEC, key beep on, boot screen LOGO.
-
-![The SYSTEM group. The simulator starts from an empty settings record, so TX BANDS shows CE HAM here; a real radio's default is FCC HAM.](img/settings-system.png)
-
-### Entering your position as a grid locator
-
-SYSTEM > GRID LOCATOR shows the six-character Maidenhead locator of the stored position (for example `EM12kx`; `----` when no
-position has been entered). `MENU` opens an entry screen where you type a locator instead of latitude and longitude digit by
-digit; `MENU` sets LATITUDE and LONGITUDE to the **middle** of the square you typed.
-
-* Four characters (`EM12`) or six (`EM12kx`). Two letters, two digits, two letters.
-* **Digits** go straight in. **Letters** are typed as on a phone keypad: `2` is A B C, `3` is D E F, `4` G H I, `5` J K L,
-  `6` M N O, `7` P Q R S, `8` T U V, `9` W X Y Z. Press the key once for its first letter, again for the next. A different key, or
-  `#`, accepts the letter. For example `EM12kx` is `3 3`, `6`, `1`, `2`, `5 5`, `#`, `9 9`.
-* A place takes only the letters that belong there: the first two letters A to R, the last two A to X. Keys that do not fit
-  the place (a digit key where a letter goes, `8` for the first two letters) are ignored.
-* `EXIT` deletes the letter being chosen or the last character; with nothing typed it goes back without changing anything.
-  `MENU` with anything but four or six characters says `Need 4 or 6 characters`.
-* The conversion is checked by unit tests against known squares. The entry screen shows only the characters; the new latitude
-  and longitude appear in the SYSTEM list when you come back.
-
-### About (VERSION)
-
-`MENU` on SYSTEM > VERSION (or on RF CHIP ID) opens a read-only view titled ABOUT (it is a different part of the SETTINGS app, so it takes a moment to appear). `UP` and `DOWN` move its cursor and `EXIT`
-goes back.
-
-| Row | Shows |
-|---|---|
-| FIRMWARE | `UV-5RM OPEN FW` |
-| BUILD | `ON BOOT SCREEN`: the build's commit (the commit hash, with `-dirty` when it was built from changed files) is drawn on the boot screen, which appears only when BOOT SCREEN is LOGO. SETTINGS cannot read it from the firmware, so it is not repeated here |
-| RADIO, BOARD, MCU | `UV-5RM`, `5RHNRFB-YP07`, `AT32F421`: what this firmware is built for (fixed text; the radio is not asked) |
-| RF CHIP | the chip's id as the firmware reads it (same as RF CHIP ID) |
-| APP ABI | the interface hash the firmware was built with, for example `0x0C109B81`. An app runs only if it was built with the same value (otherwise the APPS list shows `EMPTY`) |
+![The SYSTEM group: TX BANDS selected, FCC HAM, and the strip saying what that choice allows. The simulator has no battery, so BATTERY CAL reads 0.00V.](img/settings-help.png)
 
 ### Presets
 
-SETTINGS > PRESETS changes several settings at once. Pressing `MENU` on a preset does **not** apply it: it opens a preview that
-lists exactly the settings it would change, each as `OLD>NEW` (a setting that already has the preset's value is left out).
-`MENU` applies the preset (the notice `PRESET APPLIED` shows); `EXIT` cancels and nothing changes. A preset that has nothing
-to change says `ALREADY SET`. Applying one is a one-time change: the settings are then ordinary settings you can change
-one by one, and applying a preset again later is the only way to get them back.
+PRESETS changes several settings at once. `MENU` on a preset opens a **preview** titled with the number of changes (`QUIET: 3
+CHANGES`) that lists exactly what would change as `OLD>NEW`; settings already at the preset's value are left out. `MENU` applies it
+(`PRESET APPLIED`); `EXIT` cancels. A preset with nothing to change shows `ALREADY SET`. Applying one is a one-time change: the
+settings stay ordinary settings afterwards.
 
-![The QUIET preview: three settings would change.](img/settings-preset-preview.png)
+![The QUIET preview: three settings would change, each shown as old>new, and the strip reads MENU apply, EXIT cancel.](img/settings-preset-preview.png)
 
 | Preset | Sets |
 |---|---|
 | QUIET | KEY BEEP off, ROGER BEEP off, BOOT SOUND off, BACKLIGHT 5 SEC |
-| BATTERY SAVER | BATTERY SAVE 3 (the receiver listens 0.1 s and sleeps 0.3 s once idle), BACKLIGHT 5 SEC, DUAL WATCH off, VOX off |
-| SCANNING | SCAN RESUME CARRIER (stay on a call until it ends), SQUELCH 4, BACKLIGHT 15 SEC |
+| BATTERY SAVER | BATTERY SAVE 3, BACKLIGHT 5 SEC, DUAL WATCH off, VOX off |
+| SCANNING | SCAN RESUME CARRIER, SQUELCH 4, BACKLIGHT 15 SEC |
 | REPEATER | BUSY LOCKOUT on, SQ TAIL ELIM on, TX TIMEOUT 60 SEC, VOX off |
 | DEFAULTS | SQUELCH 3, DUAL WATCH off, BATTERY SAVE off, KEY BEEP on, BACKLIGHT 10 SEC, SCAN RESUME CARRIER, VOX off, SQ TAIL ELIM on, ROGER BEEP off |
 
-A preset **never** changes TX INHIBIT, TX BANDS, your saved position (LATITUDE, LONGITUDE), the key assignments (SIDE1,
-SIDE2, BAND, VFO/MR), BATTERY CAL, the boot text and start-up tune, or what belongs to the frequency on the main screen
-(FREQ STEP, BANDWIDTH, TX POWER, tones, repeater shift and offset). Only the settings listed in the table can change: a unit test
-checks every byte of the settings record. DEFAULTS is the "factory" preset for these settings only; RESET ALL is the one that
-erases everything.
+A preset **never** touches TX INHIBIT, TX BANDS, the saved position, the key assignments, BATTERY CAL, the boot text and tune,
+or anything that belongs to the frequency on the main screen. A unit test checks the settings record byte by byte. DEFAULTS
+restores only the settings in its row; RESET ALL is the one that erases things. Presets that follow what the radio is doing
+(low battery, on the charger) would need the core; none exists.
 
-Presets are applied by you, when you open this screen. Presets that follow what the radio is doing (battery saver when the battery is
-low, quiet on the charger) would need the radio's own firmware to apply them, because this app only runs while it is open.
+### About (VERSION)
 
-## CHAN MGR (the channel manager)
+`MENU` on SYSTEM > VERSION or RF CHIP ID opens a read-only view titled `ABOUT`. It is a different part of the SETTINGS app, so
+it takes a moment to appear. `UP` and `DOWN` move its cursor; `EXIT` or `MENU` goes back.
 
-CHAN MGR (app 2) lists, edits, adds and deletes channels. It works on one channel group at a time.
+![The ABOUT view: firmware name, build note, radio, board, MCU, RF chip id and the app ABI value, with the simulator's chip id 0x0000.](img/settings-about.png)
 
-### The list
+| Row | Shows |
+|---|---|
+| FIRMWARE | `UV-5RM OPEN FW` |
+| BUILD | `ON BOOT SCREEN`: the commit is drawn on the boot screen (BOOT SCREEN must be LOGO); apps cannot read it |
+| RADIO, BOARD, MCU | `UV-5RM`, `5RHNRFB-YP07`, `AT32F421` (fixed text, not asked of the radio) |
+| RF CHIP | The chip id as the firmware reads it |
+| APP ABI | The interface hash this firmware was built with. An app runs only if it was built with the same value |
 
-![CHAN MGR list, group REPEATERS: two stored channels and a + NEW row. The title reads GROUP 1: REPEATERS.](img/chanmgr-group-list.png)
+### Grid locator
 
-* The title names the group: `GROUP 1: REPEATERS`. The digit is the one that picks the group from the BAND menu.
-* When you open CHAN MGR it starts in the radio's current group. **`*` and `#` step to the previous and next group.**
-* Each row is the channel number (the same number the main screen shows), the name and the receive frequency:
-  `01 K5RWK  147.1200` (in group ALL, the radio's own number: `234 K5RWK`).
-* The last row is `+ NEW`. A group with nothing stored shows only that row.
-* `UP` and `DOWN` move; `MENU` opens the highlighted channel, or starts a new one on `+ NEW`; `EXIT` leaves CHAN MGR.
-  The strip reads `MENU open   * # group`.
-* CHAN MGR is two programs that hand over to each other (the list, and the editor). You only notice when it happens: opening a
-  channel takes a moment longer than moving in the list, and leaving the editor puts you back on the row you came from, in the
-  same group and at the same scroll position (on `+ NEW` if you started a new channel and left without saving).
+SYSTEM > GRID LOCATOR shows the six-character Maidenhead locator of the stored position (`EM12kx`, or `----` when none is
+stored). `MENU` opens an entry screen where you type a locator instead of latitude and longitude; `MENU` sets both to the
+**middle** of the square you typed. Four characters (`EM12`) or six (`EM12kx`): two letters, two digits, two letters.
 
-![A group with nothing stored (FRS): only the + NEW row.](img/chanmgr-group-empty.png)
+* Digits go straight in. Letters are typed as on a phone: `2` is A B C, `3` D E F, `4` G H I, `5` J K L, `6` M N O, `7` P Q R S,
+  `8` T U V, `9` W X Y Z. Press the same key again for the next letter; a different key, or `#`, accepts the letter. `EM12kx` is `3 3`,
+  `6`, `1`, `2`, `5 5`, `#`, `9 9`.
+* A place takes only the letters that belong there (A to R first, A to X last). Other keys are ignored.
+* `EXIT` deletes the letter being chosen or the last character; with nothing typed it goes back unchanged. `MENU` with anything
+  but four or six characters says `Need 4 or 6 characters`.
 
-A new channel goes into the first empty slot inside the shown group. It starts with the frequency currently on the main screen,
-LOW power and IN SCAN LIST on.
-If the group has no empty slot left, `MENU` on `+ NEW` does nothing (no message is shown).
+![Entering a grid locator: EM12kx typed on the phone-style keys, the last letter still being chosen, and the strip Again=next letter, # ok.](img/settings-grid.png)
 
-### Opening a channel and its fields
+## CHAN MGR
 
-The title is the group and the channel's number in it (`REPEATERS 02`), or `NEW` and the number it will take (`NEW REPEATERS 03`; in ALL, `ALL 234`). The fields, top to bottom:
+CHAN MGR (slot 2) lists, edits, adds and deletes channels, one channel group at a time. It is two programs that hand over to
+each other (the list, and the editor): opening a channel takes a moment longer than moving in the list.
+
+![CHAN MGR list for group REPEATERS: two stored channels and a + NEW row. The title reads GROUP 1: REPEATERS and the strip lists the group keys.](img/chanmgr-group-list.png)
+
+**The list.** The title is `GROUP 1: REPEATERS`; the digit is the one that picks the group from the BAND menu (groups 10 to 15
+show their number too). It opens on the radio's current group. **`*` steps to the previous group and `#` to the next.** Each
+row is the channel number the main screen shows, the name and the receive frequency; the last row is `+ NEW`. `UP`, `DOWN` move;
+`MENU` opens the channel, or starts a new one on `+ NEW`; `EXIT` leaves. A new channel goes into the group's first empty slot,
+starting from the frequency on the main screen, LOW power and IN SCAN LIST on; if the group is full, nothing happens and no
+message is shown. A group with nothing stored shows only `+ NEW`.
+
+![A group with nothing stored (SIMPLEX): only the + NEW row.](img/chanmgr-group-empty.png)
+
+**The editor.** The title is the group and the channel's number (`REPEATERS 02`); a new channel reads `NEW REPEATERS 03`.
 
 | Field | What it is |
 |---|---|
-| FREQUENCY | Receive frequency. |
-| RPT SHIFT | OFF, `+` or `-`. |
-| RPT OFFSET | The shift. |
-| RX TONE, TX TONE | OFF, a CTCSS tone or a DCS code. |
-| TX POWER | HIGH, LOW or MID. |
-| BANDWIDTH | WIDE or NARROW. |
-| IN SCAN LIST | Whether scanning visits this channel. |
-| BUSY LOCKOUT | Blocks transmitting while the channel is busy. |
-| ANI CALL | `#1` to `#20` (a DTMF contact) or NONE. |
-| NAME | Up to 12 characters. |
-| SAVE | Writes the channel. |
-| (blank row) | A gap, never selected, so that DELETE is not next to SAVE. |
-| DELETE | Only for channels that already exist. |
+| FREQUENCY | Receive frequency. Type three digits of MHz and five of decimals (`14652000` is 146.52000 MHz); accepted at the eighth digit, or `MENU` earlier (missing digits count as zeros) |
+| RPT SHIFT, RPT OFFSET | OFF, `+` or `-`; the shift, three digits of MHz and four of decimals (`0006000` is 0.6000). The transmit frequency follows |
+| RX TONE, TX TONE | OFF, a CTCSS tone or a DCS code |
+| TX POWER | HIGH, LOW or MID |
+| BANDWIDTH | WIDE or NARROW |
+| IN SCAN LIST | Whether scanning visits this channel |
+| BUSY LOCKOUT | Stored in the channel; **the core does not read it** (see the note below) |
+| ANI CALL | `#1` to `#20` (a DTMF contact) or NONE |
+| NAME | Up to 12 characters |
+| SAVE | Writes the channel |
+| (blank row) | Never selected: it keeps DELETE away from SAVE |
+| DELETE | Only for channels that already exist |
 
-![The channel editor for channel 02 of group ALL. The bottom strip reads MENU edit, EXIT back. UP from the top row wraps to the bottom.](img/chanmgr-channel-editor.png)
+![The channel editor for channel 02 in group ALL (title ALL 02): FREQUENCY selected, a scroll mark at the right edge, strip MENU edit, EXIT back.](img/chanmgr-channel-editor.png)
 
-Keys, not editing: `UP`/`DOWN` move between fields (they wrap, and skip the blank row), `MENU` starts editing the field, `EXIT`
-goes back to the list. The strip reads `MENU edit    EXIT back` (on SAVE: `MENU save    EXIT back`; on DELETE: `MENU delete  EXIT back`);
-once anything has been changed, `back` becomes `discard`.
+`UP`, `DOWN` move between fields (wrapping, skipping the blank row), `MENU` starts changing a field, `EXIT` goes back to the list
+**on the row you came from**. The strip reads `MENU edit    EXIT back` (on SAVE `MENU save`, on DELETE `MENU delete`); once anything has been
+changed `back` becomes `discard`.
 
-**`EXIT` on the field list leaves at once if nothing was changed. If something was, the selected row turns amber and reads
-`DISCARD CHANGES?` (strip: `MENU discard  EXIT keep`). `MENU` throws the changes away; `EXIT` (or anything else but `MENU`)
-returns to the editor with the changes still there. Use SAVE to keep them.** What counts as a change is any difference from the
-channel as it was when the editor opened: a field set back to its old value is no change, and a name typed over a stock
-(`FF`-padded) blank name that reads the same is none either.
+* **Unsaved changes.** `EXIT` leaves at once if nothing changed. If something did, the row turns amber and reads `DISCARD
+  CHANGES?` (strip `MENU discard  EXIT keep`). `MENU` throws the changes away. `EXIT` goes back to editing with the changes
+  still there; **other keys do nothing**. Use SAVE to keep them. A field set back to its old value is no change, and typing over a
+  stock `FF`-padded blank name that reads the same is none either.
+* **Choice fields** (shift, tones, power, bandwidth, scan list, busy lockout, ANI call): `UP`/`DOWN` change, `MENU` keeps, `EXIT`
+  undoes, `0` selects the first choice. Strip `UP/DN  MENU ok  EXIT undo`. FREQUENCY and RPT OFFSET: `0-9 type MENU ok EXIT del`;
+  `EXIT` deletes a digit, or cancels when none is typed.
+* **SAVE** writes the channel and returns to the list on it, with a green `SAVED 01` for about a second and a half or until a key.
+* **DELETE** is the last row. `MENU` arms it (the row turns amber and reads `HOLD #`; strip `HOLD # delete EXIT cancel`). **Hold
+  `#`** to erase the channel; you return to the list with no notice. A second `MENU` or a short `#` does nothing; `EXIT` cancels.
 
-Keys while editing a field:
+![DELETE armed: the row is amber and reads HOLD #, the strip says HOLD # delete, EXIT cancel.](img/chanmgr-delete-armed.png)
 
-* Choice fields (shift, tones, power, bandwidth, scan list, busy lockout, ANI call): `UP`/`DOWN` change the value, `MENU` keeps
-  it, `EXIT` undoes it, `0` sets the first choice (OFF or NONE). The strip reads `UP/DN  MENU ok  EXIT undo`.
-* FREQUENCY and RPT OFFSET: type digits (`0-9 type MENU ok EXIT del`). For a frequency, type three digits of MHz and
-  five of decimals, for example `14652000` for 146.520 00 MHz; it is accepted after the eighth digit, or press `MENU` earlier
-  and the missing digits count as zeros. For the offset, type three digits of MHz and four of decimals (`0006000` is 0.6000).
-  `EXIT` deletes the last digit, or cancels if nothing is typed.
-* NAME: see the next section.
+![Unsaved changes: EXIT turned the row into DISCARD CHANGES? and the strip says MENU discard, EXIT keep.](img/chanmgr-discard.png)
 
-When the frequency or shift changes, the transmit frequency follows (receive frequency plus or minus the offset).
+![The green SAVED 01 notice over the channel list of group ALL after saving a channel.](img/chanmgr-saved.png)
 
-### Naming a channel
-
-Select NAME and press `MENU`. A cursor appears in the name. Letters are typed the way old mobile phones did it: press a key
-repeatedly to step through its letters; wait about a second, or press another key, to fix the letter.
+**Naming.** Select NAME and press `MENU`: a cursor appears. Letters are typed as on an old phone: press a key repeatedly to
+step through its characters; wait about a second or press another key to fix the letter.
 
 | Key | Characters, in the order they come up |
 |---|---|
@@ -393,469 +413,561 @@ repeatedly to step through its letters; wait about a second, or press another ke
 | `8` | `T` `U` `V` `t` `u` `v` `8` |
 | `9` | `W` `X` `Y` `Z` `w` `x` `y` `z` `9` |
 
-After the last character a key wraps to its first. Example: press `5` twice for `K` (once is `J`, three times `L`); seven
-presses give the digit `5`. The strip reads `0-9 UP/DN MENU ok EXIT del`.
+`UP` and `DOWN` move the cursor, `EXIT` deletes the character before it, `MENU` accepts the name (still not saved until SAVE), and a
+**held `EXIT`** leaves without accepting. The strip reads `0-9 UP/DN MENU ok EXIT del`. A name holds 12 characters.
 
-* `UP` and `DOWN` move the cursor left and right.
-* `EXIT` deletes the character before the cursor.
-* `MENU` accepts the name. It is still only part of the unsaved channel until you use SAVE.
-* A long press of `EXIT` leaves the name editor without accepting what you typed. (The strip does not say so.)
-* A name holds at most 12 characters.
+![Naming a channel: K5R typed with the multi-tap keys, the NAME row amber, the strip listing the keys.](img/chanmgr-naming.png)
 
-![Naming a channel: K5R typed with the multi-tap keys. The NAME row is amber while it is being edited, and the strip lists the keys.](img/chanmgr-naming.png)
+> **Busy lockout, as the code stands.** Only the BUSY LOCKOUT setting in SETTINGS > RADIO blocks PTT while the channel is busy
+> (`CHANNEL BUSY`). The per-channel BUSY LOCKOUT field is stored but nothing in the core reads it. The editor accepts any
+> frequency, including ones the receiver does not cover.
 
-### SAVE and DELETE
+## SEARCH/QT SCAN
 
-* **SAVE:** select the SAVE row and press `MENU`. The channel is written and you return to the list with the channel
-  selected. A box reading `SAVED 01` (green) shows for about a second and a half, or until you press a key.
+SEARCH/QT SCAN (slot 3) is one app with two screens, QT SCAN (it opens there) and SEARCH. `1` switches between them. It only
+receives.
 
-  ![The SAVED notice after saving channel 01.](img/chanmgr-saved.png)
+**QT SCAN** listens on the main-screen frequency. When a signal opens the squelch it reads the CTCSS tone or DCS code it
+carries: `WAITING...`, `DETECTING...`, `FOUND`.
 
-* **DELETE:** it is the last row, below a blank row, so it is never next to SAVE. Select DELETE and press `MENU`: the row turns
-  amber and reads `HOLD #` (strip: `HOLD # delete EXIT cancel`). **Hold `#` for about a second** to erase the channel (no notice
-  is shown; you return to the list). A second `MENU`, or a short press of `#`, does nothing; `EXIT` cancels. Asking and
-  answering are different keys on purpose, so a double press cannot delete a channel.
+![QT SCAN: a signal on 462.5625 MHz found carrying a 100.0 Hz tone. This app has a plain black screen without a title bar.](img/qtscan.png)
 
-  ![DELETE armed: the row is amber and the strip says what to hold.](img/chanmgr-delete-armed.png)
-
-  ![Unsaved changes: EXIT asks DISCARD CHANGES?](img/chanmgr-discard.png)
-
-Channels written by stock firmware or CHIRP have a name field padded with `FF` bytes. CHAN MGR treats that as an empty
-name, so you can type one. (This was found on the radio and fixed; the fix has not yet run on the radio.)
-
-## Assigning the side keys, BAND and VFO/MR long-press
-
-SETTINGS > KEYS holds six items:
-
-| Item | Press |
+| Key | Action |
 |---|---|
-| SIDE1 SHORT, SIDE1 LONG | short or long press of `SIDE1` |
-| SIDE2 SHORT, SIDE2 LONG | short or long press of `SIDE2` |
-| BAND LONG | long press of `BAND` (a short press of `BAND` always opens CH GROUPS and cannot be changed) |
-| VFO/MR LONG | long press of `VFO/MR` |
+| `UP`, `DOWN` | Start detecting again (when a tone was found) |
+| `MENU` | When found: use the tone as the receive tone (and as the transmit tone if it is CTCSS) on the main screen's current setup, and leave. In VFO mode it is kept with the VFO; in memory mode it is **not** written to the channel |
+| `1` | Switch to SEARCH |
+| `EXIT` | Leave |
 
-Each takes one of these choices:
+**SEARCH** finds the frequency of a nearby transmitter by counting its carrier and then reads its tone (`HUNTING...`, `LISTEN`,
+`FOUND`).
 
-| Choice | What it does |
+![SEARCH on UHF, hunting for a carrier.](img/search.png)
+
+| Key | Action |
 |---|---|
-| NONE | Nothing. |
-| BANDWIDTH | Toggles WIDE and NARROW for the active side. |
-| MONITOR | Toggles monitor (opens the squelch). |
-| AM/FM | Toggles the modulation. |
-| TX TONE | While the key is held, keys the transmitter and sounds the TONE BURST tone. |
-| SCAN | Starts scanning. |
-| TX POWER | Steps LOW, MID, HIGH. |
-| LIGHT | Toggles the flashlight. |
-| REVERSE | Swaps receive and transmit frequencies (for listening on a repeater's input). |
-| APP 1 to APP 9 | Opens the app in that APPS list slot. If the slot is empty nothing happens. |
+| `A/B` | Next band: UHF, VHF, 220M, 350M |
+| `UP`, `DOWN` | Start again (when found) |
+| `MENU` | When found: put the main screen in VFO mode on that frequency with the tone found, and leave |
+| `1` | Switch to QT SCAN |
+| `EXIT` (pressed or held) | Leave |
 
-![The KEYS group while choosing APP 4 for VFO/MR LONG. APP 4 is the app in slot 4 of the APPS list. The other items are NONE because the simulator starts from an empty settings record.](img/settings-keys.png)
+## SPECTRUM
 
-Things to know, all from the source (not yet run on a radio):
+SPECTRUM (slot 4) draws signal strength over a stretch of spectrum with a waterfall under it. It opens centred on the main-screen
+frequency and only receives.
 
-* **TX TONE works only as a SHORT choice** of `SIDE1` or `SIDE2`. Assigned to a LONG press it does nothing. It
-  keys the transmitter, so TX INHIBIT and TX BANDS apply to it.
-* The choice list skips two retired values (the old FM radio and search choices), so stepping never lands on a second NONE.
-* The defaults stored in a new settings record are SIDE1 SHORT = 5 (the removed FM-radio choice, which shows as NONE and does
-  nothing), SIDE2 SHORT = LIGHT; the long presses are NONE. To open the FM app from
-  a side key, choose APP 9 (if FM is in slot 9).
-* Pressing `0` while changing a value sets NONE.
+![SPECTRUM: a strong signal at 146.520 MHz marked by an amber triangle and a weaker one at 146.700 MHz, trace above and waterfall below, strip MENU tune peak, EXIT leave.](img/spectrum.png)
 
-## Transmit safety
+The light title bar shows the start and stop frequency. The strongest signal above the red dashed trigger line gets an amber
+triangle, and the line under the waterfall reads `PEAK` with its frequency and level. The line under that shows `ST` (step), `B`
+(bins), `D` (dwell), `T+` (trigger margin, dB), `C` (top of the scale, dBm), `G` (gain: a number, or `A` for automatic) and an
+`A` when auto-listen is on. The strip says what `MENU` will do.
 
-Three things decide whether PTT transmits. All three must allow it.
-
-1. **TX INHIBIT** (SETTINGS > RADIO). **On by default.** While on, PTT shows `TX INHIBIT IS ON` (`TX PROHIBITED` on the build
-   tested on the radio) and the radio does not transmit.
-   Leave it on until you have a dummy load on the antenna port.
-2. **TX BANDS** (SETTINGS > SYSTEM; called TX BAND LOCK in earlier builds and in AUDIT.md). The set of frequencies the
-   transmitter may use. **Default: FCC HAM.** Outside the chosen set, PTT shows `OUTSIDE TX BANDS`.
-3. The channel itself: a memory channel with no transmit frequency is receive-only and shows `RX-ONLY CHANNEL`. AM never transmits (it shows `OUTSIDE TX BANDS`).
-
-Also: TX TIMEOUT ends a transmission after the set time (default 120 seconds), and BUSY LOCKOUT stops PTT while the channel
-is busy (`CHANNEL BUSY`).
-
-### TX BANDS choices
-
-| Choice | Transmit allowed on |
-|---|---|
-| CE HAM | 144 to 146 MHz and 430 to 440 MHz |
-| **FCC HAM** (default) | 144 to 148, 222 to 225 and 420 to 450 MHz; FRS/GMRS 462.550 to 462.725 and 467.550 to 467.725 MHz; MURS 151.820 to 151.940 and 154.570 to 154.600 MHz |
-| GB HAM | 144 to 148 MHz and 430 to 440 MHz |
-| 400-430 | 137 to 174 MHz and 400 to 430 MHz |
-| 400-438 | 137 to 174 MHz and 400 to 438 MHz |
-| PMR446 | 446.00625 to 446.19375 MHz |
-| GMRS/FRS | 462.550 to 462.725 and 467.550 to 467.725 MHz, and the five MURS channels (151.820, 151.880, 151.940, 154.570, 154.600 MHz) |
-| CA HAM | 144 to 148 MHz and 430 to 450 MHz |
-| NONE | Nowhere: transmit is off on every frequency (called NO TX in earlier builds) |
-| ALL (called ALL BANDS in earlier builds) | 136 to 174 MHz **except the NOAA weather channels** (162.3875 to 162.5625 MHz are blocked), 220 to 260 MHz and 400 to 520 MHz. Nothing below 136 MHz. These are the limits the stock firmware reports for this radio |
-
-The same rule applies to VFO and memory channels. The 400-430 and 400-438 choices are the upstream mod's (they start at 137
-MHz, as in the source). There is no per-band power limit.
-
-ALL was narrowed from "the synthesizer's whole range" on 2026-11-11 and has not run on a radio. Whether the transmitter is
-clean across all of 136-174, 220-260 and 400-520 MHz has not been measured. Choosing it is your decision and your
-responsibility; the radio does not know your licence.
-
-Only one shipped app transmits: **TEXT**. It shows `TX BLOCKED: SEE SETTINGS` when TX INHIBIT or TX BANDS stops it. Every
-other app only receives. The `TX TONE` key function also transmits.
-
-## The apps
-
-Open an app from the APPS list. Every app leaves with `EXIT`, unless the app says otherwise. Keys are from the source of each
-app and have not been tried on a radio. Frames below come from the simulator's scenarios, in which every radio signal is
-scripted.
-
-### SPECTRUM
-
-A panadapter: a trace of signal strength over a stretch of spectrum, with a waterfall under it. It opens centred on the
-frequency on the main screen. It only receives.
-
-![SPECTRUM: a strong signal at 146.520 MHz marked by an amber triangle and a weaker one at 146.700 MHz, trace above and waterfall below.](img/spectrum.png)
-
-The light title bar shows the start and stop frequency of the window. The strongest signal that stands above the red dashed
-line (the trigger line, set with `*` / `#`) is marked with an amber triangle at the top of the trace, and the line under the
-waterfall gives its frequency and level (`PEAK`). That is exactly the frequency `MENU` tunes to. The second line shows `ST`
-(frequency step), `B` (bins), `D` (dwell), `T+` (trigger margin, dB), `C` (top of the scale, dBm), `G` (gain: a number, or
-`A` for automatic) and `A` when auto-listen is on. The strip at the bottom says what the keys do in the current state.
-
-**Going to the strongest signal:** press `MENU`. The radio's VFO is set to the marked frequency and SPECTRUM closes, so you are
-listening to it on the main screen. It is the same hand-over BAND SWEEP uses on a held `MENU`: the active side (A or B)
-switches to VFO mode on that frequency, with no CTCSS/DCS tone, and the memory channel it was on is left unchanged. If
-nothing is above the trigger line the box `NO SIGNAL` appears and SPECTRUM stays open (it never tunes to noise). The
-frequency is the sweep's own grid point (the window is anchored on the frequency you opened it on, in steps of `ST`), so with
-a coarse step the true signal can be a few kHz away; use `7` for a finer step first. "Strongest" is the highest of the latest
-reading of every bin, so it follows the signal as it changes rather than a stale peak. While auto-listen is playing a signal,
-`MENU` tunes to that one.
+**`MENU` tunes the VFO to the marked peak and leaves SPECTRUM.** The active side switches to VFO mode on that frequency with no
+tone, and the memory channel it was on is left unchanged. With nothing above the trigger line, `NO SIGNAL` shows and SPECTRUM
+stays open. The frequency is the sweep's own grid point (a step of `ST` from the centre you opened it on), so with a coarse step
+it can be a few kHz off the signal. "Strongest" is the highest of the latest reading of every bin.
 
 ![NO SIGNAL: MENU with nothing above the trigger line.](img/spectrum-no-signal.png)
 
-| Key | Action |
-|---|---|
-| `MENU` | Tune the VFO to the marked peak and leave (or `NO SIGNAL`). |
-| `UP` / `DOWN` | Move the window up or down by the pan step. |
-| `1` / `7` | Larger / smaller scan step. |
-| `2` / `8` | Larger / smaller pan step. |
-| `3` / `9` | Raise / lower the top of the scale. |
-| `*` / `#` | Raise / lower the trigger margin. |
-| `4` | Cycle the number of bins (128, 64, 32, 16). |
-| `5` | Type a centre frequency (six digits, MHz with three decimals), `MENU` to accept. |
-| `0` / `6` | Longer / shorter dwell per bin. |
-| `A/B` | Turn auto-listen on or off (this was `MENU` before). With it on, the app stops sweeping and plays the audio of the strongest signal above the trigger. |
-| `SIDE1` | Ignore the marked bin (a signal spills into the bins next to it: press again for each). |
-| `SIDE2` | Step the fixed gain through its choices, then back to automatic. |
-| `EXIT` | Leave without tuning. Any other key stops a listen first. |
+**`A/B` turns auto-listen on or off.** With it on the sweep stops on the strongest signal above the trigger and plays its audio.
+Any key stops the listening first; `MENU` then tunes to the strongest bin above the trigger line, which is normally the one you
+were hearing (the strip says `MENU tune here` while listening).
 
-### BAND SWEEP
-
-Repeated passes over a whole band, much wider than SPECTRUM, with a list of the strongest frequencies found. It only
-receives. Its bands are VHF (136 to 174 MHz), UHF (400 to 520), AIR (118 to 137), 220 (200 to 260), 350 (300 to 390) and a
-custom range.
-
-![BAND SWEEP over VHF: a graph on top and a list of hits with their strength and number of sightings.](img/bandsweep.png)
-
-The light title bar shows the start and stop frequency of the band and its name. Under the list, the status line shows the
-step (`ST25K` or `ST12.5K`), `T+` (detection margin), `D` (dwell) and `P` (pass count and time). The strip at the bottom says
-what the keys do in the current state (listening to a hit, typing a range, or sweeping). The selected hit is blue, as in the
-other lists, and the trace is green: red is only used while the radio transmits.
+![Auto-listen playing the strong signal: RX 146.520 MHz and the level, strip MENU tune here, EXIT leave.](img/spectrum-auto-listen.png)
 
 | Key | Action |
 |---|---|
-| `UP` / `DOWN` | Select a hit in the list. |
-| `MENU` | Listen to the selected hit (`RX` line). |
-| `MENU` while listening | Put that frequency on the main screen's VFO (no tone) and leave the app. |
-| `EXIT` while listening | Go back to the sweep. |
-| `A/B` | Next band (VHF, UHF, AIR, 220, 350). |
-| `1` | Switch the step between 25 and 12.5 kHz. |
-| `5` | Type a custom range: start, `MENU`, stop, `MENU` (six digits each, MHz with three decimals). |
-| `0` / `6` | Longer / shorter dwell. |
-| `*` / `#` | Raise / lower the detection margin. |
-| `SIDE1` | Remove the selected hit from the list. |
-| `EXIT` | Leave. |
+| `MENU` | Tune the VFO to the marked peak and leave (or `NO SIGNAL`) |
+| `UP`, `DOWN` | Move the window by the pan step |
+| `1`, `7` | Larger, smaller scan step |
+| `2`, `8` | Larger, smaller pan step |
+| `3`, `9` | Raise, lower the top of the scale |
+| `*`, `#` | Raise, lower the trigger margin |
+| `4` | Cycle the number of bins (128, 64, 32, 16) |
+| `5` | Type a centre frequency (six digits, MHz with three decimals), `MENU` to accept |
+| `0`, `6` | Longer, shorter dwell per bin |
+| `A/B` | Auto-listen on or off |
+| `SIDE1` | Ignore the marked bin (a signal spills into the bins next to it: press again for each) |
+| `SIDE2` | Step the fixed gain through its choices, then back to automatic |
+| `EXIT` | Leave without tuning |
 
-A known quirk (AUDIT.md row 16): the list shows the sweep's grid frequency, which can be a few kHz off the signal's true
-frequency.
+## BAND SWEEP
 
-### FOX HUNT
+BAND SWEEP (slot 5) makes repeated passes over a whole band, much wider than SPECTRUM, and keeps a list of the strongest
+frequencies it found. It only receives. Bands: VHF (136 to 174 MHz), UHF (400 to 520), AIR (118 to 137), 220 (200 to 260), 350 (300
+to 390) and a custom range.
 
-A large signal meter that says whether a transmitter is getting stronger or weaker, and a rough distance once you have
-calibrated it. It only receives. It starts on the frequency on the main screen with the audio on and the backlight held on; `1` turns the audio off and on (the display then shows `MUTED`).
+![BAND SWEEP over VHF: a graph on top, a list of hits with strength and sighting count, and the strip MENU hear, A/B band.](img/bandsweep.png)
 
-![FOX HUNT: a strong signal at 146.52 MHz, a red bar, the word MEASURING and a peak value.](img/foxhunt.png)
+The title bar shows the start and stop of the band and its name. The line under the list shows the step (`ST25K` or `ST12.5K`),
+`T+` (detection margin), `D` (dwell) and `P` (pass number and time). The selected hit is blue and the trace is green.
 
-| Key | Action |
-|---|---|
-| `1` | Audio on or off. |
-| `5` | Type a frequency (six digits, MHz with three decimals), `MENU` to accept. |
-| `MENU` | Calibrate the distance: when you are at a known distance from the signal, press `MENU`, type the distance in tenths of a mile (`1` `0` is 1.0 mile), `MENU`. Needs a signal first. |
-| `0` | Reset the calibration and the peak. |
-| `EXIT` | Leave (from the entry screens: back to the meter). |
+**`MENU` hears the selected hit** (an `RX` line with its frequency and level). **`MENU` again tunes the main screen's VFO to it (no
+tone) and leaves**; `EXIT` goes back to the sweep instead.
 
-The bar and a word (`CLOSER +`, `FARTHER -`, `SAME`, `MEASURING`, `TOO STRONG`) say how the signal is changing. After
-calibration the app shows `ABOUT x MI`, a rough range based on 20 dB per tenfold distance in the open and about 40 dB in
-clutter. Treat it as a guide only.
-
-![Entering the distance in miles for calibration.](img/foxhunt-distance.png)
-
-### RPT FINDER (repeater finder)
-
-While someone is talking on a repeater's output, it looks at the usual input frequencies for the same traffic and tries to read
-the tone. It only receives. Tune the main screen to the repeater's output frequency first.
-
-![RPT FINDER waiting for traffic on 146.940 MHz, with two candidate input frequencies.](img/rptfinder.png)
-
-It checks inputs at -600 and +600 kHz (144 to 148 MHz), -1.6 MHz (222 to 225 MHz), +/-5 MHz (420 to 450 MHz) and +5 MHz in
-the GMRS repeater output range. The status line reads `NO STANDARD OFFSET`, `CHECKING INPUTS`, `WAITING FOR TRAFFIC` or
-`READING TONE`. Each candidate shows how often it was seen and its tone (`NO TONE`, `TONE --`, or for example `100.0Hz`).
+![Listening to a hit: RX 146.525 MHz and the level, strip MENU tune, EXIT sweep.](img/bandsweep-listening.png)
 
 | Key | Action |
 |---|---|
-| `UP` / `DOWN` | Switch between the two candidates, when there are two. |
-| `MENU` | Once a candidate has been seen, ask for a channel number to save it to. |
-| `EXIT` | Leave. |
+| `UP`, `DOWN` | Select a hit (holding repeats) |
+| `MENU` | Hear the selected hit; again: tune the VFO to it and leave |
+| `EXIT` | While hearing: back to the sweep. Otherwise: leave |
+| `A/B` | Next band (VHF, UHF, AIR, 220, 350) |
+| `1` | Step 25 kHz or 12.5 kHz |
+| `5` | Type a custom range: start, `MENU`, stop, `MENU` (six digits each, MHz with three decimals; 16 to 560 MHz) |
+| `0`, `6` | Longer, shorter dwell |
+| `*`, `#` | Raise, lower the detection margin |
+| `SIDE1` | Remove the selected hit |
 
-![The save prompt: type the channel number.](img/rptfinder-save.png)
+![Typing a custom range: START 144 so far, strip MENU next, EXIT back.](img/bandsweep-range.png)
 
-To save, type a channel number from 1 to 1000 (up to four digits) and press `MENU`. The channel gets the output as receive
-frequency, the input as transmit frequency, the tone on transmit, LOW power, narrow if the radio was narrow, scan on, and the name
-`RPT 146.940`. **It never overwrites a channel:** if the number is in use it shows `CH n IN USE`; a bad number shows
-`BAD CHANNEL`. `EXIT` goes back. With simple on/off traffic in the simulator the app was still checking after two minutes
-(AUDIT.md row 16); how fast it concludes on real repeaters is unknown.
+The list shows the sweep's grid frequency, which can be a few kHz off the signal's true frequency (AUDIT 16).
 
-### SEARCH/QT SCAN
+## FOX HUNT
 
-One app, two screens. It opens on QT SCAN. Press `1` to switch to the other screen and back. It only receives.
+FOX HUNT (slot 6) is a large signal meter that says whether a transmitter is getting stronger or weaker, and a rough distance
+once you have calibrated it. It only receives. It starts on the main-screen frequency with the audio on and the backlight held
+on. Its look is older than the shared one (dark red title bar).
 
-**QT SCAN** listens on the main-screen frequency. When a signal opens the squelch it reads the CTCSS tone or DCS code it
-carries.
-
-![QT SCAN: a signal on 462.5625 MHz carrying a 100.0 Hz tone.](img/qtscan.png)
-
-| Key | Action |
-|---|---|
-| `UP` / `DOWN` | Start detecting again (when a tone was found). |
-| `MENU` | When found: store the tone as the receive tone, and also as the transmit tone if it is CTCSS, on the main screen's current setup, and leave. In VFO mode it is saved with the VFO; in memory mode it is not written to the channel. |
-| `1` | Switch to SEARCH. |
-| `EXIT` | Leave. |
-
-**SEARCH** finds the frequency of a nearby transmitter by counting its carrier, then reads the tone. `HUNTING...`, `LISTEN` and
-`FOUND` show its progress. It is for finding the frequency of a signal you cannot identify.
-
-![SEARCH on UHF, hunting.](img/search.png)
+![FOX HUNT: a signal at 146.52 MHz, a red bar, the word MEASURING and the peak, with the key line at the bottom.](img/foxhunt.png)
 
 | Key | Action |
 |---|---|
-| `A/B` | Next band: UHF, VHF, 220M, 350M. |
-| `UP` / `DOWN` | Start again (when found). |
-| `MENU` | When found: set the main screen to that frequency (VFO mode) with the tone found, and leave. |
-| `1` | Switch to QT SCAN. |
-| `EXIT` (short or long) | Leave. |
+| `1` | Audio on or off (`MUTED` shows) |
+| `5` | Type a frequency (six digits, MHz with three decimals; 16 to 560 MHz), `MENU` to accept |
+| `MENU` | Calibrate the distance: at a known distance from the signal press `MENU`, type the distance in tenths of a mile (`10` is 1.0 mile), `MENU`. It needs a signal first (`NEEDS A SIGNAL FIRST`) |
+| `0` | Reset the calibration and the peak |
+| `EXIT` | Leave (from an entry screen: back to the meter) |
 
-### TEXT
+The word under the bar says how the signal is changing: `CLOSER +`, `FARTHER -`, `SAME`, `MEASURING`, `TOO STRONG`. After
+calibration it shows a range such as `ABOUT 0.3-0.5 MI`, from 20 dB per tenfold distance in the open and about 40 dB in clutter,
+or `UNDER 0.1 MI`. Treat it as a guide only.
 
-Short text messages between two radios using the radio chip's FSK modem. **It transmits.** Both radios must run TEXT on the same
-frequency. The frequency is the one on the main screen when you open the app; the light title bar shows it and `LOW` or `HIGH` power. The
-title turns red and reads `TX` for as long as the transmitter is actually keyed (each try, and each automatic confirmation),
-and only then. The strip at the bottom shows the keys, or a notice, or `TRY n OF 8` while a message is being repeated.
+![Entering the calibration distance in tenths of a mile.](img/foxhunt-distance.png)
 
-> **A radio with TEXT open answers messages by transmitting on its own.** A message is repeated up to eight times until the
-> other radio confirms it. Use it only on a frequency where you are licensed and permitted to send digital data, on simplex.
-> TEXT has never been tested on the air; the simulator transmits into a model.
+## RPT FINDER
 
-![TEXT with "HI" typed. The key letters are listed at the top.](img/text.png)
+RPT FINDER (slot 7) looks for a repeater's input. While someone talks on the repeater's output, it checks the usual input
+frequencies for the same traffic and tries to read the tone. It only receives. Tune the main screen to the repeater's **output**
+frequency first. Its look is older than the shared one.
 
-![TEXT at the moment the transmitter is keyed: the title bar is red and reads TX.](img/text-on-air.png)
+![RPT FINDER waiting for traffic on 146.940 MHz, with two candidate inputs, 600 kHz below and above.](img/rptfinder.png)
 
-| Key | Action |
-|---|---|
-| `0` to `9` | Type with the multi-tap keys, upper case only. `0` is space (again for the digit 0); `1` gives `. , ? ! - / 1`; `2` gives `A B C 2`; `3` `D E F 3`; `4` `G H I 4`; `5` `J K L 5`; `6` `M N O 6`; `7` `P Q R S 7`; `8` `T U V 8`; `9` `W X Y Z 9`. The letter is fixed after about a second. A message holds up to 50 characters. |
-| `MENU` | Send the typed message. |
-| `*` | Send a numbered test message (`PING 1`, `PING 2`, ...). |
-| `A/B` | Switch between LOW and HIGH power. |
-| `UP` / `DOWN` | Scroll the message list. |
-| `EXIT` | While sending: stop retrying (`STOPPED: NOT CONFIRMED`). Otherwise delete the last typed character; with nothing typed, leave. |
-| Hold `EXIT` | Leave. |
-| Hold `#` twice | Erase all stored messages (the first hold asks `HOLD # AGAIN TO ERASE ALL`). |
-
-Messages are kept in the radio's flash memory until overwritten or erased. Notices include `NEW MESSAGE`, `DELIVERED`,
-`NOT CONFIRMED`, and `TX BLOCKED: SEE SETTINGS` when TX INHIBIT or TX BANDS stops it.
-
-### FM
-
-The FM broadcast receiver, 87.5 to 108.0 MHz, with a list of saved stations that can have names. Broadcast FM uses a
-separate tuner chip, so it is an app and not a VFO band; typing a frequency in that range on the main screen in VFO mode
-(`0981` and so on) opens this app already tuned to it, and `EXIT` returns to the main screen. Nothing about this app has
-been checked on the radio yet; the pictures are from the simulator, which has a made-up tuner (signals at 90.1, 94.5, 98.1,
-101.1 and 104.5 MHz) and a made-up station list.
-
-![The tuner on a saved station.](img/fm.png)
-
-The tuner shows the frequency in large digits, the station's name and its detail line (a format or a city) under it, the
-step arrows either side, and a scale along the bottom with a mark for every saved station and a marker at the tuned
-frequency. The four bars at the right of the title bar are the signal strength. A frequency that is not in the list shows
-`Not saved`.
+It checks -600 and +600 kHz (144 to 148 MHz), -1.6 MHz (222 to 225 MHz), -5 and +5 MHz (420 to 450 MHz) and +5 MHz for GMRS
+repeater outputs. The status line reads `NO STANDARD OFFSET`, `CHECKING INPUTS`, `WAITING FOR TRAFFIC`, `READING TONE`. Each
+candidate shows how often it was seen and its tone (`NO TONE`, `TONE --` or for example `100.0Hz`).
 
 | Key | Action |
 |---|---|
-| `UP` / `DOWN` | Tune 0.1 MHz up or down (holding repeats). |
-| Hold `UP` / `DOWN` | Seek to the next signal (`SEEKING` shows; only `EXIT` is heard meanwhile). |
-| `#` / `*` | Jump to the next / previous saved station, by frequency. |
-| `0` to `9` | Type a frequency in amber: `981` is 98.1 MHz and `1015` is 101.5. Three digits are taken as soon as a fourth could not make a valid frequency; `0981` also works. Outside 87.5 to 108.0 shows `RANGE 87.5-108.0`. |
-| `MENU` | Open the station list. |
-| `EXIT` | Clear a half-typed number, otherwise leave. |
+| `UP`, `DOWN` | Switch between the two candidates |
+| `MENU` | Once a candidate has been seen, ask for a channel number to save it to |
+| `EXIT` | Leave |
 
-![Typing a frequency.](img/fm-typing.png)
+![The save prompt: type the radio's own channel number.](img/rptfinder-save.png)
 
-**The station list** (`MENU`) is a list like the others: blue is the row you are on, a speaker marks the station that is
-playing, and the frequency is on the right. It opens on the station that is playing.
+To save, type the radio's own channel number from 1 to 1000 (up to four digits) and press `MENU`. The channel gets the output as
+its receive frequency, the input as its transmit frequency, the tone, LOW power, narrow if the radio was narrow, scan on, and the
+name `RPT 146.940`. **It never overwrites a channel**: if the number is in use it shows `CH n IN USE`; a bad number shows `BAD
+CHANNEL`; success shows `SAVED TO CH n`. Pick a number inside the REPEATERS range (234 to 304 or 327 to 344) if you want it in that
+group. How quickly it concludes on real repeaters is unknown (in the simulator, with simple on/off traffic, it was still checking
+after two minutes).
 
-![The station list.](img/fm-list.png)
+## FSK PROBE
+
+FSK PROBE (slot 8) is a bring-up tool for people debugging the radio chip's FSK modem, not for ordinary use: does the modem hear
+anything, and what do its registers say? It only receives. It starts on 404.800 MHz (the Fort Worth radiosonde) at 4800 baud with the
+RS41 frame header as the sync word, a four-byte sync match and frames of 316 bytes after the sync (158 words). The title bar is dark
+red and says `RX ONLY`. The crystal, the sync words, the bit order and whether the modem hears a real signal at all are
+**unverified on this radio**; the test steps are in [SONDE-APP.md](SONDE-APP.md) and the register notes in
+[HARDWARE.md](../HARDWARE.md).
+
+![FSK PROBE with the modem on and a quiet channel: RSSI, sync word, counters SYN, WRD, FRM and CUT, a register peek and the key lines.](img/fskprobe.png)
+
+The counters are `SYN` (syncs), `WRD` (words), `FRM` (whole frames) and `CUT` (frames that stopped early). The row near the bottom
+lists five options, `LEN` (316, 256 or 2048 bytes), `TH` (words per interrupt, 1 or 4), `INV` (invert received data), `BW` (receive
+bandwidth 2.4 or 1.2) and `S` (sync length, 4 or 2 bytes); the selected one is yellow.
+
+![FSK PROBE with every option changed from its default: LEN 2048, TH 4, INV+, BW 1.2, S2.](img/fskprobe-options.png)
 
 | Key | Action |
 |---|---|
-| `UP` / `DOWN` | Move. |
-| `MENU` | On a station: tune to it and go back to the tuner. On `+ SAVE THIS`: save the tuned frequency. |
-| `*` | On a station: arm a delete (the row turns amber); `MENU` confirms, `EXIT` or a move cancels. |
-| `EXIT` | Back to the tuner. |
+| `MENU` | Modem on or off |
+| `*` | Next frequency (404.800, 144.390, 146.520, 446.000, 434.714 MHz) |
+| `1` to `4` | Baud rate 450, 1200, 2400, 4800 |
+| `5` to `9` | Sync word: `7E7E`, `2DD4`, `AAAA`, the RS41 header (`8`), the RS41 header in the other bit order (`9`) |
+| `A/B` | Pick which option `0` changes |
+| `0` | Change that option; the modem is reconfigured at once |
+| `UP`, `DOWN` | Pick the register shown at the bottom |
+| `#` | Start a capture, or stop the one running |
+| `EXIT` | Modem off (ending any capture) and leave |
 
-![Saving the tuned frequency.](img/fm-save.png)
+**Capture.** `#` records every word the modem delivers, with its time, sync flag and signal strength. The screen shows `ERASING` for a
+moment (the app erases 32 sectors of flash first), then `REC` with a count, and `SAVED` with the total when `#`, `MENU` or `EXIT` ends it.
+While it runs only `MENU`, `UP`, `DOWN`, `#` and `EXIT` work, so frequency, baud, sync and options cannot change. It holds 16,352
+records (about 55 seconds of continuous 4800 baud), then shows `REC FULL`. It can only write inside its own 128 KB of the radio's
+flash (0x1B0000 to 0x1D0000); any other address faults the app instead of writing. Each capture replaces the last.
 
-`+ SAVE THIS` is the first row whenever the tuned frequency is not in the list. A frequency saved on the radio has no
-name (the list shows `(unnamed)`); names come from the computer, below. New stations are added at the end of the list;
-the list keeps the order of the file it came from. It holds 127 stations; the last one shows `LIST FULL`.
+![FSK PROBE recording: REC with a count in red, the options frozen.](img/fskprobe-capture.png)
 
-**Station names from a computer.** Write the stations as a CSV (a CHIRP export works: only `Name`, `Frequency` and
-`Detail` are read; the file for the Dallas area is `channels/fm/dallas.csv`, and nothing about it is built into the app),
-check it, and install it through the programming port:
+To copy a capture to the computer, leave the app (the radio must be on its main screen) and run:
+
+```
+python3 firmware/source-changes/probe_capture.py PORT my-capture.bin
+```
+
+It prints a summary (records, syncs, time between words, signal strength, the options recorded in the header) and writes
+`my-capture.csv` beside the file. It only reads, and only that range, and never overwrites an existing file.
+
+## FM
+
+FM (slot 9) is the broadcast receiver, 87.5 to 108.0 MHz, with a list of saved stations that can have names. Broadcast FM uses a
+separate tuner chip, so it is an app and not a VFO band. Typing a frequency in that range on the main screen opens it already tuned
+(`098100` opens it on 98.1). Opened from the APPS list it starts on 100.0 MHz. **Nothing about this app has been seen on the radio**;
+the pictures are from the simulator, which has a made-up tuner (signals at 90.1, 94.5, 98.1, 101.1 and 104.5 MHz) and a made-up station
+list.
+
+![The tuner on a saved station: large 7-segment digits, the name KERA, its detail line, signal bars at the top right, step arrows and a tuning scale with a mark for every saved station.](img/fm.png)
+
+The tuner shows the frequency in large digits, the station's name and detail line (a format or a city; `Not saved` when the
+frequency is not in the list) and a scale along the bottom with a mark per saved station and a marker at the tuned frequency. The
+four bars at the right of the title bar are the signal strength.
+
+| Key | Action |
+|---|---|
+| `UP`, `DOWN` | Tune 0.1 MHz up or down (holding repeats; wraps at the ends of the band) |
+| Hold `UP`, `DOWN` | Seek to the next signal. `SEEKING` shows and only `EXIT` is heard until it ends (it gives up after three seconds) |
+| `#`, `*` | Jump to the next, previous saved station by frequency (`NO SAVED STATIONS` if none) |
+| `0` to `9` | Type a frequency, shown in amber: `981` is 98.1 MHz, `1015` is 101.5. Three digits are taken as soon as a fourth could not make a valid frequency (`981` yes, `100` waits for a fourth); `0981` also works. Outside 87.5 to 108.0: `RANGE 87.5-108.0` |
+| `MENU` | Open the station list |
+| `EXIT` | Clear a half-typed number, otherwise leave |
+
+![Hold UP: the tuner is seeking and says SEEKING.](img/fm-seek.png)
+
+![Typing a frequency: 98 so far in amber, the strip 0-9 type, EXIT clear.](img/fm-typing.png)
+
+**The station list** (title `STATIONS`, `MENU`) is a list like the others: blue is your row, a speaker marks the station that is
+playing, the frequency is on the right, and it opens on the station that is playing.
+
+![The station list: the playing station has a speaker mark and is selected; strip MENU play, * delete.](img/fm-list.png)
+
+| Key | Action |
+|---|---|
+| `UP`, `DOWN` | Move |
+| `MENU` | On a station: tune to it and go back to the tuner. On `+ SAVE THIS`: save the tuned frequency |
+| `*` | On a station: arm a delete (the row turns amber). `MENU` confirms; `EXIT` or a move cancels |
+| `EXIT` | Back to the tuner |
+
+![A delete armed: the row is amber and the strip says MENU confirm, EXIT cancel.](img/fm-delete-armed.png)
+
+`+ SAVE THIS` is the first row whenever the tuned frequency is not in the list. Notices: `SAVED`, `DELETED`, `LIST FULL`.
+
+![Saving the tuned frequency: the + SAVE THIS row is selected.](img/fm-save.png)
+
+A station saved on the radio has no name (the list shows `(unnamed)`); names come from the computer, below. New stations go at the
+end, so the list keeps the order of the file it came from, not frequency order. It holds 127 stations. Without a table the app
+shows the 30 bare frequencies the stock list held, and the first save or delete moves them into a table.
+
+**Station names from a computer.** Write the stations as a CSV (a CHIRP export works: only `Name`, `Frequency` and `Detail` are read;
+`channels/fm/dallas.csv` is an example, and nothing about it is built into the app) and install it. The installer's step 5 does it;
+by hand:
 
 ```
 python3 firmware/source-changes/fm_stations.py build my-stations.csv -o build-out/my-stations.fmst
 python3 firmware/source-changes/fm_stations.py install PORT build-out/my-stations.fmst --before build-out/fm-before.bin
 ```
 
-A name is at most 12 printable ASCII characters (it is not truncated; the build fails instead), a detail at most 16, the
-frequency a multiple of 0.1 MHz from 87.5 to 108.0. The name does not need to repeat the frequency: the app shows both.
-Installing replaces the whole list, including stations saved on the radio (`--before` keeps a copy of what was there;
-`fm_stations.py show FILE` reads one). It needs a core with the `F` programming-port command; an older core answers with an
-error and nothing is written. RESET ALL clears the 30-station list the stock firmware kept, not this one.
+A name is at most 12 printable ASCII characters (it is not cut: the build fails), a detail at most 16, the frequency a multiple of
+0.1 MHz from 87.5 to 108.0, at most 127 stations. **Installing replaces the whole list, including stations saved on the radio**
+(`--before` keeps a copy; `fm_stations.py show FILE` reads one). It needs a core that has the `F` programming-port command; an older
+core answers with an error and nothing is written. RESET ALL clears the stock 30-station list, not this table. Not tried on a radio.
 
-Without a table the app shows the 30 bare frequencies the earlier version saved, and the first save or delete moves
-them into a table. A table that is damaged is ignored in the same way.
+## HAM TOOLS
 
-### HAM TOOLS
-
-Four small tools: station-ID timer, stopwatch, wavelength calculator and grid locator. It only receives. It is built with
-the release but is not in a slot by default (see [APPS list](#the-apps-list-menu)). **Leaving the app loses the timers.**
-`A/B` moves to the next tool.
+HAM TOOLS is an *extra* (not in a slot by default). Four small tools: station-ID timer, stopwatch, wavelength calculator and
+grid locator. It only receives. `A/B` moves to the next tool. **Leaving the app loses the timers.** While the ID timer is armed or
+the stopwatch is running, a short `EXIT` only shows `HOLD EXIT: TIMER RUNS`; **hold `EXIT`** to leave. It has its own look (dark
+red title bar).
 
 | Tool | Keys |
 |---|---|
-| ID TIMER | `MENU`: "I just identified", restart the countdown. `*`: arm or disarm. `UP`/`DOWN`: set the interval, 1 to 30 minutes in 1-minute steps (only while disarmed). Default 10 minutes. When overdue it flashes `ID NOW`, holds the backlight on and beeps every 30 seconds (the beep follows KEY BEEP). |
-| STOPWATCH | `MENU`: start/stop. `*`: lap (four laps shown). `0`: reset. |
-| WAVELENGTH | Type the frequency in kHz (six digits). `*` clears. Shows full, half and quarter wave and a quarter wave at velocity factor 0.95. |
-| GRID LOCATOR | Shows the six-character Maidenhead locator for the position in SETTINGS > SYSTEM > LATITUDE and LONGITUDE; `NO POSITION SET` until you enter it. |
-
-While the ID timer is armed or the stopwatch is running, a short `EXIT` only shows `HOLD EXIT: TIMER RUNS`; hold `EXIT` to
-leave.
+| ID TIMER | `MENU`: "I just identified", restart the countdown. `*`: arm or disarm (and restart). `UP`, `DOWN`: set the interval, 1 to 30 minutes in 1-minute steps, only while disarmed. Default 10 minutes. When overdue it shows `ID NOW`, holds the backlight on and beeps every 30 seconds (the beep follows KEY BEEP) |
+| STOPWATCH | `MENU`: start or stop. `*`: lap (the last four are shown). `0`: reset |
+| WAVELENGTH | Type the frequency in kHz (six digits). `*` clears. Shows the full, half and quarter wave and a quarter wave at velocity factor 0.95 |
+| GRID LOCATOR | Shows the Maidenhead locator of the position in SETTINGS > SYSTEM; `NO POSITION SET` until you enter one |
 
 ![HAM TOOLS station-ID timer, armed, counting down from 10:00.](img/hamtools-idtimer.png)
 
+![HAM TOOLS stopwatch running with two laps.](img/hamtools-stopwatch.png)
+
 ![HAM TOOLS wavelength calculator for 446.000 MHz.](img/hamtools-wavelength.png)
 
-### FSK PROBE
+![HAM TOOLS grid locator for a stored position in New York: FN30ar.](img/hamtools-grid.png)
 
-A bring-up tool: does the radio chip's FSK modem hear anything, and what do its registers say? It only receives and is for
-people debugging the radio, not for ordinary use. Its source says the crystal, the sync words and whether the modem hears a
-real signal at all are all unverified on this radio. It starts on 404.800 MHz at 4800 baud with the RS41 radiosonde's
-frame header as the sync word, a 4-byte sync match, and frames of 316 bytes after the sync (158 words). The counters
-show SYN (syncs), WRD (words), FRM (whole frames) and CUT (frames that stopped early). Where the register document
-leaves a choice open, the options row lets you switch, and a capture records the choice. Test steps are in
-[SONDE-APP.md](SONDE-APP.md).
+## TEXT
 
-![FSK PROBE with the modem on and a quiet channel.](img/fskprobe.png)
+TEXT is an *extra* (not in a slot by default). It sends short text messages between two radios using the radio chip's FSK modem.
+**It transmits.** Both radios must run TEXT on the same frequency, the one on the main screen when you open the app. The light title
+bar shows the frequency and `LOW` or `HIGH` power, and **turns red and reads `TX` only while the transmitter is actually keyed**.
 
-![FSK PROBE with every option changed from its default; the S item is selected.](img/fskprobe-options.png)
+> **A radio with TEXT open answers messages by transmitting on its own.** A message is repeated up to eight times until the other
+> radio confirms it. Use it only on a frequency where you are licensed and permitted to send digital data, on simplex. TEXT has
+> never been tested on the air: the simulator transmits into a model.
+
+![TEXT with HI typed: the key letters listed at the top, the strip MENU send, EXIT del, *ping.](img/text.png)
+
+![TEXT at the moment the transmitter is keyed: the title bar is red and reads TX 146.52000 LOW.](img/text-on-air.png)
 
 | Key | Action |
 |---|---|
-| `MENU` | Modem on or off. |
-| `*` | Next frequency (404.800, 144.390, 146.520, 446.000, 434.714 MHz). |
-| `1` to `4` | Baud rate: 450, 1200, 2400, 4800. |
-| `5` to `9` | Sync word: 7E7E, 2DD4, AAAA, RS41 header (`8`), RS41 header in the other bit order (`9`). |
-| `#` | Start a capture, or stop the one running. |
-| `AB` | Pick which option (the settings row near the bottom; the chosen one is yellow) `0` changes. |
-| `0` | Change that option: LEN (bytes the chip is told to count: 316, 256 or 2048), TH (words per interrupt, 1 or 4), INV (invert received data), BW (receive bandwidth 2.4K or 1.2K), S (sync length 4 or 2 bytes). The modem is reconfigured at once. |
-| `UP` / `DOWN` | Pick the register shown at the bottom. |
-| `EXIT` | Turns the modem off (ending any capture) and leaves. |
+| `0` to `9` | Type with the multi-tap keys, upper case only: `0` is space (again: the digit 0), `1` gives `. , ? ! - / 1`, `2` `A B C 2`, `3` `D E F 3`, `4` `G H I 4`, `5` `J K L 5`, `6` `M N O 6`, `7` `P Q R S 7`, `8` `T U V 8`, `9` `W X Y Z 9`. The letter is fixed after about a second. A message holds 50 characters |
+| `MENU` | Send the typed message (`TYPE A MESSAGE FIRST` if empty) |
+| `*` | Send a numbered test message (`PING 1`, `PING 2`, ...) |
+| `A/B` | Switch between LOW and HIGH power |
+| `UP`, `DOWN` | Scroll the message list |
+| `EXIT` | While sending: stop retrying (`STOPPED: NOT CONFIRMED`). Otherwise delete the last typed character; with nothing typed, leave |
+| Hold `EXIT` | Leave |
+| Hold `#` twice | Erase all stored messages (the first hold asks `HOLD # AGAIN TO ERASE ALL`) |
 
-**Capture.** `#` records every word the modem delivers, with the time, sync flag and signal strength, so a decoder can be
-designed from real data. The screen shows `ERASING` for a moment, then `REC` with a count, and `SAVED` with the total
-after `#`, `MENU` or `EXIT` ends it. The frequency, baud rate, sync word and options cannot be changed while it runs. It holds
-16,352 records (about 55 seconds of continuous 4800 baud data), then shows `REC FULL` and records no more; it cannot
-write outside its own 128 KB of the radio's flash (0x1B0000 to 0x1D0000). Each new capture replaces the last. To copy
-one to the computer, leave the app (the radio must be on its main screen) and run:
+Messages are kept in the radio's flash (256 of them) until overwritten or erased. Notices include `NEW MESSAGE`, `DELIVERED`,
+`NOT CONFIRMED`, `MESSAGE FULL`, `TX FAILED: NO DONE FLAG` and `TX BLOCKED: SEE SETTINGS` when TX INHIBIT or TX BANDS stops it.
 
-    python3 firmware/source-changes/probe_capture.py PORT my-capture.bin
+## Settings reference
 
-It prints a summary (records, sync count, time between words, signal strength) and writes `my-capture.csv` beside the
-file. The tool only reads, and only that range.
+Every setting in SETTINGS, with its values, the value a new settings record has (the radio's factory-reset state, checked
+against the core by a unit test), and the line the radio's own help strip shows for it. Press `#` while changing a setting to
+return to the default. The source for this table is `firmware/firmware-source/apps/settings/common.rs`.
 
-## Loading channel lists from a computer
+### RADIO
 
-The `channels/` folder holds one CHIRP-format CSV file per channel group: `weather.csv` (7 NOAA weather channels), `frs.csv`
-(FRS/GMRS 1 to 22), `gmrs.csv` (GMRS repeaters), `murs.csv` (5 MURS channels) and `repeaters.csv` (the owner's local
-repeaters, Dallas area; `gmrs.csv` currently also lists Dallas-area repeaters, so replace both with your own). The file name says which group's numbers it fills. See
-[channels/README.md](../channels/README.md) for the rules; the main points:
+| Setting | Values | Default | The radio says |
+|---|---|---|---|
+| SQUELCH | 0 to 9 | 3 | `Higher mutes weak signals` |
+| FREQ STEP | 2.50k, 5.00k, 6.25k, 10.00k, 12.50k, 20.00k, 25.00k, 50.00k, 100.00k | 10.00k | `Step when tuning the VFO` |
+| TX TIMEOUT | OFF, then 15 to 180 SEC in steps of 15 | 120 SEC | `Stops TX after this time` |
+| DUAL WATCH | OFF, ON | OFF | `Listen to both A and B` |
+| BATTERY SAVE | OFF, 1 to 4 | OFF | per value: `Listens 0.1s, sleeps 0.1s` ... `0.4s`; OFF: `Receiver always listening` |
+| BUSY LOCKOUT | OFF, ON | OFF | `No TX while channel busy` |
+| TX INHIBIT | OFF, ON | **ON** | `Radio will not transmit` (ON), `TX allowed within TX BANDS` (OFF) |
+| BANDWIDTH | WIDE, NARROW | WIDE | `WIDE 25k or NARROW 12.5k` |
+| TX POWER | HIGH, LOW, MID | LOW | `Lower power saves battery` |
+| RX TONE | OFF, a CTCSS tone or a DCS code | OFF | `Hear only calls with tone` |
+| TX TONE | OFF, a CTCSS tone or a DCS code | OFF | `Tone sent with your TX` |
+| RPT SHIFT | OFF, +, - | OFF | `Repeater TX is + or - RX` |
+| RPT OFFSET | typed, in MHz | 0.0000 | `Repeater TX gap, in MHz` |
+| SCRAMBLER | OFF, 1 to 3 | OFF | `Voice scramble, must match` |
+| SCAN RESUME | TIMED, CARRIER, STOP | CARRIER | `Waits a bit, then moves on` (TIMED), `Holds until signal ends` (CARRIER), `Stops at the first signal` (STOP) |
+| RIT | -1270 to +1270 Hz in steps of 10 | 0 | `Fine RX tune, USB only` |
+| CH DISPLAY | FREQUENCY, NAME, NAME+FREQ | NAME+FREQ | `Channel shows freq or name` |
 
-* A file fills only its own group's channel numbers, in file order. Weather goes to 1 to 7, repeaters to 234 to 304, FRS to 305
-  to 326, GMRS to 327 to 344, MURS to 345 to 349.
-* Names are at most 12 ASCII characters and are never cut: a longer name stops the build. The `Detail` column is checked but
-  not stored on the radio yet.
-* If a group overflows, two files claim a slot, or a row cannot be read, the build fails and writes nothing.
+The VFO's own values (FREQ STEP, BANDWIDTH, TX POWER, RX TONE, TX TONE, RPT SHIFT, RPT OFFSET) start at the defaults above when the
+radio is reset. RIT acts only in USB.
 
-The commands (run on a computer, in the repository folder):
+### AUDIO
+
+| Setting | Values | Default | The radio says |
+|---|---|---|---|
+| KEY BEEP | OFF, ON | ON | `Beep on keys and alerts` |
+| VOX | OFF, ON | OFF | `Talk to transmit, no PTT` (the same TX INHIBIT and TX BANDS rules apply) |
+| VOX LEVEL | 1 to 9 | 1 | `1 most sensitive, 9 least` |
+| VOX DELAY | 0.5 to 2.0 S | 1.0 S | `Keeps TX on after speech` |
+| TONE BURST | 1000, 1450, 1750, 2100 Hz | 1750 Hz | `Pitch of the TX TONE key` (it is used only by the TX TONE key function) |
+| SQ TAIL ELIM | OFF, ON | ON | `No squelch crash at TX end` |
+| RPT TAIL DLY | OFF, 100 to 1000 MS | OFF | `Wait after TX before RX` |
+| ROGER BEEP | OFF, ROGER, MDC1200 | OFF | `Nothing sent at TX end` (OFF), `Beep sent when you unkey` (ROGER), `Data burst sent at TX end` (MDC1200) |
+
+### DISPLAY
+
+| Setting | Values | Default | The radio says |
+|---|---|---|---|
+| BACKLIGHT | ALWAYS ON, 5, 10, 15, 20 SEC | 10 SEC | `Light-on time after a key` |
+| AUTO KEYLOCK | OFF, 5, 10, 15 SEC | OFF | `Locks keys after idle time` |
+
+### KEYS
+
+Six assignable key presses. `BAND`'s short press always opens CH GROUPS and cannot be changed.
+
+| Setting | Values | Default | The radio says |
+|---|---|---|---|
+| SIDE1 SHORT | a key function (below) | NONE | what the chosen function does |
+| SIDE1 LONG | a key function | NONE | the same |
+| SIDE2 SHORT | a key function | LIGHT | the same |
+| SIDE2 LONG | a key function | NONE | the same |
+| BAND LONG | a key function | NONE | the same |
+| VFO/MR LONG | a key function | NONE | the same |
+
+| Key function | What it does |
+|---|---|
+| NONE | Nothing |
+| BANDWIDTH | Switches WIDE and NARROW (`Switches WIDE / NARROW`) |
+| MONITOR | Opens the squelch on or off (`Squelch open on or off`) |
+| AM/FM | Steps FM, AM, USB (`Steps FM, AM, USB`) |
+| TX TONE | **Transmits** the TONE BURST tone while the key is held (`Transmits the TONE BURST`). Works only as a SHORT choice of `SIDE1` or `SIDE2`; as a hold it does nothing. TX INHIBIT and TX BANDS apply |
+| SCAN | Starts scanning |
+| TX POWER | Steps HIGH, LOW, MID |
+| LIGHT | Flashlight on or off |
+| REVERSE | Swaps the receive and transmit frequencies (`Swaps RX and TX frequency`) |
+| APP 1 to APP 9 | Opens the app in that APPS list slot (`Opens the app in slot n`); nothing if the slot is empty. EXIT returns to the main screen |
+
+The choices skip two retired values, so stepping never lands on a second NONE. The stored default of SIDE1 SHORT is one of the
+retired values: it does nothing and shows as NONE.
+
+![The KEYS group while choosing APP 4 for VFO/MR LONG. The other keys show their defaults: only SIDE2 SHORT is LIGHT.](img/settings-keys.png)
+
+### ANI / DTMF
+
+| Setting | Values | Default | The radio says |
+|---|---|---|---|
+| ANI ON PTT | OFF, ON | OFF | `Sends your ID when you key` |
+| ANI CALL | NONE, `#1` to `#20` | NONE | `Contact your ID goes to` |
+
+### SYSTEM
+
+| Setting | Values | Default | The radio says |
+|---|---|---|---|
+| TX BANDS | CE HAM, FCC HAM, GB HAM, 400-430, 400-438, PMR446, GMRS/FRS, CA HAM, NONE, ALL | **FCC HAM** | what the chosen choice allows (see [Transmit safety](#transmit-safety)) |
+| LATITUDE | typed, degrees N or S | not set (`----`) | `For HAM TOOLS grid locator` |
+| LONGITUDE | typed, degrees E or W | not set (`----`) | `For HAM TOOLS grid locator` |
+| GRID LOCATOR | typed as a locator | `----` | `Sets LATITUDE + LONGITUDE` |
+| BATTERY CAL | typed true battery volts | nominal 2537 | `Type true battery volts` |
+| BOOT SCREEN | OFF, LOGO | LOGO | `Logo shown at power-on` |
+| BOOT SOUND | OFF, ON | ON | `Start-up tune; needs LOGO` (it cannot be ON while BOOT SCREEN is OFF) |
+| VERSION | opens the about view | | `MENU: about this firmware` |
+| RF CHIP ID | opens the about view | | `Radio chip ID, for support` |
+| RESET ALL | `MENU`, then hold `#` | | `Erases settings and VFOs` |
+
+### PRESETS
+
+| Setting | Values | Default | The radio says |
+|---|---|---|---|
+| QUIET | opens a preview | | `No beeps, short light` |
+| BATTERY SAVER | opens a preview | | `Sleeps more, light short` |
+| SCANNING | opens a preview | | `Scanning: stays on a call` |
+| REPEATER | opens a preview | | `Polite repeater operating` |
+| DEFAULTS | opens a preview | | `Defaults, except TX limits` |
+
+Decisions still open for the owner (AUDIT 51): the FCC HAM default of TX BANDS includes FRS, GMRS and MURS; VOX LEVEL defaults
+to the most sensitive; TX TIMEOUT defaults to 120 s; the `0` key can set TX INHIBIT to OFF while it is being changed. TONE BURST
+feeds only the TX TONE key function. Nothing here has been measured on a radio.
+
+## Transmit safety
+
+PTT transmits only if **all** of these allow it, checked in this order. The first refusal is the notice you see.
+
+1. **TX INHIBIT** (SETTINGS > RADIO). **On by default, and on again after RESET ALL.** While on, PTT shows `TX INHIBIT IS ON` and
+   the radio does not transmit. Leave it on until there is a dummy load on the antenna port.
+2. **The channel.** A memory channel with no transmit frequency is receive-only: `RX-ONLY CHANNEL`.
+3. **BUSY LOCKOUT** (SETTINGS > RADIO), if on and a signal is present: `CHANNEL BUSY`.
+4. **TX BANDS** (SETTINGS > SYSTEM). The set of frequencies the transmitter may use. **Default: FCC HAM.** Outside the chosen set,
+   or in any mode but FM (AM and USB never transmit), PTT shows `OUTSIDE TX BANDS`.
+
+TX TIMEOUT ends a transmission after the set time (default 120 seconds). PTT is ignored while scanning and in menus and apps
+(an app that transmits, TEXT, applies the same inhibit and band rules and says `TX BLOCKED: SEE SETTINGS`). A hard fault, a panic or
+an app fault switches the power amplifier off before anything else (see [Troubleshooting](#troubleshooting)); that has not been
+tested with the transmitter keyed.
+
+| TX BANDS | Transmit allowed on |
+|---|---|
+| CE HAM | 144 to 146 and 430 to 440 MHz |
+| **FCC HAM** (default) | 144 to 148, 222 to 225 and 420 to 450 MHz; FRS/GMRS 462.550 to 462.725 and 467.550 to 467.725 MHz; MURS 151.820 to 151.940 and 154.570 to 154.600 MHz |
+| GB HAM | 144 to 148 and 430 to 440 MHz |
+| 400-430 | 137 to 174 and 400 to 430 MHz |
+| 400-438 | 137 to 174 and 400 to 438 MHz |
+| PMR446 | 446.00625 to 446.19375 MHz |
+| GMRS/FRS | 462.550 to 462.725 and 467.550 to 467.725 MHz, and the five MURS frequencies (151.820, 151.880, 151.940, 154.570, 154.600) |
+| CA HAM | 144 to 148 and 430 to 450 MHz |
+| NONE | Nowhere: no transmitting on any frequency |
+| ALL | 136 to 174 MHz **except the NOAA weather channels** (162.3875 to 162.5625 MHz are blocked), 220 to 260 and 400 to 520 MHz. Nothing below 136 MHz. These are the limits the stock firmware reports for this radio |
+
+The same rule applies to VFO and memory channels, and there is no per-band power limit. The 400-430 and 400-438 choices are the
+upstream mod's. ALL has not run on a radio and nobody has measured whether the transmitter is clean across 136 to 174, 220 to 260
+and 400 to 520 MHz; choosing it is your decision and your responsibility. The radio does not know your licence.
+
+![The SYSTEM group with TX BANDS selected: FCC HAM, the default, and the strip listing the bands it allows.](img/settings-help.png)
+
+## Loading from a computer
+
+**The installer is the main path.** `install.py` backs the radio up, checks every file, flashes the core only if needed, then
+writes apps, channels, channel details, FM stations and a boot screen, and verifies each by reading it back. Nothing is written
+until you type `INSTALL`. Read [INSTALL.md](INSTALL.md) first (risks, cable, what it needs, recovery); the short form is:
+
+```
+python3 install.py --dry-run --port PORT       # everything except the writes
+python3 install.py --port PORT                 # menus, then the real thing after you type INSTALL
+```
+
+**It has only been run against simulated radios, never a real one.** The tools it drives have each been used on the one radio, except
+the channel loader after the sector fix, the details and FM writers and the boot-logo tool in their latest form (AUDIT 48).
+
+The manual path is the individual tools, in the order of [FIRST-FLASH-RUNBOOK.md](FIRST-FLASH-RUNBOOK.md). What each load replaces:
+
+| What | Tool | A load replaces |
+|---|---|---|
+| Core firmware | `flash_bf.py` (guided by the runbook; the installer does it) | The whole core. Settings, channels and calibration are kept (a core-to-core upgrade kept the settings once, AUDIT 30) |
+| Apps | `install_apps.py PORT RELEASE_DIR [--dry-run]` | Each of the nine slots that differs; a slot the layout leaves empty is **erased** |
+| Channels | `channel_plan.py build`, then `restore_backup.py PORT IMAGE --before UNDO.img [--write]` | The slots of the groups you load. It rewrites **whole 4 KB sectors** (128 channels) because the firmware erases a sector on the first write; unchanged channels in a touched sector are rewritten from the image, so use `--base` with a backup or channels outside your lists in those sectors are erased. A first run without `--write` is a dry run |
+| Channel details | `channel_extras.py PORT TABLE.extras` | The **whole** details table (the text beside the number), built only from the lists you loaded: details of channels not in those lists disappear |
+| FM station names | `fm_stations.py build` and `install` | The whole station list, including stations saved on the radio |
+| Boot screen | `boot_logo_raw.py PORT LOGO.rgb565 BACKUP.rgb565` (`set_boot_logo.py` for photos) | The picture; the old one is saved first |
+| Start-up tune | `set_boot_tune.py PORT BACKUP.bin doom` (or `mario`) | The tune bytes of the settings record only |
+| Settings | the radio's own SETTINGS | Never written by any tool here |
+| Calibration | none | Never written; the installer reads it before and after and stops if it changed |
+
+**Channel lists.** `channels/` holds one CHIRP-format CSV per channel group: `weather.csv`, `frs.csv`, `gmrs.csv`, `murs.csv`,
+`repeaters.csv`, `simplex.csv`, `satellites.csv` and `sonde.csv`. The file name says which group's slots it fills; names are at
+most 12 ASCII characters and are never cut; the optional `Detail` column (16 characters) is the text beside the number on the
+main screen. `repeaters.csv` and `gmrs.csv` are local to the Dallas area, so replace them with your own. See
+[channels/README.md](../channels/README.md).
 
 ```
 python3 firmware/source-changes/channel_plan.py build channels -o build-out/channels.img --base my-backup/NAME.img
 python3 firmware/source-changes/restore_backup.py PORT build-out/channels.img --before build-out/undo.img            # dry run
 python3 firmware/source-changes/restore_backup.py PORT build-out/channels.img --before build-out/undo.img --write    # writes
+python3 firmware/source-changes/channel_extras.py PORT build-out/channels.extras --before build-out/extras-before.bin
 ```
 
-* **Use `--base` with a backup** from `radio_read.py` (see below). Without it, every slot the CSV files do not fill is written
-  empty, which erases whatever the radio has there. The `--before` file is an undo image.
-* `channel_plan.py show IMAGE` prints any image or backup as a table.
-* The first command does not touch a radio. The other two use the serial port; run the dry run first.
-* **Not yet run on a radio.** This whole path has been tested only against a fake radio.
-* This radio is not certified for FRS, GMRS or MURS. Use those lists to listen unless your licence and the rules allow
-  otherwise. Which frequencies it will transmit on is decided by TX BANDS and TX INHIBIT.
+FRS, GMRS and MURS lists are for listening unless your licence and the rules allow otherwise; TX BANDS and TX INHIBIT decide what
+the radio will transmit.
 
-## Backing up and flashing
+**Boot screen and start-up tune.** The boot screen is a picture stored on the radio. To carry your callsign: copy `.env.sample` to
+`.env` (git ignores it, so your details are never committed), fill it in, run `scripts/dev.sh personalize`, look at the preview, and
+install the result with `boot_logo_raw.py` (or give it to the installer as a finished 160x128 RGB565 file). BOOT SCREEN must be LOGO and
+BOOT SOUND ON for the picture and tune to appear.
 
-Do not repeat the steps from memory. Follow [FIRST-FLASH-RUNBOOK.md](FIRST-FLASH-RUNBOOK.md): it starts with read-only steps,
-says which cable to use, what can and cannot be restored, and where to stop. The short version:
+## Backup and recovery
 
-* **Take a backup before anything else** with `radio_read.py`, and a second one with CHIRP.
-* **There is no stock firmware image for this radio.** Flashing is effectively one way (see [HARDWARE.md](../HARDWARE.md)).
-* Flash only an image built by CI, never the `.BF` committed in the repository ([AUDIT.md](../AUDIT.md), row 6).
-* Keep TX INHIBIT on until a dummy load is on the antenna port.
-* Never commit radio backups to git.
+Follow [FIRST-FLASH-RUNBOOK.md](FIRST-FLASH-RUNBOOK.md); it starts with read-only steps and says what can and cannot be restored.
+In short:
 
-Other documents: [HARDWARE.md](../HARDWARE.md) (the radio's hardware), [AUDIT.md](../AUDIT.md) (what has and has not been
-verified), [CHANNEL-GROUPS.md](CHANNEL-GROUPS.md) (ideas for groups; not built).
+* **Back up before anything else** (`radio_read.py` on the stock firmware, `dump_nor.py` on this one; the installer does it for you),
+  and make a second copy with CHIRP while the stock firmware is still on the radio.
+* **There is no stock firmware image for this radio** (the YP07's chip is not the one in the published images). Flashing is
+  effectively one way, and the bootloader is not overwritten, so another open build can always be flashed.
+* Apps, the boot logo, channels, the VFO and the 20 DTMF contacts can be restored from a backup. Settings are not restored from a
+  stock backup (re-enter them in SETTINGS). Calibration is never written, and cannot be restored if lost.
+* Flash only an image built by `scripts/dev.sh release` whose hash equals `firmware/expected-hashes.json` (AGENTS.md); never the
+  `.BF` committed in the repository (AUDIT 6).
+* Keep TX INHIBIT on until a dummy load is on the antenna port. Never commit a backup (`my-backup/` is git-ignored).
 
-## Personal boot screen and start-up tune
+## Troubleshooting
 
-Not yet tried on a radio. The boot screen is a picture stored on the radio (the boot logo), so it can carry your callsign,
-name, the radio's board and the firmware build it was made from.
+| What you see | What it means and what to do |
+|---|---|
+| Installer or tool says "re-seat the cable", or the radio shows its programming icon again and again | The plug is not fully in. A half-seated plug echoes the computer's own bytes back. Push it in until it is home and run again |
+| The programming port does not answer | It answers only from the main screen of the radio. Leave any app and the menus first |
+| The tool reports something odd after the cable was plugged in and the radio keyed up | The cable is for another radio (a PL2303 one did this). Unplug it and do not use it |
+| `EMPTY` in the APPS list for apps you installed | The apps were built for a different core: `EMPTY` means the package is missing or its ABI hash differs. Reinstall the apps from the same release as the core (the installer's "always flash" core choice, or `install_apps.py` with that release folder). SETTINGS > SYSTEM > VERSION shows the hash the core expects |
+| Red `APP DID NOT LOAD (n)` | See [the APPS list](#the-apps-list) for the code. 2 is the usual one: wrong core |
+| A red screen titled `APP FAULT`, `APP CRASH` or `CORE FAULT` | The firmware stopped on purpose. It has already switched the power amplifier off. The second line says where: `SLOT 8 PANIC` or `SLOT 8 LINE 142` (the launcher slot of the app), `PC 0800 DA22` or `IRQ 7` (the core). It shows for about two and a half seconds and then the radio restarts; hold the power key to switch off instead. Write down the line and tell the project. If it recurs on every start, it will loop until you hold the power key. This screen has not been seen on a radio |
+| A blank screen and no response | An older core hung when an app was opened (fixed; AUDIT 31) and a battery pull recovered it. Pull the battery. If it keeps happening note what you pressed before it |
+| PTT does nothing, or a red box | Read the box; see [Transmit safety](#transmit-safety). With TX INHIBIT off, `OUTSIDE TX BANDS` also means the mode is AM |
+| `NO CH IN ...` | The group has no stored channel. Choose ALL or load the group's list |
+| A channel missing from memory mode | It is outside the current group's numbers. Choose ALL |
+| `OUT OF RX RANGE` on a typed frequency | The receiver does not cover it (108 to 174, 200 to 260, 350 to 520 MHz); 87.5 to 108.0 opens the FM app instead |
+| Keys do nothing | The keypad is locked (padlock in the status bar): hold `*` |
+| A setting seems to have changed by itself | A preset or RESET ALL was applied, or the value was changed with `#` or `0` while changing it; presets never touch TX INHIBIT or TX BANDS |
+| The installer finished but the radio's details or FM names changed | Loading channel lists replaces the whole details table, and an FM list replaces the whole station list; copies are kept in the backup folder |
 
-1. Copy `.env.sample` to `.env` and fill in `OWNER_CALLSIGN`, `OWNER_NAME`, `RADIO_BOARD` and the rest. `.env` is ignored by
-   git, so your details are not committed.
-2. `scripts/dev.sh personalize` draws `build-out/personal/boot-logo.rgb565` and a preview, `boot-logo.png`. Look at the preview.
-   The bottom strip shows the commit and date; a `+` after the commit means there were uncommitted changes. Run it again after
-   each firmware build you flash, so the screen names the build that is on the radio.
-3. `python3 firmware/source-changes/boot_logo_raw.py PORT build-out/personal/boot-logo.rgb565 my-backup/logo-before.rgb565`
-   saves the logo that is on the radio, writes the new one and reads it back. Run it again with the backup file as the logo to undo.
-4. Start-up tune: `python3 firmware/source-changes/set_boot_tune.py PORT my-backup/settings-before.bin doom` (or `mario`).
-   It changes only the tune inside the settings record and keeps a backup of the record.
-
-BOOT SCREEN must be LOGO and BOOT SOUND must be ON (SETTINGS > SYSTEM) for the picture and the tune to appear.
+Other documents: [INSTALL.md](INSTALL.md), [FIRST-FLASH-RUNBOOK.md](FIRST-FLASH-RUNBOOK.md), [RADIO-CHECKLIST.md](RADIO-CHECKLIST.md),
+[HARDWARE.md](../HARDWARE.md), [AUDIT.md](../AUDIT.md), [CHANNEL-GROUPS.md](CHANNEL-GROUPS.md).
