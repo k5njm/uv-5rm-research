@@ -640,27 +640,38 @@ after two minutes).
 
 FSK PROBE (slot 8) is a bring-up tool for people debugging the radio chip's FSK modem, not for ordinary use: does the modem hear
 anything, and what do its registers say? It only receives. It starts on 404.800 MHz (the Fort Worth radiosonde) at 4800 baud with the
-RS41 frame header as the sync word, a four-byte sync match and frames of 316 bytes after the sync (158 words). The title bar is dark
-red and says `RX ONLY`. The crystal, the sync words, the bit order and whether the modem hears a real signal at all are
+RS41 frame header as the sync word, a four-byte sync match and frames of 316 bytes after the sync (158 words); one key switches it
+to an APRS setup for a test on 144.390 MHz (below). The title bar is dark red and says `RX ONLY`. The crystal, the sync words, the bit order and whether the modem hears a real signal at all are
 **unverified on this radio**; the test steps are in [SONDE-APP.md](SONDE-APP.md) and the register notes in
 [HARDWARE.md](../HARDWARE.md).
 
 ![FSK PROBE with the modem on and a quiet channel: RSSI, sync word, counters SYN, WRD, FRM and CUT, a register peek and the key lines.](img/fskprobe.png)
 
-The counters are `SYN` (syncs), `WRD` (words), `FRM` (whole frames) and `CUT` (frames that stopped early). The row near the bottom
-lists five options, `LEN` (316, 256 or 2048 bytes; 318 instead of 316 with a two-byte sync), `TH` (words per interrupt, 1 or 4), `INV` (invert received data), `BW` (receive
-bandwidth 2.4 or 1.2) and `S` (sync length, 4 or 2 bytes); the selected one is yellow.
+The counters are `SYN` (syncs), `WRD` (words), `FRM` (whole frames) and `CUT` (frames that stopped early). The two rows near the bottom
+list seven options; the selected one is yellow, and the cursor starts on the first:
 
-![FSK PROBE with every option changed from its default: LEN 2048, TH 4, INV+, BW 1.2, S2.](img/fskprobe-options.png)
+* the preset: `RS41`, `APRS`, or `CUST` once anything was changed by hand (`0` here sets frequency, baud, mode, bandwidth, sync, length and
+  threshold together, `RS41` to `APRS` and back);
+* `MODE`: `FSK`, `F1224` (FFSK 1200/2400) or `F1218` (FFSK 1200/1800), the chip's receive modes;
+* `LEN` (the bytes the chip is told to count after the sync: 316, 256 or 2048; 318 instead of 316 with a two-byte sync; the APRS preset's window is 256, so its first value is 256);
+* `TH` (words per interrupt, 1 or 4), `INV` (invert received data), `BW` (receive bandwidth: `AUTO`, the one the document pairs with the mode, or forced `1.2`, `2.4` or `1218`) and `S` (sync length, 4 or 2 bytes).
+
+![FSK PROBE with the APRS preset's mode and options changed by hand: CUST F1224, LEN 2048, TH 4, INV+, BW 1.2, S2.](img/fskprobe-options.png)
+
+![FSK PROBE on the APRS preset after a 128-word window: 144.390, 1200 baud, sync FEFE, SYN 1, WRD 128, FRM 1; APRS F1224 LEN256 TH1.](img/fskprobe-aprs.png)
+
+The APRS preset (simulator picture above: a made-up modem was fed the flag preamble and a frame) is a stand-in test signal for the radiosonde test:
+FFSK 1200/2400, 1200 baud, sync `FEFE FEFE` (a repeating HDLC flag as the demodulator should deliver it), 256 bytes after the sync. The procedure,
+the Direwolf reference receiver and the table of results are in [APRS-TEST.md](APRS-TEST.md). **None of it has been seen on the radio.**
 
 | Key | Action |
 |---|---|
 | `MENU` | Modem on or off |
 | `*` | Next frequency (404.800, 144.390, 146.520, 446.000, 434.714 MHz) |
 | `1` to `4` | Baud rate 450, 1200, 2400, 4800 |
-| `5` to `9` | Sync word: `7E7E`, `2DD4`, `AAAA`, the RS41 header (`8`), the RS41 header in the other bit order (`9`) |
+| `5` to `9` | Sync word. `5` steps through the HDLC flag patterns `FEFE`, `0101`, `7F7F`, `8080`; `6` through `AAAA`, `5555`; `7` is `7E7E`; `8` is the RS41 header, `9` the RS41 header in the other bit order |
 | `A/B` | Pick which option `0` changes |
-| `0` | Change that option; the modem is reconfigured at once |
+| `0` | Change that option (on the preset item: switch preset); the modem is reconfigured at once |
 | `UP`, `DOWN` | Pick the register shown at the bottom |
 | `#` | Start a capture, or stop the one running |
 | `EXIT` | Modem off (ending any capture) and leave |
@@ -668,7 +679,7 @@ bandwidth 2.4 or 1.2) and `S` (sync length, 4 or 2 bytes); the selected one is y
 **Capture.** `#` records every word the modem delivers, with its time, sync flag and signal strength. The screen shows `ERASING` for a
 moment (the app erases 32 sectors of flash first), then `REC` with a count, and `SAVED` with the total when `#` or `MENU` ends it (`EXIT` ends it too, but leaves the app at the same moment).
 While it runs only `MENU`, `UP`, `DOWN`, `#` and `EXIT` work, so frequency, baud, sync and options cannot change. It holds 16,352
-records (about 55 seconds of continuous 4800 baud), then shows `REC FULL`. It can only write inside its own 128 KB of the radio's
+records (about 55 seconds of continuous 4800 baud, 218 seconds at 1200), then shows `REC FULL`. It can only write inside its own 128 KB of the radio's
 flash (0x1B0000 to 0x1D0000); any other address faults the app instead of writing (the fault screen then shows `SLOT 8 CODE` and the address as a decimal number). Each capture replaces the last.
 
 ![FSK PROBE recording: REC with a count in red, the options frozen.](img/fskprobe-capture.png)
@@ -680,7 +691,9 @@ python3 firmware/source-changes/probe_capture.py PORT my-capture.bin
 ```
 
 It prints a summary (records, syncs, time between words, signal strength, the options recorded in the header) and writes
-`my-capture.csv` beside the file. It only reads, and only that range, and never overwrites an existing file.
+`my-capture.csv` beside the file. For a 1200 baud capture (or with `--ax25`) it then decodes the words as AX.25 / APRS in every plausible bit and
+byte order and prints each frame that passes its check as `SOURCE>DEST,PATH:payload`, or, when none does, the bit statistics that say why
+(see [APRS-TEST.md](APRS-TEST.md)). `probe_capture.py --decode my-capture.bin` decodes a saved file without the radio. It only reads, and only that range, and never overwrites an existing file.
 
 ## FM
 

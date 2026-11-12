@@ -14,6 +14,9 @@
 //!                       master/signal/chan may appear before or after `app`; they are applied after the reset
 //!   air HEX [HEX...]   the simulated FSK modem hears a sync, then these 16-bit words (hex), one per poll
 //!                       (a package of several segments, like `chanmgr`, runs as in the firmware: `Chain` switches segment)
+//!   airmode fsk|ffsk1224|ffsk1218|any   the tone pair of the signal `air` plays (REG_58 bits 12:10 000 / 100 / 111); the modem only
+//!                       hears it with the matching RX mode. A GUESS in the model; `any` (default) hears every mode
+//!   expect rfreg REG HEX   an RF chip register as the app left it (hex, e.g. `expect rfreg 58 1309`)
 //!   expect handoff HEX...  the handoff buffer, as hex bytes (what a settings segment passed on with Chain)
 //!   expect setting OFFSET V...  bytes of the settings record from OFFSET, decimal
 //!   handoff GROUP ACTION [ROW]  preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items
@@ -385,6 +388,22 @@ impl Run<'_> {
                 c.script.push_back(AirEvent::Sync);
                 c.script.extend(w.into_iter().map(AirEvent::Word));
             }
+            ["airmode", m] => {
+                chip().hears = match *m {
+                    "fsk" => Some(0b000),
+                    "ffsk1224" => Some(0b100),
+                    "ffsk1218" => Some(0b111),
+                    "any" => None,
+                    _ => return self.check(false, "airmode needs fsk, ffsk1224, ffsk1218 or any"),
+                };
+            }
+            ["expect", "rfreg", reg, val] => {
+                let (Ok(r), Ok(v)) = (usize::from_str_radix(reg, 16), u16::from_str_radix(val, 16)) else {
+                    return self.check(false, "expect rfreg needs REG VALUE in hex");
+                };
+                let got = chip().regs.get(r).copied().unwrap_or(0xFFFF);
+                self.check(got == v, &format!("RF register {r:02X} is {v:04X} (got {got:04X})"));
+            }
             ["chan", n, rx, rest @ ..] => {
                 let (Ok(n), Ok(rx)) = (n.parse::<u16>(), rx.parse::<u32>()) else {
                     return self.check(false, "chan needs N RXHZ");
@@ -545,7 +564,7 @@ impl Run<'_> {
             ["expect", "captured", n] => {
                 // FSK PROBE's capture as probe_capture.py would read it: a header, then records until an erased one
                 let nor = nor();
-                let got = if &nor[0x1B_0000..0x1B_0008] == b"FSKCAP2\0" {
+                let got = if &nor[0x1B_0000..0x1B_0008] == b"FSKCAP3\0" {
                     nor[0x1B_0100..0x1D_0000].chunks(8).take_while(|r| r[6] != 0xFF).count()
                 } else {
                     usize::MAX

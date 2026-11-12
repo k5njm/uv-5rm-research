@@ -164,10 +164,11 @@ interrupt and, 119.7 ms later, one word with the done flag. Sources, in order of
 | 0x0B (read) | 7 / 6 / 4 | FSK sync negative found / positive found / CRC pass | FD p4 | unverified (never read before; FSK PROBE now records bits 7:6 at each sync) |
 | 0x3F | 15 / 14 / 13 / 12 / 1 | enable for the same flags as 0x02 | FD p8; K6 comment `0x3000 rx sucs/fifo_af irq mask`; TEXT writes 0x3002 | confirmed |
 | 0x58 | 0 | FSK enable | FD p10; K6 | confirmed |
-| 0x58 | 3:1 | RX bandwidth: 000 FSK 1.2K, 100 FSK 2.4K, 001 FFSK 1200/1800, 010 NOAA SAME | FD p10 | confirmed (meaning); which suits 4800 baud RS41 is **unverified** (probe default now 2.4K) |
+| 0x58 | 3:1 | RX bandwidth: 000 FSK 1.2K, 100 **FSK 2.4K and FFSK 1200/2400**, 001 FFSK 1200/1800, 010 NOAA SAME | FD p10 (re-read 2026-11-12 from the rendered page) | confirmed (meaning); which suits 4800 baud RS41 is **unverified** (probe default now 2.4K). The probe's BW item forces each of the first three; AUTO takes the one the document pairs with the MODE |
 | 0x58 | 5:4 | preamble type 11=0xAA, 10=0x55, 00 by sync byte 0 MSB | FD p10 | confirmed; TX only, unused |
 | 0x58 | 9:8 | "FSK RX gain" (values not given). 0x0301 sets both | FD p10; TEXT value | unverified; kept from TEXT, which works at 450 baud |
-| 0x58 | 12:10 / 15:13 | RX mode / TX mode (000 = FSK 1.2K/2.4K) | FD p10 | confirmed, left 000 |
+| 0x58 | 12:10 | RX mode: 000 FSK 1.2K, FSK 2.4K **and NOAA SAME**; 111 FFSK 1200/1800; **100 FFSK 1200/2400** | FD p10 | confirmed (meaning). The probe's MODE item writes 000, 100 or 111; whether any of them yields bits from a Bell 202 (1200/2200 Hz) signal is **unverified** (docs/APRS-TEST.md) |
+| 0x58 | 15:13 | TX mode: 000 FSK 1.2K/2.4K, 001 FFSK 1200/1800, 011 FFSK 1200/2400, 101 NOAA SAME | FD p10 | confirmed (meaning); receive-only apps leave 000 |
 | 0x59 | 15 / 14 | clear TX FIFO / clear RX FIFO, "1 = clear" | FD p11; K6 `REG_59 \| 0x4000` then `\| 0x1000`; TEXT `rx_restart`; K5 | confirmed. Whether the clear is level (held) or edge is **unverified** |
 | 0x59 | 13 | FSK scramble | FD p11 | confirmed; left 0 (RS41 is scrambled by the sonde, descrambled in software) |
 | 0x59 | 12 / 11 | enable FSK RX / TX | FD p11; K6; TEXT `CTRL_RX_ON = 1<<12` | confirmed |
@@ -185,6 +186,9 @@ interrupt and, 119.7 ms later, one word with the done flag. Sources, in order of
 | 0x72 | 15:0 | TONE2/FSK frequency word = baud * 10.32444 (13/26 MHz crystal) or * 10.48576 | FD p12; K6 0x3065 = 1200; TEXT 4646 = 450 | confirmed formula; the crystal is **unverified** (TEXT would agree with itself either way) |
 | 0x73 | 4 / 13:11 | AFC disable / AFC range | FD p12 | **not on the allow-list**; AFC is on by default (0 = enabled), range at maximum. Not changed |
 | 0x67 | 8:0 | RSSI = value/2 - 160 dBm | FD p11 | confirmed (already used) |
+| 0x6E | 15:9 / 8:0 | AF frequency out: Nout / Rout, tone = Nout * 25390.625 / Rout Hz (25000 for 19.2/38.4 MHz crystals); read only | FD p11 | unverified; the probe's peek shows it in Hz (REG 6E, `UP` from REG 02), a crude 1200 / 2200 Hz discriminator that needs no write |
+| 0x63 | 7:0 | glitch count within about 10 ms; read only | FD p11 | unverified, not shown |
+| 0x0B | 12 / 11:8 | DTMF/5-tone found / code received; read only | FD p4 | unverified, not shown. Using it as a tone detector needs REG_09 and others (below) |
 
 RS41 needs (RS41.cpp): 4800 baud 2-level FSK; the header `08 6D 53 88 44 69 48 1F`; 320 bytes (`RS41MAXLEN`); the SX1278 is told 8 sync
 bytes and then 312 payload bytes, with AFC and AGC on; bits are reversed and XORed with a 64-byte mask afterwards. The FD6818B
@@ -210,3 +214,31 @@ the sync, if the chip does not deliver the sync bytes (as in K5's aircopy, unver
 
 FSK PROBE now sets bit 3, releases the clear bit using TEXT's restart sequence, writes REG_5D as 0x3B20, counts words itself
 and ends a frame at 158 words whatever the chip does, and offers options for the open readings (LEN, TH, INV, BW, SYNC).
+
+### APRS (Bell 202) on this modem, 2026-11-12
+
+Sources: the FD6818B register document page 10 (REG_58, read from the rendered page), page 11 (REG_6E), the older
+FD6818 programming guide (mikrocontroller.net attachment 608473, pages 35-37, an unofficial copy for the previous chip revision), and the UV-K5 firmware thread
+[piotr022/UV_K5_playground issue 20](https://github.com/piotr022/UV_K5_playground/issues/20). Bell 202 is 1200 baud, 1200/2200 Hz. The chip
+has **no** 1200/2200 mode: FFSK 1200/2400 (document REG_58 RX mode `100`, bandwidth `100`) shares the mark tone and is 200 Hz off on
+the space tone, 1200/1800 (`111`, `001`) is 400 Hz off. No report of working APRS reception on a BK4819 or FD6818 modem was found; one participant in the thread
+says "BK4819 produces FSK, not AFSK" without showing a test. The odds, the HDLC flag sync-word derivation (`FEFE FEFE`
+and its three variants), the host decoder and the test procedure are in [docs/APRS-TEST.md](docs/APRS-TEST.md). Status of everything there: **unverified**.
+
+The older guide describes two FSK frame formats (fixed length with an optional chip CRC; "unlimited reception"), selected by a transmitted
+**type byte** (`0x01`, `0x21`, `0x61`), and a length in words. The FD6818B document mentions neither; **whether the FD6818B receiver reads a type byte after the sync is unknown**
+(it would explain a stream with no such byte being misread). Not checked against TEXT's packet layout.
+
+Registers an APRS attempt needs, against `RF_WRITABLE` (`abi/src/lib.rs`: 0x02 0x0C 0x2B 0x30 0x3F 0x40 0x47 0x48 0x58 0x59 0x5A 0x5B 0x5C
+0x5D 0x5E 0x5F 0x70 0x71 0x72):
+
+| Needed | On the list? |
+|---|---|
+| REG_58 (mode, bandwidth, enable), REG_59, 5A, 5B, 5C, 5D, 5E (sync, length, threshold), 5F (FIFO), 70, 72 (gain, baud), 3F and 02 (interrupts) | all on it; the probe writes only these |
+| REG_6E, 63, 67, 0B, 0C (tone counter, glitch count, RSSI, flags; reads) | reads are not restricted |
+| REG_73 (AFC off/range): would separate AFC from the demodulator; APRS carriers are within about 1 kHz | **not on it**; AFC stays at its default (on, maximum range) |
+| REG_74, 75 (3000 Hz AF response, TX and RX), 54, 55 (300 Hz coefficients): shape the audio the demodulator sees, so the balance of the 1200 and 2200 Hz tones | **not on them** |
+| REG_09, 04, 07, 51 to 54 (DTMF/5-tone/single-tone detector set-up, the older guide's 1050 Hz recipe): a possible hardware tone detector | **not on them**; none was built |
+| AGC: `api.set_agc_fix` exists (REG_7E), a separate ABI call | available to the core's API, not used by the probe |
+
+Nothing was built that depends on a missing register.

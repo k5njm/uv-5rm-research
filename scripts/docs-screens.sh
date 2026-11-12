@@ -66,6 +66,7 @@ FRAMES=(
   "hamtools_grid/new_york                    hamtools-grid"
   "fskprobe_idle/on_quiet                    fskprobe"
   "fskprobe_options/all_changed              fskprobe-options"
+  "fskprobe_preset_aprs/heard                fskprobe-aprs"
   "fskprobe_capture/recording                fskprobe-capture"
 )
 

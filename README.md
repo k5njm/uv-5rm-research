@@ -70,7 +70,7 @@ as CI does; the BK4819 image built on arm64 differs (AUDIT 18). CI runs only the
 | [channels/README.md](channels/README.md) | Channel lists (CHIRP CSV) and FM station lists |
 | [HARDWARE.md](HARDWARE.md) | The radio's hardware, the purchase check, the FSK modem registers |
 | [AUDIT.md](AUDIT.md) | Findings, and what has and has not been verified |
-| [docs/CHANNEL-GROUPS.md](docs/CHANNEL-GROUPS.md), [docs/SONDE-APP.md](docs/SONDE-APP.md) | Design notes (channel groups as tags; a radiosonde app) and the FSK PROBE test steps |
+| [docs/CHANNEL-GROUPS.md](docs/CHANNEL-GROUPS.md), [docs/SONDE-APP.md](docs/SONDE-APP.md), [docs/APRS-TEST.md](docs/APRS-TEST.md) | Design notes (channel groups as tags; a radiosonde app) and the FSK PROBE test steps, including the APRS stand-in test on 144.390 MHz |
 | [docs/CORE-FIRMWARE-BUDGET.md](docs/CORE-FIRMWARE-BUDGET.md), [docs/WEB-BUILDER.md](docs/WEB-BUILDER.md) | Core flash budget; the web builder design |
 | [docs/TEST-DOUBLES.md](docs/TEST-DOUBLES.md), [docs/UI-UX-AUDIT-HANDOFF.md](docs/UI-UX-AUDIT-HANDOFF.md) | The fakes audited against the code; an outside UI review and what became of it |
 | [FEATURES.md](FEATURES.md), [FIRMWARE-INTERNALS.md](FIRMWARE-INTERNALS.md), [FLASHING-WORKFLOW.md](FLASHING-WORKFLOW.md), [REFERENCES.md](REFERENCES.md), [SECURITY-AUDIT.md](SECURITY-AUDIT.md), [HAB-TRACKING-APPS.md](HAB-TRACKING-APPS.md) | Background from the first research pass; parts predate the current code |
