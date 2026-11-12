@@ -40,10 +40,12 @@ pub const MY_SEG: u8 = 0;
 pub const MY_SEG: u8 = 1;
 #[cfg(feature = "settings-system")]
 pub const MY_SEG: u8 = 2;
-#[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system"))]
+#[cfg(feature = "settings-presets")]
+pub const MY_SEG: u8 = 3;
+#[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system", feature = "settings-presets"))]
 #[path = "../../firmware-source/apps/settings/common.rs"]
 mod settings;
-#[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system"))]
+#[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system", feature = "settings-presets"))]
 const _: () = settings::assert_seg_features();
 #[path = "../../firmware-source/src/fmtlite.rs"]
 mod fmtlite;

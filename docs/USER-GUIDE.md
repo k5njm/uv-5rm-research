@@ -184,26 +184,43 @@ Apps must be built for the same core firmware that is on the radio, or the list 
 
 ## SETTINGS
 
-SETTINGS is app 1. It has six groups. Use `UP` and `DOWN` and `MENU` to open one; `EXIT` leaves.
+SETTINGS is app 1. It has seven groups. Use `UP` and `DOWN` and `MENU` to open one; `EXIT` leaves.
 
-![The SETTINGS list: RADIO, AUDIO, DISPLAY, KEYS, ANI / DTMF and SYSTEM.](img/settings-groups.png)
+![The SETTINGS list: RADIO, AUDIO, DISPLAY, KEYS, ANI / DTMF, SYSTEM and PRESETS.](img/settings-groups.png)
 
 ### Changing a value
 
 1. Move to an item with `UP` and `DOWN`.
 2. Press `MENU`. The row turns amber and `^` and `v` appear around the value.
 3. `UP` and `DOWN` change the value. Pressing `0` sets it to its lowest choice (off, none, or the first in the list).
-4. Press `MENU` to **keep** the change, or `EXIT` to **undo** it and put the old value back.
+   Pressing `#` puts it **back to its default**, the value a new settings record has, so you do not need to know what
+   it was (the strip says `#default`).
+4. Press `MENU` to **keep** the change, or `EXIT` to **undo** it and put the old value back. `#` is a change like any
+   other: it is not saved until you press `MENU`.
 
-A list longer than the screen has a small grey mark on its right edge showing how far down you are. The strip at the bottom says which keys do what at that moment: `MENU change  EXIT back` when you are only looking, and
-`UP/DN MENU save EXIT undo` while a value is being changed. For numbers you type it reads `0-9 type MENU ok EXIT del` (latitude and
-longitude: `0-9  * N/S  MENU ok` and `0-9  * E/W  MENU ok`), and for VERSION and RF CHIP ID `UP/DN page    EXIT back`.
+A list longer than the screen has a small grey mark on its right edge showing how far down you are.
+
+**The strip at the bottom.** While you are only looking at a list, it explains the selected setting in plain words (for
+example `Higher mutes weak signals` under SQUELCH). A few lines follow the value: under BATTERY SAVE it says what the
+chosen step costs, under TX INHIBIT whether the radio can transmit, under TX BANDS which frequencies the chosen choice
+allows, and under a key setting what the assigned function does. (The keys are the same on every list: `MENU` changes the
+selected setting, `EXIT` goes back.) While a value is being changed the strip shows the keys instead:
+`#default MENU ok EXIT undo`. For numbers you type it reads `0-9 # default  MENU ok` (latitude and
+longitude: `0-9 * N/S # clear MENU ok` and `0-9 * E/W # clear MENU ok`); once you have pressed `#` it reads as for any other value.
 
 ![Changing AUTO KEYLOCK: the row is amber, the value has arrows, and the bottom strip reads UP/DN MENU save EXIT undo.](img/settings-editing.png)
+
+![Browsing SETTINGS > SYSTEM: the strip under the list says what the selected TX BANDS choice allows.](img/settings-help.png)
 
 Notes:
 
 * The new value takes effect as soon as you change it, before you press `MENU`; `EXIT` restores the old value.
+* `#` works on every item that holds a value, including the numbers you type (RPT OFFSET, BATTERY CAL, LATITUDE and
+  LONGITUDE, where it means "no position"; the strip says `# clear`). It does nothing on VERSION, RF CHIP ID and RESET ALL.
+  **It never loosens a transmit restriction.** TX INHIBIT goes to ON. TX BANDS goes back to FCC HAM only when it is on FCC HAM
+  or ALL; from any narrower choice (CE HAM, GB HAM, PMR446, GMRS/FRS, CA HAM), from NONE and from the two 400-xxx choices the
+  strip says `Choose TX BANDS by hand` and nothing changes: pick it with `UP` and `DOWN`, as before. BATTERY CAL goes back
+  to the nominal 2537, which discards a calibration you made with a voltmeter.
 * Items that are numbers you type (RPT OFFSET, BATTERY CAL, LATITUDE, LONGITUDE): press `MENU`, type the digits, press `MENU`
   to accept. `EXIT` deletes the last digit, and leaves the item when nothing is typed. In LATITUDE and LONGITUDE, `*`
   switches between N and S, or E and W. Type latitude as four decimals after two integer digits (`407100` is 40.7100 N) and
@@ -224,12 +241,70 @@ Names and choices are from the source. What each one does on the air has not bee
 | DISPLAY | BACKLIGHT (ALWAYS ON, 5, 10, 15, 20 SEC); AUTO KEYLOCK (OFF, 5, 10, 15 SEC) |
 | KEYS | SIDE1 SHORT, SIDE1 LONG, SIDE2 SHORT, SIDE2 LONG, BAND LONG, VFO/MR LONG: see [below](#assigning-the-side-keys-band-and-vfomr-long-press) |
 | ANI / DTMF | ANI ON PTT; ANI CALL |
-| SYSTEM | **TX BANDS** (the transmit-range lock); LATITUDE; LONGITUDE (used by HAM TOOLS' grid locator); BATTERY CAL; BOOT SCREEN (OFF, LOGO); BOOT SOUND; VERSION (`MENU`, then `UP`/`DOWN` flips between `UV-5RM OPEN FW` and `SEE BOOT SCREEN`); RF CHIP ID; RESET ALL |
+| PRESETS | QUIET; BATTERY SAVER; SCANNING; REPEATER; DEFAULTS: see [Presets](#presets) |
+| SYSTEM | **TX BANDS** (the transmit-range lock); LATITUDE; LONGITUDE (used by HAM TOOLS' grid locator); GRID LOCATOR (type the position as a locator, see [below](#entering-your-position-as-a-grid-locator)); BATTERY CAL; BOOT SCREEN (OFF, LOGO); BOOT SOUND; VERSION (`MENU` opens the [about view](#about-version)); RF CHIP ID (opens the same view); RESET ALL |
 
 Defaults of a new settings record, from the source: TX INHIBIT on, TX BANDS `FCC HAM`, SQUELCH 3, TX TIMEOUT 120 s
 (8 steps), CH DISPLAY NAME+FREQ, backlight 10 SEC, key beep on, boot screen LOGO.
 
 ![The SYSTEM group. The simulator starts from an empty settings record, so TX BANDS shows CE HAM here; a real radio's default is FCC HAM.](img/settings-system.png)
+
+### Entering your position as a grid locator
+
+SYSTEM > GRID LOCATOR shows the six-character Maidenhead locator of the stored position (for example `EM12kx`; `----` when no
+position has been entered). `MENU` opens an entry screen where you type a locator instead of latitude and longitude digit by
+digit; `MENU` sets LATITUDE and LONGITUDE to the **middle** of the square you typed.
+
+* Four characters (`EM12`) or six (`EM12kx`). Two letters, two digits, two letters.
+* **Digits** go straight in. **Letters** are typed as on a phone keypad: `2` is A B C, `3` is D E F, `4` G H I, `5` J K L,
+  `6` M N O, `7` P Q R S, `8` T U V, `9` W X Y Z. Press the key once for its first letter, again for the next. A different key, or
+  `#`, accepts the letter. For example `EM12kx` is `3 3`, `6`, `1`, `2`, `5 5`, `#`, `9 9`.
+* A place takes only the letters that belong there: the first two letters A to R, the last two A to X. Keys that do not fit
+  the place (a digit key where a letter goes, `8` for the first two letters) are ignored.
+* `EXIT` deletes the letter being chosen or the last character; with nothing typed it goes back without changing anything.
+  `MENU` with anything but four or six characters says `Need 4 or 6 characters`.
+* The conversion is checked by unit tests against known squares. The entry screen shows only the characters; the new latitude
+  and longitude appear in the SYSTEM list when you come back.
+
+### About (VERSION)
+
+`MENU` on SYSTEM > VERSION (or on RF CHIP ID) opens a read-only view titled ABOUT (it is a different part of the SETTINGS app, so it takes a moment to appear). `UP` and `DOWN` move its cursor and `EXIT`
+goes back.
+
+| Row | Shows |
+|---|---|
+| FIRMWARE | `UV-5RM OPEN FW` |
+| BUILD | `ON BOOT SCREEN`: the build's commit (the commit hash, with `-dirty` when it was built from changed files) is drawn on the boot screen, which appears only when BOOT SCREEN is LOGO. SETTINGS cannot read it from the firmware, so it is not repeated here |
+| RADIO, BOARD, MCU | `UV-5RM`, `5RHNRFB-YP07`, `AT32F421`: what this firmware is built for (fixed text; the radio is not asked) |
+| RF CHIP | the chip's id as the firmware reads it (same as RF CHIP ID) |
+| APP ABI | the interface hash the firmware was built with, for example `0x0C109B81`. An app runs only if it was built with the same value (otherwise the APPS list shows `EMPTY`) |
+
+### Presets
+
+SETTINGS > PRESETS changes several settings at once. Pressing `MENU` on a preset does **not** apply it: it opens a preview that
+lists exactly the settings it would change, each as `OLD>NEW` (a setting that already has the preset's value is left out).
+`MENU` applies the preset (the notice `PRESET APPLIED` shows); `EXIT` cancels and nothing changes. A preset that has nothing
+to change says `ALREADY SET`. Applying one is a one-time change: the settings are then ordinary settings you can change
+one by one, and applying a preset again later is the only way to get them back.
+
+![The QUIET preview: three settings would change.](img/settings-preset-preview.png)
+
+| Preset | Sets |
+|---|---|
+| QUIET | KEY BEEP off, ROGER BEEP off, BOOT SOUND off, BACKLIGHT 5 SEC |
+| BATTERY SAVER | BATTERY SAVE 3 (the receiver listens 0.1 s and sleeps 0.3 s once idle), BACKLIGHT 5 SEC, DUAL WATCH off, VOX off |
+| SCANNING | SCAN RESUME CARRIER (stay on a call until it ends), SQUELCH 4, BACKLIGHT 15 SEC |
+| REPEATER | BUSY LOCKOUT on, SQ TAIL ELIM on, TX TIMEOUT 60 SEC, VOX off |
+| DEFAULTS | SQUELCH 3, DUAL WATCH off, BATTERY SAVE off, KEY BEEP on, BACKLIGHT 10 SEC, SCAN RESUME CARRIER, VOX off, SQ TAIL ELIM on, ROGER BEEP off |
+
+A preset **never** changes TX INHIBIT, TX BANDS, your saved position (LATITUDE, LONGITUDE), the key assignments (SIDE1,
+SIDE2, BAND, VFO/MR), BATTERY CAL, the boot text and start-up tune, or what belongs to the frequency on the main screen
+(FREQ STEP, BANDWIDTH, TX POWER, tones, repeater shift and offset). Only the settings listed in the table can change: a unit test
+checks every byte of the settings record. DEFAULTS is the "factory" preset for these settings only; RESET ALL is the one that
+erases everything.
+
+Presets are applied by you, when you open this screen. Presets that follow what the radio is doing (battery saver when the battery is
+low, quiet on the charger) would need the radio's own firmware to apply them, because this app only runs while it is open.
 
 ## CHAN MGR (the channel manager)
 

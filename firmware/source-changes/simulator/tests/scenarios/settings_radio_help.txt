@@ -1,0 +1,30 @@
+# Settings, RADIO: the strip under the list explains the selected setting in plain words; while a value is being
+# changed it shows the keys instead. A few lines follow the value (BATTERY SAVE, TX INHIBIT).
+# MODEL: the simulated record starts as the core's Settings::DEFAULT (clamped like Settings::from_bytes); `setting` steps move what the scenario needs away from it.
+setting 3 0                 # TX INHIBIT off
+handoff 0 1
+app settings
+shot sql_help
+key down
+key down
+key down
+key down                  # BATTERY SAVE
+shot save_off_help
+key menu
+shot save_editing_keys
+key up
+key up
+key menu                  # keep level 2
+shot save_2_help
+key down
+key down                  # TX INHIBIT
+shot txinhibit_off_help
+key menu
+key up                    # ON
+key menu
+shot txinhibit_on_help
+key down
+key down
+key down
+key down                  # RX TONE
+shot rxtone_help

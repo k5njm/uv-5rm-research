@@ -31,6 +31,8 @@ FRAMES=(
   "settings_menu_groups/autolk_editing       settings-editing"
   "settings_menu_keys/vm_long_app4           settings-keys"
   "settings_system_items/system_items        settings-system"
+  "settings_system_help/txbands_fcc_help     settings-help"
+  "settings_presets_quiet/quiet_preview      settings-preset-preview"
   # Apps
   "spectrum_two_signals/waterfall_filled     spectrum"
   "spectrum_no_signal/no_signal_toast        spectrum-no-signal"

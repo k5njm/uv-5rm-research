@@ -1,0 +1,51 @@
+# Settings, menu segment: the help line for AUDIO items (ROGER BEEP follows its value) and for KEYS, where it says
+# what the assigned function does.
+# MODEL: the simulated record starts as the core's Settings::DEFAULT (clamped like Settings::from_bytes); `setting` steps move what the scenario needs away from it.
+handoff 1 1
+app settings
+shot audio_beep_help
+key down
+key down
+key down
+key down
+key down
+key down
+key down                  # ROGER BEEP
+shot roger_off_help
+key menu
+key up
+key menu
+shot roger_beep_help
+key menu
+key up
+key menu
+shot roger_mdc_help
+key exit                  # back to the groups
+key down
+key down                  # KEYS
+key menu
+shot side1_short_none_help
+key menu
+key up
+key menu
+shot side1_short_bandwidth_help
+key down
+key down
+key down
+key down
+key down                  # VFO/MR LONG
+key menu
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key menu                  # APP 4 (12 steps: 5 and 9 are skipped)
+shot vm_long_app4_help

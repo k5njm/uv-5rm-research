@@ -2,7 +2,7 @@
 
 The simulator (firmware/source-changes/simulator/scenario.rs) is the reference; this parses the
 same text. Steps the rig cannot do on a real radio are reported, never silently skipped:
-`coords`, `step`, `expect backlight`, `expect fmlive` and the radio-condition setup steps (`master`, `signal`, `chan`, `air`, `handoff`, `group`) need the
+`coords`, `step`, `expect backlight`, `expect fmlive`, `expect handoff`, `expect setting` and the radio-condition setup steps (`master`, `signal`, `chan`, `air`, `handoff`, `group`, `setting`) need the
 simulator's access to internals; on a real radio the equivalent conditions (a signal generator, stored channels)
 must be arranged by hand before the run, so these are listed in the report, never silently skipped.
 """
@@ -14,7 +14,7 @@ KEYS = {"star": 10, "pound": 11, "menu": 12, "exit": 13, "up": 14, "down": 15, "
 # device/keypad.rs `supports_long`: the only keys that ever send a Long event. Holding any other key just sends a
 # Single when it is released, so a `hold` step on it would not do what the simulator's author meant (MENU is not here).
 LONG_KEYS = {"up", "down", "exit", "star", "pound", "0", "side1", "side2"}
-SIM_ONLY = {"coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore", "txshot"}
+SIM_ONLY = {"coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore", "txshot", "setting"}
 # The injector has no wire to the side keys, and a rig cannot capture the screen mid-transmission.
 SIDE_KEYS = ("side1", "side2")
 
@@ -43,7 +43,7 @@ def parse(text):
             raise ValueError(f"line {n}: wait needs seconds")
         if op == "shot" and len(args) != 1:
             raise ValueError(f"line {n}: shot needs a name")
-        if op not in ("app", "key", "hold", "repeat", "wait", "shot", "expect", "allow", "coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore", "txshot"):
+        if op not in ("app", "key", "hold", "repeat", "wait", "shot", "expect", "allow", "coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "setting", "fmcore", "txshot"):
             raise ValueError(f"line {n}: unknown step {op!r}")
         steps.append(Step(n, op, args))
     return steps
@@ -55,4 +55,4 @@ def uses_tx(steps):
 
 def sim_only(steps):
     return [s for s in steps if s.op in SIM_ONLY or (s.op in ("key", "hold") and s.args[0] in SIDE_KEYS)
-            or (s.op == "expect" and s.args[:1] in (["backlight"], ["fmlive"], ["fmtable"], ["vfo"]))]
+            or (s.op == "expect" and s.args[:1] in (["backlight"], ["fmlive"], ["fmtable"], ["vfo"], ["handoff"], ["setting"]))]

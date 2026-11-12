@@ -1,0 +1,35 @@
+# Settings, SYSTEM: help for TX BANDS follows the choice (what may transmit), and the rest of the group.
+# MODEL: the simulated record starts as the core's Settings::DEFAULT (clamped like Settings::from_bytes); `setting` steps move what the scenario needs away from it.
+setting 29 0                # TX BANDS CE HAM
+handoff 5 1
+app settings
+shot txbands_ce_help
+key menu
+key up
+key menu
+shot txbands_fcc_help
+key menu
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up                    # steps up to ALL, the widest choice: the help lists its ranges
+key menu
+shot txbands_all_help
+key down
+key down                  # LATITUDE is the second row; this lands on LONGITUDE
+shot lon_help
+key down                  # GRID LOCATOR
+shot grid_help
+key down                  # BATTERY CAL
+shot battcal_help
+key down
+key down
+key down                  # VERSION
+shot version_help
+key down
+key down                  # RESET ALL
+shot reset_help

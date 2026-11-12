@@ -683,7 +683,9 @@ impl<'a> App<'a> {
 
     // auto-lock
     fn reset_key_idle(&mut self) {
-        self.key_idle_ticks = self.settings.key_auto_lock as u16 * 50;
+        // 5 s per step, as the setting is labelled. Polled beside the backlight (main.rs), whose 5 s is
+        // BACKLIGHT_STEP_TICKS; this was `* 50`, which locked the keys after about half a second per step (AUDIT 51).
+        self.key_idle_ticks = self.settings.key_auto_lock as u16 * BACKLIGHT_STEP_TICKS;
     }
 
     pub fn poll_auto_lock(&mut self, syst: &mut SYST, rx_active: bool) {

@@ -1,0 +1,32 @@
+# Settings, segment PRESETS: entering a Maidenhead locator (SYSTEM > GRID LOCATOR). Letters are typed like a phone's
+# keypad (3 is DEF: 3 twice is E), digits go straight in, # accepts a letter. The screen shows the stored position's
+# locator and, once four or six characters are in, the latitude and longitude it would set (the middle of the square).
+# Starts from a stored position (40.7100 N, 74.0100 W: FN20).
+setting 32 88 30 62 0 216 17 143 255
+handoff 0 3 3             # started from GRID LOCATOR (SYSTEM row 3)
+app settings
+shot start
+key 3
+key 3
+shot first_letter         # E, still being chosen
+key 6
+shot second_letter        # a different key accepts the E: M
+key 1
+shot first_digit
+key 2
+shot square_complete      # EM12: four characters are enough
+key 5
+key 5
+key 5
+key 5                     # J K L J
+shot sub_square_first
+key 5
+shot sub_square_k         # a different... the same key again steps on: K
+key pound
+key 9
+key 9
+shot six_complete         # EM12kx
+expect setting 32 88 30 62 0 216 17 143 255   # nothing is stored until MENU
+key menu
+expect setting 32 125 82 50 0 140 204 107 255   # 32.9792 N, 97.1250 W
+expect handoff A5 05 01 03
