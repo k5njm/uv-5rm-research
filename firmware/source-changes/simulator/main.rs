@@ -204,7 +204,14 @@ extern "C" fn uptime() -> u32 {
     sim().now = sim().now.wrapping_add(1);
     sim().now
 }
+/// `txshot` step: `Some(None)` while armed, `Some(Some(frame))` once the screen has been captured with the transmitter keyed.
+pub static mut TX_CAPTURE: Option<Option<Vec<u8>>> = None;
 extern "C" fn delay_ms(ms: u32) {
+    unsafe {
+        if sim().transmitting && matches!(*std::ptr::addr_of!(TX_CAPTURE), Some(None)) {
+            *std::ptr::addr_of_mut!(TX_CAPTURE) = Some(Some(scenario::frame_rgb()));
+        }
+    }
     sim().now = sim().now.wrapping_add(ms * 10);
 }
 

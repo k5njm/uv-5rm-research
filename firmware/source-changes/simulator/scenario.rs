@@ -21,7 +21,7 @@
 //!   fmtable bad         a table whose header is damaged: the FM app must ignore it
 //!   fmcore DECI...      the core's bare FM station list (what the FM app shows when there is no table)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
-//!   key K               single press. K = 0-9 star pound menu exit up down ab
+//!   key K               single press. K = 0-9 star pound menu exit up down ab side1 side2
 //!   hold K              long press
 //!   step MS             radio time advanced per tick by `wait` (default 5; larger = faster)
 //!   wait SECS           run ticks + draws for SECS of radio time
@@ -33,6 +33,9 @@
 //!   expect fmlive N     live stations in the FM table, as the app would read it; `expect fmtable none` for no valid table
 //!   expect rfrefused N  RF register writes the core's allow-list refused
 //!   expect captured N   records FSK PROBE left in its flash capture range
+//!   expect vfo HZ CODE  what the app handed the core with api.save_master_vfo (tone code 0 = none); `expect vfo none` if nothing
+//!   txshot NAME         the NEXT key or hold: also save the frame the app had on screen at the moment the transmitter was keyed
+//!                       (the first delay while transmitting), as NAME.png compared with the golden like `shot`
 //!   expect rxonly       (default on) fails the scenario if the app keyed PTT or the tone function
 //!   allow tx            disables the rx-only safety check for this scenario
 //! The same file is meant to drive the real radio through hil/ (keys via the injector,
@@ -90,6 +93,8 @@ fn key_id(k: &str) -> Option<u8> {
         "up" => 14,
         "down" => 15,
         "ab" => 17,
+        "side1" => 19,
+        "side2" => 20,
         d if d.len() == 1 && d.as_bytes()[0].is_ascii_digit() => d.as_bytes()[0] - b'0',
         _ => return None,
     })
@@ -187,7 +192,7 @@ fn png_decode_own(png: &[u8], w: usize, h: usize) -> Option<Vec<u8>> {
     Some(rgb)
 }
 
-fn frame_rgb() -> Vec<u8> {
+pub(crate) fn frame_rgb() -> Vec<u8> {
     let mut out = Vec::with_capacity(W * H * 3);
     for &p in &sim().fb {
         out.push((((p >> 11) & 0x1F) * 255 / 31) as u8);
@@ -254,6 +259,7 @@ struct Run<'a> {
     step_ms: u32,
     last_exit: bool,
     rx_only: bool,
+    tx_shot: Option<String>,
     pass: u32,
     fail: u32,
 }
@@ -265,6 +271,10 @@ impl Run<'_> {
 
     fn shot(&mut self, shot: &str) {
         let rgb = frame_rgb();
+        self.shot_rgb(shot, rgb);
+    }
+
+    fn shot_rgb(&mut self, shot: &str, rgb: Vec<u8>) {
         let png = png_encode(W, H, &rgb);
         let dir = self.o.out.join(&self.name);
         std::fs::create_dir_all(&dir).unwrap();
@@ -441,6 +451,12 @@ impl Run<'_> {
                     }
                     std::thread::sleep(std::time::Duration::from_micros(200));
                 }
+                if let Some(name) = self.tx_shot.take() {
+                    match unsafe { TX_CAPTURE.take() } {
+                        Some(Some(rgb)) => self.shot_rgb(&name, rgb),
+                        _ => self.check(false, &format!("txshot {name}: the transmitter was never keyed")),
+                    }
+                }
             }
             ["step", ms] => self.step_ms = ms.parse().unwrap_or(5).max(1),
             ["wait", s] => match s.parse::<f64>() {
@@ -488,6 +504,19 @@ impl Run<'_> {
             ["expect", "rfrefused", n] => {
                 let got = unsafe { RF_WRITES_REFUSED };
                 self.check(n.parse::<u32>().ok() == Some(got), &format!("{n} refused RF register write(s) (got {got})"));
+            }
+            ["expect", "vfo", "none"] => {
+                let got = sim().vfo_saved;
+                self.check(got.is_none(), &format!("nothing handed to the VFO (got {got:?})"));
+            }
+            ["expect", "vfo", hz, code] => {
+                let want = hz.parse::<u32>().ok().zip(code.parse::<u16>().ok());
+                let got = sim().vfo_saved;
+                self.check(want.is_some() && got == want, &format!("VFO handed {hz} Hz, tone code {code} (got {got:?})"));
+            }
+            ["txshot", n] => {
+                unsafe { TX_CAPTURE = Some(None) };
+                self.tx_shot = Some(n.to_string());
             }
             ["allow", "tx"] => self.rx_only = false,
             _ => self.check(false, &format!("unrecognised step `{}`", t.join(" "))),
@@ -541,7 +570,7 @@ pub fn run_file(o: &Opts) -> u32 {
         std::process::exit(2)
     });
     println!("scenario {name}");
-    let mut r = Run { o, master: 146_520_000, setup: Vec::new(), name, app: None, step_ms: 5, last_exit: false, rx_only: true, pass: 0, fail: 0 };
+    let mut r = Run { o, master: 146_520_000, setup: Vec::new(), name, app: None, step_ms: 5, last_exit: false, rx_only: true, tx_shot: None, pass: 0, fail: 0 };
     for (i, l) in text.lines().enumerate() {
         r.line(i + 1, l);
     }

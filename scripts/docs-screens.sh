@@ -33,6 +33,7 @@ FRAMES=(
   "settings_system_items/system_items        settings-system"
   # Apps
   "spectrum_two_signals/waterfall_filled     spectrum"
+  "spectrum_no_signal/no_signal_toast        spectrum-no-signal"
   "bandsweep_vhf/after_first_pass            bandsweep"
   "foxhunt_signal/meter_steady               foxhunt"
   "foxhunt_signal/distance_entry             foxhunt-distance"

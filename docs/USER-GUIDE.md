@@ -433,15 +433,28 @@ scripted.
 A panadapter: a trace of signal strength over a stretch of spectrum, with a waterfall under it. It opens centred on the
 frequency on the main screen. It only receives.
 
-![SPECTRUM: a strong signal at 146.520 MHz and a weaker one at 146.700 MHz, trace above and waterfall below.](img/spectrum.png)
+![SPECTRUM: a strong signal at 146.520 MHz marked by an amber triangle and a weaker one at 146.700 MHz, trace above and waterfall below.](img/spectrum.png)
 
-The top line shows the start and stop frequency of the window. At the bottom, line one shows a typed frequency (`F`), the
-frequency being listened to (`RX`), the peak (`P`) or the pan step; line two shows `ST` (frequency step), `B` (bins), `D`
-(dwell), `T+` (trigger margin, dB), `C` (top of the scale, dBm), `G` (gain: a number, or `A` for automatic) and `A` when
-auto-listen is on.
+The light title bar shows the start and stop frequency of the window. The strongest signal that stands above the red dashed
+line (the trigger line, set with `*` / `#`) is marked with an amber triangle at the top of the trace, and the line under the
+waterfall gives its frequency and level (`PEAK`). That is exactly the frequency `MENU` tunes to. The second line shows `ST`
+(frequency step), `B` (bins), `D` (dwell), `T+` (trigger margin, dB), `C` (top of the scale, dBm), `G` (gain: a number, or
+`A` for automatic) and `A` when auto-listen is on. The strip at the bottom says what the keys do in the current state.
+
+**Going to the strongest signal:** press `MENU`. The radio's VFO is set to the marked frequency and SPECTRUM closes, so you are
+listening to it on the main screen. It is the same hand-over BAND SWEEP uses on a held `MENU`: the active side (A or B)
+switches to VFO mode on that frequency, with no CTCSS/DCS tone, and the memory channel it was on is left unchanged. If
+nothing is above the trigger line the box `NO SIGNAL` appears and SPECTRUM stays open (it never tunes to noise). The
+frequency is the sweep's own grid point (the window is anchored on the frequency you opened it on, in steps of `ST`), so with
+a coarse step the true signal can be a few kHz away; use `7` for a finer step first. "Strongest" is the highest of the latest
+reading of every bin, so it follows the signal as it changes rather than a stale peak. While auto-listen is playing a signal,
+`MENU` tunes to that one.
+
+![NO SIGNAL: MENU with nothing above the trigger line.](img/spectrum-no-signal.png)
 
 | Key | Action |
 |---|---|
+| `MENU` | Tune the VFO to the marked peak and leave (or `NO SIGNAL`). |
 | `UP` / `DOWN` | Move the window up or down by the pan step. |
 | `1` / `7` | Larger / smaller scan step. |
 | `2` / `8` | Larger / smaller pan step. |
@@ -450,10 +463,10 @@ auto-listen is on.
 | `4` | Cycle the number of bins (128, 64, 32, 16). |
 | `5` | Type a centre frequency (six digits, MHz with three decimals), `MENU` to accept. |
 | `0` / `6` | Longer / shorter dwell per bin. |
-| `MENU` | Turn auto-listen on or off. With it on, the app stops sweeping and plays the audio of the strongest signal above the trigger. |
-| `SIDE1` | Blacklist the current peak (ignore that bin). |
+| `A/B` | Turn auto-listen on or off (this was `MENU` before). With it on, the app stops sweeping and plays the audio of the strongest signal above the trigger. |
+| `SIDE1` | Ignore the marked bin (a signal spills into the bins next to it: press again for each). |
 | `SIDE2` | Step the fixed gain through its choices, then back to automatic. |
-| `EXIT` | Leave. Any other key stops a listen first. |
+| `EXIT` | Leave without tuning. Any other key stops a listen first. |
 
 ### BAND SWEEP
 
