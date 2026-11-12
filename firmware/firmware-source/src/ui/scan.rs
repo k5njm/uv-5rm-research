@@ -90,8 +90,8 @@ where
         header.put_str(app.chan_mode_name());
         header.put_char(' ');
         header.put_str(dir);
-        header.put_str(" M");
-        header.put_u32_w((app.watching_channel_num() + 1) as u32, 3, b'0');
+        header.put_char(' ');
+        app.put_channel_number(app.watching_channel_num(), &mut header);
     } else {
         header.put_str(app.chan_mode_name());
         header.put_char(' ');

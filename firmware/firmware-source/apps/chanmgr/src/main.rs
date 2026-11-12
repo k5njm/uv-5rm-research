@@ -1242,17 +1242,23 @@ fn format_field_value(
     }
 }
 
-/// `num` is the flash slot (from 0); the text is the number the main screen shows for it (M001 is slot 0).
-fn fmt_ch_num(out: &mut [u8], num: u16) {
+/// The number the main screen shows for slot `num`: its position in the group being shown, at least two digits
+/// ("01"; in ALL the printed channel number). Returns the length written.
+fn fmt_num(api: &Api, out: &mut [u8], num: u16) -> usize {
+    let pos = (api.chan_group_pos)(shown_group(), num) as u32;
+    let mut i = 0;
+    if pos < 10 {
+        out[0] = b'0';
+        i = 1;
+    }
+    i + (api.fmt_u32)(pos, out[i..].as_mut_ptr()) as usize
+}
+
+/// "CH" and the number; returns the length written.
+fn fmt_ch_num(api: &Api, out: &mut [u8], num: u16) -> usize {
     out[0] = b'C';
     out[1] = b'H';
-    let mut digits = [b'0'; 3];
-    let mut n = num as u32 + 1;
-    for k in (0..3).rev() {
-        digits[k] = (n % 10) as u8 + b'0';
-        n /= 10;
-    }
-    out[2..5].copy_from_slice(&digits);
+    2 + fmt_num(api, &mut out[2..], num)
 }
 
 fn draw(api: &Api) -> AppResult {
@@ -1296,13 +1302,11 @@ fn draw(api: &Api) -> AppResult {
                     }
                     match list.channel_at(gi) {
                         Some(num) => {
-                            // "001 K5RWK      147.1200": the number the main screen shows, the name, the frequency
+                            // "01 K5RWK       147.1200": the number the main screen shows, the name, the frequency
                             let ch = read_channel(api, num);
-                            let mut digits = [0u8; 5];
-                            fmt_ch_num(&mut digits, num);
-                            rows[i].label[..3].copy_from_slice(&digits[2..5]);
-                            rows[i].label[3] = b' ';
-                            write_bytes(&mut rows[i].label[4..], channel_name_bytes(&ch.name));
+                            let n = fmt_num(api, &mut rows[i].label, num);
+                            rows[i].label[n] = b' ';
+                            write_bytes(&mut rows[i].label[n + 1..], channel_name_bytes(&ch.name));
                             fmt_mhz4(api, ch.rx_freq_deci_hz() * 10, &mut rows[i].value);
                             rows[i].has_value = true;
                         }
@@ -1349,9 +1353,9 @@ fn draw(api: &Api) -> AppResult {
         Phase::Detail(edit) => {
             if edit.is_new {
                 write_str(&mut title_buf, "NEW ");
-                fmt_ch_num(&mut title_buf[4..], edit.num);
+                fmt_ch_num(api, &mut title_buf[4..], edit.num);
             } else {
-                fmt_ch_num(&mut title_buf, edit.num);
+                fmt_ch_num(api, &mut title_buf, edit.num);
             }
         }
         Phase::Exit => {}
@@ -1388,10 +1392,10 @@ fn draw(api: &Api) -> AppResult {
         show_arrows,
     );
     if let Some(num) = state.saved {
-        let mut text = [0u8; 11];
+        let mut text = [0u8; 16];
         text[..6].copy_from_slice(b"SAVED ");
-        fmt_ch_num(&mut text[6..], num);
-        (api.toast)(text.as_ptr(), text.len() as u16);
+        let n = 6 + fmt_ch_num(api, &mut text[6..], num);
+        (api.toast)(text.as_ptr(), n as u16);
     }
 
     AppResult::Continue

@@ -112,10 +112,12 @@ fn hop(app: &mut App, syst: &mut SYST) {
             }
         }
         ChVfoMode::Vfo => {
+            // CUSTOM RANGE scans the typed range; otherwise the band the VFO is in (2 m, 70 cm, ...), not the
+            // synthesizer's whole 16-560 MHz.
             let (lo, hi) = if modes::is_custom(app.chan_mode) {
                 (app.range_lo_hz, app.range_hi_hz)
             } else {
-                FreqRanges::hardware().bounds()
+                super::group_table::scan_band(app.sides[app.master].rx_freq_hz)
             };
             let s = &mut app.sides[app.master];
             let step_hz = s.step_deci_hz() * 10;

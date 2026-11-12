@@ -659,8 +659,8 @@ where
 
     let mut label: TextBuf<8> = TextBuf::new();
     if app.side_is_channel_mode(i) {
-        label.put_char('M');
-        label.put_u32_w((app.side_channel_num(i) + 1) as u32, 3, b'0');
+        // the channel's number within the current group (the group is named in the status bar)
+        app.put_channel_number(app.side_channel_num(i), &mut label);
     } else {
         label.put_str("VFO");
     }
@@ -816,7 +816,6 @@ where
 {
     let len = app.channel_input_len();
     let mut buf: TextBuf<8> = TextBuf::new();
-    buf.put_char('M');
     for pos in 0..3usize {
         if pos + len < 3 {
             buf.put_char('-');

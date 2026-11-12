@@ -971,6 +971,15 @@ extern "C" fn api_chan_in_group(index: u8, num: u16) -> bool {
 }
 
 #[inline(never)]
+extern "C" fn api_chan_group_pos(index: u8, num: u16) -> u16 {
+    if (index as usize) < super::modes_table().len() && num <= super::MAX_CHANNEL_NUM {
+        super::group_table::group_pos(index, num).unwrap_or(0)
+    } else {
+        0
+    }
+}
+
+#[inline(never)]
 extern "C" fn api_current_group() -> u8 {
     app_ref().chan_mode_index() as u8
 }
@@ -1609,6 +1618,7 @@ static API: Api = Api {
     group_name: api_group_name,
     chan_in_group: api_chan_in_group,
     current_group: api_current_group,
+    chan_group_pos: api_chan_group_pos,
     toast: api_toast,
     list_hint: api_list_hint,
 };

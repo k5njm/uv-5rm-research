@@ -934,6 +934,13 @@ impl<'a> App<'a> {
         }
     }
 
+    /// The number shown for channel slot `num`: its position in the current group, at least two digits ("01"; in
+    /// ALL the printed channel number). The main screen, the scan screen and CHAN MGR use the same number.
+    pub fn put_channel_number(&self, num: u16, w: &mut dyn crate::fmtlite::Sink) {
+        let pos = group_table::group_pos(self.chan_mode, num).unwrap_or(num + 1);
+        w.put_u32_w(pos as u32, 2, b'0');
+    }
+
     /// Detail text of the channel side `index` is on; empty in VFO mode or when none was loaded.
     pub fn side_detail_str(&self, index: usize) -> &str {
         let d = &self.details[index];

@@ -434,6 +434,13 @@ extern "C" fn chan_in_group(index: u8, num: u16) -> bool {
 extern "C" fn current_group() -> u8 {
     unsafe { GROUP }
 }
+extern "C" fn chan_group_pos(index: u8, num: u16) -> u16 {
+    if (index as usize) < group_table::MODES.len() && num <= 999 {
+        group_table::group_pos(index, num).unwrap_or(0)
+    } else {
+        0
+    }
+}
 /// Same drawing code as the firmware; removing the toast forces the list under it to repaint, as on the radio.
 extern "C" fn toast(text: *const u8, len: u16) {
     if text.is_null() || len == 0 {
@@ -804,6 +811,7 @@ static API: Api = Api {
     group_name,
     chan_in_group,
     current_group,
+    chan_group_pos,
     toast,
     list_hint,
 };

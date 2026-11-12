@@ -210,6 +210,9 @@ pub struct Api {
     pub chan_in_group: extern "C" fn(index: u8, num: u16) -> bool,
     /// The group the radio is using now.
     pub current_group: extern "C" fn() -> u8,
+    /// The number to show for channel slot `num` in group `index`: its position in the group from 1 (in ALL, the
+    /// printed channel number). 0 if the slot is not in the group. The main screen, scan and CHAN MGR all show this.
+    pub chan_group_pos: extern "C" fn(index: u8, num: u16) -> u16,
     /// A notice box in the middle of the screen (like TX PROHIBITED), drawn over whatever is there. Call it after
     /// `draw_list` on every Draw while it should show. `len` 0 removes it: the next `draw_list` repaints in full.
     pub toast: extern "C" fn(text: *const u8, len: u16),

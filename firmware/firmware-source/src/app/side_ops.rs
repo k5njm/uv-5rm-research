@@ -83,12 +83,13 @@ pub(super) fn commit_input(app: &mut App, syst: &mut SYST) {
     let value = app.input.entered_value();
     match app.sides[app.master].vfo_chan {
         ChVfoMode::Channel => {
-            // Typed numbers count from 1 like the printed sheet; flash slots from 0.
-            if (1..=MAX_CHANNEL_NUM as u32 + 1).contains(&value) {
-                let num = value as u16 - 1;
-                if !app.storage.is_channel_empty(num)
-                    && modes::contains(app.chan_mode, num)
-                {
+            // A typed number is the one the screen shows: the position in the current group, from 1
+            // (in ALL, the printed channel number).
+            let slot = u16::try_from(value)
+                .ok()
+                .and_then(|pos| super::group_table::group_slot(app.chan_mode, pos));
+            if let Some(num) = slot {
+                if num <= MAX_CHANNEL_NUM && !app.storage.is_channel_empty(num) {
                     load_channel_num(app, num);
                     sync_watching_to_master(app, syst);
                 }
