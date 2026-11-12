@@ -72,6 +72,14 @@ for label, addr, _ in want:
         raise SystemExit(f"SHORT READ of {label}: got {len(r)} bytes")
     before.append(r)
 changed = [i for i in range(len(want)) if before[i] != want[i][2]]
+# The firmware erases a channel's whole 4 KB flash sector (128 channels) the first time a session writes into it
+# (storage.rs write_channel), then stores only what it is sent. So every channel the image has in a touched sector
+# must be sent, changed or not, or the unchanged ones are lost. Found on a radio (AUDIT 37): a load that changed 65
+# channels wiped the untouched ones beside them. The fake radio now erases the same way.
+SECTOR_CHANNELS = 4096 // SLOT
+touched = {i // SECTOR_CHANNELS for i in changed if i < SLOTS}
+to_write = [i for i in range(len(want)) if (i >= SLOTS and i in changed)
+            or (i < SLOTS and i // SECTOR_CHANNELS in touched and (want[i][2] != b"\xff" * SLOT or i in changed))]
 groups = {}
 for i in changed:
     groups.setdefault(want[i][0].split()[0], []).append(i)
@@ -105,7 +113,7 @@ else:
         f.write(undo)
     print(f"current records saved to {before_path}")
 
-for n, i in enumerate(changed, 1):
+for n, i in enumerate(to_write, 1):
     label, addr, data = want[i]
     cps.send(WRITE, addr, data)
     if cps.send(READ, addr)[2] != data:
@@ -114,11 +122,11 @@ for n, i in enumerate(changed, 1):
         cps.end()
         raise SystemExit(f"RESTORE STOPPED at {label}; everything else is as it was or restored. Undo file: {before_path}")
     if n % 100 == 0:
-        print(f"  {n}/{len(changed)}")
+        print(f"  {n}/{len(to_write)}")
 for label, addr, data in want:
     if cps.send(READ, addr)[2] != data:
         cps.end()
         raise SystemExit(f"FINAL VERIFY FAILED at {label}")
-print(f"restored {len(changed)} records; all {len(want)} verified through the port")
+print(f"restored {len(changed)} records ({len(to_write)} written: whole sectors); all {len(want)} verified through the port")
 cps.end()
 print("done; radio restarting")
