@@ -1,0 +1,32 @@
+# Settings, SYSTEM: help for TX BANDS follows the choice (what may transmit), and the rest of the group.
+# MODEL CAVEAT: all-zero settings record in the simulator: TX BANDS starts at CE HAM (a real radio starts at FCC HAM).
+handoff 5 1
+app settings
+shot txbands_ce_help
+key menu
+key up
+key menu
+shot txbands_fcc_help
+key menu
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up                    # steps up to ALL, the widest choice: the help lists its ranges
+key menu
+shot txbands_all_help
+key down
+key down                  # LATITUDE is the second row; this lands on LONGITUDE
+shot lon_help
+key down                  # BATTERY CAL
+shot battcal_help
+key down
+key down
+key down                  # VERSION
+shot version_help
+key down
+key down                  # RESET ALL
+shot reset_help

@@ -192,11 +192,19 @@ SETTINGS is app 1. It has six groups. Use `UP` and `DOWN` and `MENU` to open one
 3. `UP` and `DOWN` change the value. Pressing `0` sets it to its lowest choice (off, none, or the first in the list).
 4. Press `MENU` to **keep** the change, or `EXIT` to **undo** it and put the old value back.
 
-A list longer than the screen has a small grey mark on its right edge showing how far down you are. The strip at the bottom says which keys do what at that moment: `MENU change  EXIT back` when you are only looking, and
-`UP/DN MENU save EXIT undo` while a value is being changed. For numbers you type it reads `0-9 type MENU ok EXIT del` (latitude and
+A list longer than the screen has a small grey mark on its right edge showing how far down you are.
+
+**The strip at the bottom.** While you are only looking at a list, it explains the selected setting in plain words (for
+example `Higher mutes weak signals` under SQUELCH). A few lines follow the value: under BATTERY SAVE it says what the
+chosen step costs, under TX INHIBIT whether the radio can transmit, under TX BANDS which frequencies the chosen choice
+allows, and under a key setting what the assigned function does. (The keys are the same on every list: `MENU` changes the
+selected setting, `EXIT` goes back.) While a value is being changed the strip shows the keys instead:
+`UP/DN MENU save EXIT undo`. For numbers you type it reads `0-9 type MENU ok EXIT del` (latitude and
 longitude: `0-9  * N/S  MENU ok` and `0-9  * E/W  MENU ok`), and for VERSION and RF CHIP ID `UP/DN page    EXIT back`.
 
 ![Changing AUTO KEYLOCK: the row is amber, the value has arrows, and the bottom strip reads UP/DN MENU save EXIT undo.](img/settings-editing.png)
+
+![Browsing SETTINGS > SYSTEM: the strip under the list says what the selected TX BANDS choice allows.](img/settings-help.png)
 
 Notes:
 

@@ -31,6 +31,7 @@ FRAMES=(
   "settings_menu_groups/autolk_editing       settings-editing"
   "settings_menu_keys/vm_long_app4           settings-keys"
   "settings_system_items/system_items        settings-system"
+  "settings_system_help/txbands_fcc_help     settings-help"
   # Apps
   "spectrum_two_signals/waterfall_filled     spectrum"
   "bandsweep_vhf/after_first_pass            bandsweep"

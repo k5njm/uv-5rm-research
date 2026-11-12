@@ -66,7 +66,8 @@ FWDIR=firmware/firmware-source
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
 cmd_sim()       { run "mkdir -p /tmp/simout && cd $SIMDIR && CARGO_TARGET_DIR=/cache/sim cargo run --release -- /tmp/simout ../../skull_logo.rgb565 > /tmp/sim.log; tail -2 /tmp/sim.log; grep -qE '^[0-9]+ passed, 0 failed' /tmp/sim.log"; }
-cmd_unit()      { run "cd $SIMDIR && CARGO_TARGET_DIR=/cache/sim cargo test --release > /tmp/unit.log 2>&1 || { cat /tmp/unit.log; exit 1; }; grep -E 'test result' /tmp/unit.log"; }
+# The settings app is one source compiled once per segment (cargo features), so its tests run once per segment too.
+cmd_unit()      { run "cd $SIMDIR && export CARGO_TARGET_DIR=/cache/sim && for f in '' settings-menu settings-radio settings-system; do cargo test --release \${f:+--features \$f} > /tmp/unit.log 2>&1 || { cat /tmp/unit.log; exit 1; }; echo \"[\${f:-default}] \$(grep -E 'test result' /tmp/unit.log)\"; done"; }
 cmd_scenarios() {
   run "cd $SIMDIR && export CARGO_TARGET_DIR=/cache/sim && ./run_scenarios.sh $* && for st in $STYLES; do STYLE=\$st ./run_scenarios.sh $*; done"
 }

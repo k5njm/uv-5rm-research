@@ -681,6 +681,156 @@ fn band_lock_label(v: u8) -> &'static str {
     }
 }
 
+// help: one plain-language line (26 characters at most) under the list for the selected setting
+
+/// What a key function does (the value of SIDE1 SHORT and the others). 11..=19 are the apps, see `help_into`.
+#[cfg(feature = "g_keys")]
+fn key_function_help(v: i32) -> &'static str {
+    match v {
+        1 => "Switches WIDE / NARROW",
+        2 => "Squelch open on or off",
+        3 => "Steps FM, AM, USB",
+        4 => "Transmits the TONE BURST",
+        6 => "Starts scanning",
+        7 => "Steps HIGH, LOW, MID",
+        8 => "Flashlight on or off",
+        10 => "Swaps RX and TX frequency",
+        _ => "Does nothing",
+    }
+}
+
+/// The help line for `item` whose current value is `v` (only a few lines depend on it: what a key does, what a
+/// battery-save step costs, what a TX BANDS choice allows). Writes at most 26 bytes and returns the length.
+fn help_into(item: SettingItem, v: i32, out: &mut [u8]) -> usize {
+    use SettingItem::*;
+    let s: &str = match item {
+        #[cfg(feature = "g_radio")]
+        Sql => "Higher mutes weak signals",
+        #[cfg(feature = "g_radio")]
+        Step => "Step when tuning the VFO",
+        #[cfg(feature = "g_radio")]
+        Tot => "Stops TX after this time",
+        #[cfg(feature = "g_radio")]
+        Tdr => "Listen to both A and B",
+        #[cfg(feature = "g_radio")]
+        Save => match v {
+            1 => "Listens 0.1s, sleeps 0.1s",
+            2 => "Listens 0.1s, sleeps 0.2s",
+            3 => "Listens 0.1s, sleeps 0.3s",
+            4 => "Listens 0.1s, sleeps 0.4s",
+            _ => "Receiver always listening",
+        },
+        #[cfg(feature = "g_radio")]
+        BusyLock => "No TX while channel busy",
+        #[cfg(feature = "g_radio")]
+        TxForbid => {
+            if v != 0 {
+                "Radio will not transmit"
+            } else {
+                "TX allowed within TX BANDS"
+            }
+        }
+        #[cfg(feature = "g_radio")]
+        Wn => "WIDE 25k or NARROW 12.5k",
+        #[cfg(feature = "g_radio")]
+        TxPr => "Lower power saves battery",
+        #[cfg(feature = "g_radio")]
+        RxCts => "Hear only calls with tone",
+        #[cfg(feature = "g_radio")]
+        TxCts => "Tone sent with your TX",
+        #[cfg(feature = "g_radio")]
+        Sftd => "Repeater TX is + or - RX",
+        #[cfg(feature = "g_radio")]
+        Offse => "Repeater TX gap, in MHz",
+        #[cfg(feature = "g_radio")]
+        Scrm => "Voice scramble, must match",
+        #[cfg(feature = "g_radio")]
+        ScanMd => match v {
+            0 => "Waits a bit, then moves on",
+            2 => "Stops at the first signal",
+            _ => "Holds until signal ends",
+        },
+        #[cfg(feature = "g_radio")]
+        Rit => "Fine RX tune, USB only",
+        #[cfg(feature = "g_radio")]
+        ChDisp => "Channel shows freq or name",
+
+        #[cfg(feature = "g_audio")]
+        Beep => "Beep on keys and alerts",
+        #[cfg(feature = "g_audio")]
+        Vox => "Talk to transmit, no PTT",
+        #[cfg(feature = "g_audio")]
+        VoxLv => "1 most sensitive, 9 least",
+        #[cfg(feature = "g_audio")]
+        VoxDly => "Keeps TX on after speech",
+        #[cfg(feature = "g_audio")]
+        Rtone => "Pitch of the TX TONE key",
+        #[cfg(feature = "g_audio")]
+        Tail => "No squelch crash at TX end",
+        #[cfg(feature = "g_audio")]
+        Rptrl => "Wait after TX before RX",
+        #[cfg(feature = "g_audio")]
+        Roge => match v {
+            1 => "Beep sent when you unkey",
+            2 => "Data burst sent at TX end",
+            _ => "Nothing sent at TX end",
+        },
+
+        #[cfg(feature = "g_disp")]
+        Abr => "Light-on time after a key",
+        #[cfg(feature = "g_disp")]
+        AutoLk => "Locks keys after idle time",
+
+        #[cfg(feature = "g_keys")]
+        Side1Short | Side1Long | Side2Short | Side2Long | BandShort | BandLong | VmLong => {
+            if (11..=19).contains(&v) {
+                let mut w = Out::new(out);
+                w.str("Opens the app in slot ");
+                w.u32(v as u32 - 10, 1);
+                return w.len;
+            }
+            key_function_help(v)
+        }
+
+        #[cfg(feature = "g_ani")]
+        AniTx => "Sends your ID when you key",
+        #[cfg(feature = "g_ani")]
+        AniCall => "Contact your ID goes to",
+
+        #[cfg(feature = "g_system")]
+        FLock => match v {
+            1 => "2m 1.25m 70cm, FRS, MURS",
+            2 => "144-148 430-440 MHz",
+            3 => "137-174 400-430 MHz",
+            4 => "137-174 400-438 MHz",
+            5 => "446.0-446.2 MHz only",
+            6 => "FRS, GMRS, MURS only",
+            7 => "144-148 430-450 MHz",
+            8 => "No transmitting at all",
+            9 => "136-174 220-260 400-520",
+            _ => "144-146 430-440 MHz",
+        },
+        #[cfg(feature = "g_system")]
+        Lat | Lon => "For HAM TOOLS grid locator",
+        #[cfg(feature = "g_system")]
+        BattCal => "Type true battery volts",
+        #[cfg(feature = "g_system")]
+        BootMode => "Logo shown at power-on",
+        #[cfg(feature = "g_system")]
+        BootSnd => "Start-up tune; needs LOGO",
+        #[cfg(feature = "g_system")]
+        Info => "MENU: about this firmware",
+        #[cfg(feature = "g_system")]
+        ChipId => "Radio chip ID, for support",
+        #[cfg(feature = "g_system")]
+        Reset => "Erases settings and VFOs",
+
+        #[allow(unreachable_patterns)]
+        _ => "",
+    };
+    write_str(out, s)
+}
+
 // state
 
 pub struct ItemsState {
@@ -1899,7 +2049,10 @@ fn draw(api: &Api) -> AppResult {
         _ => {}
     }
 
-    // The strip at the bottom says what the keys do in this state (EXIT while changing a value undoes it).
+    // The strip at the bottom: while looking at a list it explains the selected setting (the keys there never
+    // change: MENU changes it, EXIT goes back); while a value is being changed it says what the keys do
+    // (EXIT while changing a value undoes it).
+    let mut help_buf = [0u8; 26];
     let hint: &[u8] = match &state.phase {
         Phase::Items(st) if st.editing => match st.item() {
             SettingItem::Reset => b"HOLD # reset  EXIT cancel",
@@ -1909,8 +2062,11 @@ fn draw(api: &Api) -> AppResult {
             SettingItem::Offse | SettingItem::BattCal => b"0-9 type MENU ok EXIT del",
             _ => b"UP/DN MENU save EXIT undo",
         },
-        Phase::Items(st) if matches!(st.item(), SettingItem::Reset) => b"MENU reset   EXIT back",
-        Phase::Items(_) => b"MENU change  EXIT back",
+        Phase::Items(st) => {
+            let item = st.item();
+            let n = help_into(item, current_value(api, st, item), &mut help_buf);
+            &help_buf[..n]
+        }
         _ => b"MENU open    EXIT back",
     };
     (api.list_hint)(hint.as_ptr(), hint.len() as u16);
@@ -1940,4 +2096,30 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
         }
     }
     loop {}
+}
+
+// Host tests. The simulator crate runs them once per segment build (`dev.sh unit`: --features settings-menu, -radio,
+// -system), because each segment compiles only its own groups.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every setting a segment shows has a help line, for every value it can have, and the line fits the strip.
+    #[test]
+    fn every_setting_has_help_that_fits_the_strip() {
+        let mut seen = 0;
+        for g in SETTINGS_GROUPS {
+            for &item in g.items() {
+                seen += 1;
+                for v in -1..=300 {
+                    let mut buf = [0u8; 64];
+                    let n = help_into(item, v, &mut buf);
+                    assert!(n > 0, "{}: no help for value {v}", item.label());
+                    assert!(n <= 26, "{}: help for value {v} is {n} characters", item.label());
+                    assert!(buf[..n].iter().all(|b| (0x20..0x7F).contains(b)), "{}: not plain ASCII", item.label());
+                }
+            }
+        }
+        assert!(seen > 0 || !have_group(0) && !have_group(1) && !have_group(5));
+    }
 }
