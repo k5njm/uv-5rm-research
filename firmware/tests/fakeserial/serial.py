@@ -21,6 +21,16 @@ Fault injection ($FAKE_RADIO_DIR/faults.json, consumed once each unless noted):
   {"corrupt_logo_write": true}      flip one byte of the next full logo write
   {"corrupt_settings_write": true}  flip one byte of the next settings write
   {"silent": true}                  never answer the handshake
+  {"corrupt_app_write": true}       flip one byte of the next app write ('a')
+  {"corrupt_extra_write": true}     flip one byte of the next extras-table chunk ('X')
+  {"corrupt_fm_write": true}        flip one byte of the next FM station chunk ('F')
+  {"corrupt_read_once": true}       flip one byte of the next raw read ('D') reply: a read that does not repeat
+
+App slots (cps/mod.rs handle_app_erase / handle_app_write): 'A' (addr = slot 0-8) erases the slot's 32 KB at 0x14C000 + slot * 0x8000
+and selects it for this session; 'a' (addr = offset) writes exactly 512 bytes at a 512-aligned offset inside the selected slot, and
+answers error 02 with no slot selected. Flash programming can only clear bits (norflash write_bytes does not erase first), so the
+fake ANDs the data into what is there: a write into a slot that was not erased shows up as wrong bytes, as on the chip.
+Every command that writes is logged: "A <slot>", "a <slot> <offset>", "X <offset>", "l <offset>", "W", "F".
 """
 import json, os, struct
 
@@ -29,6 +39,7 @@ READ_LOGO, WRITE_LOGO, END, READ, WRITE = 0x4C, 0x6C, 0x45, 0x52, 0x57
 LOGO_SIZE, SETTINGS_ADDR, SETTINGS_BYTES = 160 * 128 * 2, 0x9000, 168
 READ_RAW, NOR_SIZE, LOGO_ADDR, VFO_ADDR, CHAN_SIZE, MAX_CHAN = 0x44, 2 * 1024 * 1024, 0xC0000, 0x8000, 32, 999
 CONTACT_ADDR, CONTACT_SIZE, CONTACTS = 0xA020, 16, 20
+APP_ERASE, APP_WRITE, APP_BASE, APP_SLOT, APP_SLOTS, APP_CHUNK = 0x41, 0x61, 0x14C000, 32 * 1024, 9, 512
 HANDSHAKE = b"PROGRAMBF-5RH"
 
 
@@ -77,6 +88,7 @@ class Serial:
         self.settings = bytearray(_load("settings.bin", bytes(range(SETTINGS_BYTES))))
         self.nor = bytearray(_load("nor.bin", b"\xff" * NOR_SIZE))
         self.chan_writes = 0
+        self.app_slot = None          # selected by 'A', per session (cps/mod.rs app_slot)
         self.log = os.path.join(_dir(), "log.txt")
 
     def _note(self, s):
@@ -139,6 +151,10 @@ class Serial:
             if a + 64 > NOR_SIZE:
                 return self._reply(ERR, addr, b"\x02")
             chunk = bytearray(self.nor[a:a + 64])
+            if _faults().get("corrupt_read_once"):
+                chunk[0] ^= 0xFF
+                _clear_fault("corrupt_read_once")
+                self._note("fault: corrupted a raw read")
             for base, blob in ((SETTINGS_ADDR, self.settings), (LOGO_ADDR, self.logo)):
                 lo, hi = max(a, base), min(a + 64, base + len(blob))
                 if lo < hi:  # overlay the part of the chunk covered by that region
@@ -188,12 +204,41 @@ class Serial:
             self.chan_writes += 1
             self._persist()
             return self._reply(cmd, addr)
+        if cmd == APP_ERASE:
+            if addr >= APP_SLOTS:
+                return self._reply(ERR, addr, b"\x02")
+            self._note(f"A {addr}")
+            self.app_slot = addr
+            lo = APP_BASE + addr * APP_SLOT
+            self.nor[lo:lo + APP_SLOT] = b"\xff" * APP_SLOT
+            self._persist()
+            return self._reply(cmd, addr)
+        if cmd == APP_WRITE:
+            if self.app_slot is None or addr % APP_CHUNK or len(data) != APP_CHUNK or addr + APP_CHUNK > APP_SLOT:
+                return self._reply(ERR, addr, b"\x02")
+            self._note(f"a {self.app_slot} {addr}")
+            blk = bytearray(data)
+            if _faults().get("corrupt_app_write"):
+                blk[7] ^= 0x10
+                _clear_fault("corrupt_app_write")
+                self._note("fault: corrupted app write")
+            lo = APP_BASE + self.app_slot * APP_SLOT + addr
+            for i, b in enumerate(blk):
+                self.nor[lo + i] &= b          # NOR programming clears bits only
+            self._persist()
+            return self._reply(cmd, addr)
         if cmd == 0x58:  # channel extras table: 512-byte chunks, the chunk at offset 0 erases the table
             base, size = 0x1E0000, 20480
             if addr % 512 or len(data) != 512 or addr + 512 > size:
                 return self._reply(ERR, addr, b"\x02")
+            self._note(f"X {addr:#x}")
             if addr == 0:
                 self.nor[base:base + size] = b"\xff" * size
+            data = bytearray(data)
+            if _faults().get("corrupt_extra_write"):
+                data[3] ^= 0x01
+                _clear_fault("corrupt_extra_write")
+                self._note("fault: corrupted extras write")
             self.nor[base + addr:base + addr + 512] = data
             self._persist()
             return self._reply(cmd, addr)
@@ -204,6 +249,11 @@ class Serial:
                 return self._reply(ERR, addr, b"\x02")
             if addr == 0:
                 self.nor[base:base + size] = b"\xff" * size
+            data = bytearray(data)
+            if _faults().get("corrupt_fm_write"):
+                data[5] ^= 0x01
+                _clear_fault("corrupt_fm_write")
+                self._note("fault: corrupted fm write")
             self.nor[base + addr:base + addr + 512] = data
             self._persist()
             return self._reply(cmd, addr)
@@ -212,6 +262,7 @@ class Serial:
         elif cmd == WRITE_LOGO:
             if addr + len(data) > LOGO_SIZE:
                 return self._reply(ERR, addr, b"\x02")
+            self._note(f"l {addr:#x}")
             if addr == 0:
                 self.logo[:] = b"\xff" * LOGO_SIZE  # erase on first block
                 self._note("logo erase")
