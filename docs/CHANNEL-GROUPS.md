@@ -32,5 +32,5 @@ Candidate: short press cycles VFO -> group A -> group B -> ... -> VFO, skipping 
 (SETTINGS > KEYS > VFO/MR LONG). Decide before building: whether ALL is in the cycle, and whether the BAND key keeps the list.
 
 ## Cost
-Core change (the core has about 2 KB of flash free, see AGENTS.md; the old stable-toolchain core had 88 bytes), CHAN MGR change, tool support,
+Core change (the core has 1,372 bytes of flash free on 2026-11-12, see AGENTS.md; the old stable-toolchain core had 88 bytes), CHAN MGR change, tool support,
 a migration step, and hardware verification. Not started.

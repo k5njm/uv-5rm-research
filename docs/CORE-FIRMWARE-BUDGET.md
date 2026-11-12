@@ -1,8 +1,8 @@
 # Core firmware budget, and how to add modem features efficiently
 
 > **Status 2026-11-12.** The figures below are the 2026-11-07 measurement of the old stable-toolchain core (61,352 bytes, 88 bytes free). The core that is built
-> and flashed now uses the pinned nightly toolchain with the changes described under "What the prototypes measured": see AGENTS.md for the current flash headroom,
-> and `scripts/dev.sh check` (the release gate prints it). Since then the core also gained the fault handler (AUDIT 43), VFO range limits and scan
+> and flashed now uses the pinned nightly toolchain with the changes described under "What the prototypes measured": see AGENTS.md for the current flash headroom (1,372 bytes free on 2026-11-12;
+> `build_core.sh` prints it). Since then the core also gained the fault handler (AUDIT 43), VFO range limits and scan
 > labels (AUDIT 43, 50). The app arena is at `0x200002D0` with 256 bytes of headroom for the core's statics (the link fails under 64; AUDIT 43, `memory.x`).
 > This note is a history of how the budget was found, not the current budget.
 
