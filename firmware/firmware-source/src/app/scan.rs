@@ -66,21 +66,6 @@ fn find_next_scan_channel(
     None
 }
 
-fn wrap_freq(freq_hz: u32, step_hz: u32, up: bool, lo: u32, hi: u32) -> u32 {
-    if up {
-        let next = freq_hz.saturating_add(step_hz);
-        if next > hi {
-            lo
-        } else {
-            next
-        }
-    } else if freq_hz < step_hz || freq_hz - step_hz < lo {
-        hi
-    } else {
-        freq_hz - step_hz
-    }
-}
-
 pub(super) fn enter(app: &mut App, syst: &mut SYST) {
     let master = &app.sides[app.master];
     if master.vfo_chan == ChVfoMode::Channel
@@ -121,10 +106,10 @@ fn hop(app: &mut App, syst: &mut SYST) {
             };
             let s = &mut app.sides[app.master];
             let step_hz = s.step_deci_hz() * 10;
-            if s.rx_freq_hz < lo || s.rx_freq_hz > hi {
-                s.rx_freq_hz = lo;
+            // only ever a receivable frequency inside the band; a range with none leaves the VFO where it is
+            if let Some(next) = super::group_table::next_rx(s.rx_freq_hz, step_hz, up, lo, hi) {
+                s.rx_freq_hz = next;
             }
-            s.rx_freq_hz = wrap_freq(s.rx_freq_hz, step_hz, up, lo, hi);
             s.auto_modulation();
             s.refresh_cfg_freqs();
         }

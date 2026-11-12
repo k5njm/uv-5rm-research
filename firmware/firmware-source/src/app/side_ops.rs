@@ -33,11 +33,8 @@ pub(super) fn step(app: &mut App, syst: &mut SYST, up: bool) {
     match s.vfo_chan {
         ChVfoMode::Vfo => {
             let step_hz = s.step_deci_hz() * 10;
-            s.rx_freq_hz = if up {
-                s.rx_freq_hz.saturating_add(step_hz)
-            } else {
-                s.rx_freq_hz.saturating_sub(step_hz)
-            };
+            // stays in the receive bands: off the top of one lands on the bottom of the next, and wraps
+            s.rx_freq_hz = super::group_table::step_rx(s.rx_freq_hz, step_hz, up);
             s.auto_modulation();
             s.refresh_cfg_freqs();
             app.save_vfo();

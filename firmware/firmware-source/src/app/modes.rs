@@ -68,7 +68,7 @@ fn persist(app: &mut App) {
 
 fn range_valid(lo: u32, hi: u32) -> bool {
     let hw = FreqRanges::hardware();
-    lo < hi && hw.allows(lo) && hw.allows(hi)
+    lo < hi && hw.allows(lo) && hw.allows(hi) && super::group_table::first_rx_in(lo, hi).is_some()
 }
 
 
@@ -196,14 +196,15 @@ fn commit_range_field(app: &mut App) {
 }
 
 fn start_range_scan(app: &mut App, syst: &mut SYST) {
-    let lo = app.range_lo_hz;
+    let (lo, hi) = (app.range_lo_hz, app.range_hi_hz);
     persist(app);
     let s = &mut app.sides[app.master];
     s.vfo_chan = ChVfoMode::Vfo;
     s.rx_only = false;
     s.reversed = false;
     s.name = [0; 12];
-    s.rx_freq_hz = lo;
+    // the first frequency of the range the receiver covers (range_valid guarantees one)
+    s.rx_freq_hz = super::group_table::first_rx_in(lo, hi).unwrap_or(lo);
     s.freq_dir = 0;
     s.offset_hz = 0;
     s.cfg.subaudio_rx = SubAudio::None;
