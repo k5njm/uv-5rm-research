@@ -10,7 +10,7 @@ The firmware already splits in two:
 
 | Part | What it is | Size / limits | Risk to change |
 |---|---|---|---|
-| **Core** (`.BF`) | boot, radio driver, launcher, menus | 61 KB of 60 KB-class area, **88 bytes free** | flashed through the bootloader; wrong image = no RX/TX |
+| **Core** (`.BF`) | boot, radio driver, launcher, menus | 60 KB area; **88 bytes free** when this was written, 1,372 bytes on 2026-11-12 (AGENTS.md) | flashed through the bootloader; wrong image = no RX/TX |
 | **Overlay apps** (`.app`) | independent programs in SPI-flash slots | 8 KB arena, 32 KB slot, 9 slots; hash-pinned to the ABI and CRC-checked at load | written over the programming cable; a bad one is rejected at load, never bricks |
 
 So a "custom build" is **core variant + a chosen set of prebuilt apps (each in a chosen style/locale)**.
@@ -26,7 +26,7 @@ CI matrix (apps x styles x locales, core x board x palette)
 ## What is varied how
 * **Style**: compile-time cargo feature per app (`style-d74`, `style-proxx`, `style-ft5d`; default classic). Only the chosen
   style is in the binary, so size stays flat (4.7-4.9 KB for HAM TOOLS). *Prototyped here.* The core's own UI (launcher/menus)
-  needs core variants; palette-only variants are size-neutral, layout changes are not (88 bytes free).
+  needs core variants; palette-only variants are size-neutral, layout changes are not (the core has only about 1.4 KB of flash free).
 * **Locale**: per-locale string tables as cargo features, same mechanism. The simulator already panics when text runs off the
   screen (it caught a real bug in HAM TOOLS), so it doubles as a **translation overflow lint** across a golden frame per locale.
   Limits: the built-in fonts are ASCII; Latin-1 languages are plausible (extra glyphs cost flash), Cyrillic/CJK are not practical in 8 KB.

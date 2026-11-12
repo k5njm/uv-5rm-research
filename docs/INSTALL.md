@@ -8,8 +8,8 @@ For someone who is not the owner of this repository and has a Baofeng UV-5RM / U
   after that has not been on a radio at all (see [AUDIT.md](../AUDIT.md)). Nothing has been transmitted with it. By default it
   refuses to transmit (TX INHIBIT is on). You are responsible for transmitting only where you are licensed.
 * **The installer itself has only been run against simulated radios** (`firmware/tests/test_install.py`) until someone runs it on a
-  real one. The tools it drives have each been run on the one radio, except the channel loader, the extras and FM table
-  writers and the boot-logo tool, which have only met simulations. If it does something unexpected, stop and unplug the cable.
+  real one. The tools it drives have each been run on the one radio (the channel loader, the details-table writer and the boot-logo tool included),
+  except the FM station table writer, which has only met simulations. If it does something unexpected, stop and unplug the cable.
 * **Going back is not available for the YP07.** No stock firmware image exists for this board (it uses an FD6818B radio chip, and
   the images for other boards do not restore receive and transmit). The bootloader is not overwritten, so you can always flash
   another open build, but you cannot go back to stock.
@@ -222,8 +222,9 @@ the fallback and the explanation of why each step exists.
 
 ## What is and is not verified
 
-Verified on a real radio (the owner's `5RHNRFB-YP07`, AUDIT rows 25-26, 30, 35): the stock backup read, the bootloader
-handshake, the core flash, the calibration read before and after, the app install, the boot logo and the channel extras table.
+Verified on a real radio (the owner's `5RHNRFB-YP07`, AUDIT rows 25-26, 30, 32, 35, 37, 40): the stock backup read, the bootloader
+handshake, the core flash, the calibration read before and after, the app install, the boot logo, the channel loader (whole-sector writes, all 1,000
+slots read back) and the channel extras table.
 **Not verified on any radio**: this installer; the order of its probes (what a stock radio or the bootloader does when it hears a
 handshake meant for something else); the stock radio's calibration read through `radio_read.py --cal` (done by hand once);
 how long the radio takes to restart after each step (the installer waits and retries); the FM station table; and every

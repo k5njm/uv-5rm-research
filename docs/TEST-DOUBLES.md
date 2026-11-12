@@ -37,7 +37,7 @@ Real defects in tools, apps and the core, exposed by making the doubles faithful
    Release (1) out in `overlay::dispatch_key` (one line, `app/overlay.rs:459`), which fixes every present and future app;
    no app uses them (`grep KIND_PRESS` finds nothing).
 2. **Long MENU does not exist.** `supports_long` (`device/keypad.rs:40-55`) has no `Menu`, so no long MENU event is ever
-   sent. Dead code: Band Sweep's "hold MENU: open in Spectrum" (`apps/bandsweep/src/logic.rs:605`) and the mode menu's
+   sent. Dead code: Band Sweep's "hold MENU: open in Spectrum" (`apps/bandsweep/src/logic.rs:605`; replaced by MENU then MENU in AUDIT 50) and the mode menu's
    "hold MENU: pick the group and start scanning" (`app/modes.rs:160`). Not fixed (it is a core or a design question:
    add `Menu` to `supports_long`, or move the action to a key that has a long press). The simulator test for it is
    skipped, not deleted, and `known_gaps_are_still_gaps` fails the day the keypad can send it.

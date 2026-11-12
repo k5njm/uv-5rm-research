@@ -1,14 +1,18 @@
 # Channel groups (design note, not built)
 
-Status 2026-11-11: **proposal.** What exists today is described first; nothing below "Proposal" is implemented.
+Status 2026-11-12: **proposal.** What exists today is described first; nothing below "Proposal" is implemented. The user-facing description of
+what exists is the [channel groups section of the user guide](USER-GUIDE.md#channel-groups).
 
 ## Today
 * One array of 1,000 channel slots, 32 bytes each, at SPI flash 0x0000 (Baofeng's layout; CHIRP, stock and the open firmware share it).
-* The core has 13 hardcoded "modes" (`app/modes.rs`): a name and one or two **channel-number ranges** (WEATHER = 1-7,
-  REPEATERS = 234-304 and 327-344, ...), from the mod author's channel plan. Selecting one restricts memory mode and scan to
-  those numbers. A channel has no group field; its only membership flag is "in scan list".
-* On hardware this read as a fault: with a group other than ALL selected, memory mode said NO CHANNELS although channels existed.
-  The menu is now titled CH GROUPS and the notice names the group, but membership is still by number.
+* The core has 16 hardcoded groups (`app/group_table.rs`, `MODES`): a name, a short name and one or two **channel-number ranges**
+  (WEATHER = 1-7, REPEATERS = 234-304 and 327-344, ...). Most are from the mod author's channel plan; SIMPLEX (351-380),
+  SATELLITES (381-410) and SONDE (411-420) were added here. The index is the group's number: `BAND` then a digit `0`-`9` selects it.
+  Selecting one restricts memory mode, typed channel numbers and scans to those numbers. **Each side (A and B) has its own group.**
+  The channel number shown is the position in the group (`01` is the first channel of REPEATERS); in ALL it is the radio's number.
+  A channel has no group field; its only membership flag is "in scan list".
+* On hardware this once read as a fault: with a group other than ALL selected, memory mode said NO CHANNELS although channels
+  existed. The menu is titled CH GROUPS and the notice names the group (`NO CH IN WX`), but membership is still by number.
 
 ## Proposal: a group is an attribute of the memory
 * Keep the single array where it is (CHIRP, backups and every tool keep working).
@@ -28,5 +32,5 @@ Candidate: short press cycles VFO -> group A -> group B -> ... -> VFO, skipping 
 (SETTINGS > KEYS > VFO/MR LONG). Decide before building: whether ALL is in the cycle, and whether the BAND key keeps the list.
 
 ## Cost
-Core change (needs the nightly-toolchain core: the stable one has 88 bytes free), CHAN MGR change, tool support, a migration
-step, and hardware verification. Not started.
+Core change (the core has 1,372 bytes of flash free on 2026-11-12, see AGENTS.md; the old stable-toolchain core had 88 bytes), CHAN MGR change, tool support,
+a migration step, and hardware verification. Not started.

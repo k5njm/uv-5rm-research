@@ -14,7 +14,8 @@ the safe default), and checks the example change sets against the real workflow.
 Jobs (outputs):
   gate    verify_release.py on the committed .BF and .app files
   sim     simulator build, app unit tests (logic.rs), scenario + golden-frame tests for every style
-  tools   host tool tests (firmware/tests/test_*.py: fake radio, fake bootloader, recovery tools, manifest, bundle, filters)
+  tools   host tool tests (firmware/tests/test_*.py: fake radio, fake bootloader, recovery tools, manifest, bundle, filters,
+          and test_docs.py: README.md, docs/*.md, docs/img and what the guide says about the launcher, groups and settings)
   hil     hil/test_hil.py (synthetic camera, fake injector) against the simulator's committed goldens and scenarios
   images  overlay builds (HAM TOOLS styles, FSK PROBE), core firmware (both variants), size budgets, pinned hashes
   web     headless-Chromium test of web/ against the images the `images` job built (so web implies images)
@@ -79,7 +80,7 @@ RULES = [
     ("firmware/firmware-source/apps/spectrum/**", {"sim"}),
     ("firmware/firmware-source/apps/fm/**", {"sim"}),
     ("firmware/firmware-source/apps/chanmgr/**", {"sim"}),
-    ("firmware/firmware-source/apps/settings/common.rs", {"sim"}),
+    ("firmware/firmware-source/apps/settings/common.rs", {"sim", "tools"}),   # test_docs.py: the guide lists every setting
     ("firmware/firmware-source/*", set()),                                    # README, LICENSE, flake.*, make.sh, rustfmt.toml
 
     # --- simulator, scenarios, golden frames -------------------------------------------------------------------
@@ -87,8 +88,9 @@ RULES = [
     ("firmware/source-changes/apps_new/**", {"sim"}),                         # logic.rs of rptfind, bandsweep, foxhunt, ...
     ("firmware/skull_logo.rgb565", {"sim"}),                                  # argument of the simulator's own run
     # hil/test_hil.py reads tests/golden (not the style dirs) and tests/scenarios.
-    ("firmware/source-changes/simulator/tests/golden/**", {"hil"}),
-    ("firmware/source-changes/simulator/tests/scenarios/**", {"hil"}),
+    # test_docs.py checks that every golden frame and scenario shot named in scripts/docs-screens.sh still exists.
+    ("firmware/source-changes/simulator/tests/golden/**", {"hil", "tools"}),
+    ("firmware/source-changes/simulator/tests/scenarios/**", {"hil", "tools"}),
 
     # --- host tools and their tests ----------------------------------------------------------------------------
     # The tests copy tools from source-changes/ into a sandbox next to a fake `serial`; channel_plan.py builds the
@@ -122,6 +124,11 @@ RULES = [
     # --- read by no CI job -------------------------------------------------------------------------------------
     ("**/*.md", set()),
     ("docs/**", set()),
+    # test_docs.py (the `tools` job) checks every link and picture of these, so they are not "read by no job":
+    ("README.md", {"tools"}),
+    ("channels/README.md", {"tools"}),
+    ("docs/*.md", {"tools"}),
+    ("docs/img/*.png", {"tools"}),
     ("docs/INSTALL.md", {"tools"}),                   # bundled; test_bundle_release.py reads it
     ("docs/FIRST-FLASH-RUNBOOK.md", {"tools"}),       # bundled the same way
     ("LICENSE", set()),
@@ -133,14 +140,14 @@ RULES = [
     ("firmware/source-changes/*.rs", set()),                                  # backdrop.rs, modes_*.rs: included by nothing built
     ("firmware/source-changes/*.html", set()),
     ("firmware/source-changes/*.js", set()),
-    ("firmware/tools/build_release.py", set()),                               # only `dev.sh release` / release.yml
-    ("firmware/tools/provenance.py", set()),                                  # only `dev.sh provenance`
+    ("firmware/tools/build_release.py", {"tools"}),                           # `dev.sh release` / release.yml; test_docs.py reads LAYOUT
+    ("firmware/tools/provenance.py", {"tools"}),                              # `dev.sh provenance`; test_docs.py reads the app names
     ("firmware/tools/upstream_status.py", set()),
     ("firmware/tools/size/**", set()),
     ("firmware/tools/experiments/**", set()),
     ("scripts/ci-replay.sh", set()),
     ("scripts/chirp-backup.sh", set()),
-    ("scripts/docs-screens.sh", set()),
+    ("scripts/docs-screens.sh", {"tools"}),                                   # test_docs.py reads its table of screenshots
     ("scripts/serial_bridge.py", set()),
 ]
 

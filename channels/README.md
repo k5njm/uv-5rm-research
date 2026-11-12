@@ -1,14 +1,18 @@
 # channels/
 
 CHIRP-format CSV channel lists that `firmware/source-changes/channel_plan.py` turns into a channel image for the radio.
-Nothing here has been written to a real radio yet; the whole path is tested only against the fake radio.
+Status: the channel path (`channel_plan.py`, then `restore_backup.py`) has loaded 115 and then 116 channels onto the owner's radio and read all 1,000
+slots back through the port (AUDIT 32, 37, 40). The details table (`channel_extras.py`) has been written and read back on the radio too. The FM station
+list (`fm_stations.py`) and the installer (`install.py`, which runs all of these) have only been tried against the fake radio. The easiest way to load
+everything is the installer: [docs/INSTALL.md](../docs/INSTALL.md); what each tool replaces is in the
+[user guide](../docs/USER-GUIDE.md#loading-from-a-computer).
 
 - One file per channel group. The file name must match a group name or short name from
   `firmware/firmware-source/src/app/group_table.rs` (case-insensitive, `-`/`_` count as spaces): `repeaters.csv`, `weather.csv`,
   `frs.csv`, `pd-fd.csv`, ... Channels fill that group's slots in file order. The `Location` column is ignored.
   `all.csv` is the exception: channels go to their own `Location` (1-1000).
 - Groups overlap, so each file uses only its group's own slots: weather 1-7, repeaters 234-304, frs 305-326,
-  gmrs 327-344, murs 345-349, simplex 351-380, satellites 381-410.
+  gmrs 327-344, murs 345-349, simplex 351-380, satellites 381-410, sonde 411-420 (`sonde.csv`: the Fort Worth radiosonde, receive only).
 - `weather.csv`, `frs.csv`, `murs.csv` and `simplex.csv` (national calling frequencies and the 2 m simplex channels) are
   the same everywhere in the US. `repeaters.csv` (ham) and `gmrs.csv` (GMRS repeaters, with their tones) are local to
   the Dallas area. `satellites.csv` holds the FM satellites a handheld can work, from AMSAT's FM satellite summary
@@ -35,7 +39,9 @@ python3 firmware/source-changes/restore_backup.py PORT build-out/channels.img --
 (`scripts/dev.sh channels` runs the build step in the container.) `channel_plan.py show IMAGE` prints any image or backup.
 
 Without `--base`, every slot the CSVs do not fill is written EMPTY, erasing whatever the radio has there (the undo file
-restores it). Use `--base` with a `radio_read.py` backup to keep the other channels. Channels whose transmit frequency is
+restores it). Use `--base` with a `radio_read.py` backup to keep the other channels. `restore_backup.py` rewrites **whole 4 KB sectors** (128 channels): the
+firmware erases a channel's sector the first time a session writes into it (AUDIT 37), so it sends every channel the image holds in any sector it touches.
+The channel details table is written whole too, from the lists you build: the details of channels that are not in those lists are lost (the channels stay). Channels whose transmit frequency is
 outside the radio's transmit plan are flagged in the table but still written, as the upstream uploader does.
 
 ## FM station names (`channels/fm/`)

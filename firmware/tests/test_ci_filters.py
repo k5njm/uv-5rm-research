@@ -87,8 +87,15 @@ ALL_JOBS = {"gate", "sim", "tools", "hil", "images", "web"}
 
 CASES = [
     # (description, changed files, jobs that must run)
-    ("docs only", ["README.md", "AUDIT.md", "docs/USER-GUIDE.md", "channels/README.md", "LICENSE", ".env.sample",
-                   "firmware/preview_menus.png", "firmware/firmware-source/README.md"], set()),
+    ("docs no job reads", ["AUDIT.md", "HARDWARE.md", "LICENSE", ".env.sample", "docs/SOMETHING-ELSE.png",
+                           "firmware/preview_menus.png", "firmware/firmware-source/README.md"], set()),
+    # test_docs.py (in the tools job) checks every link and picture of the README, docs/*.md and channels/README.md
+    ("the README or the user guide", ["README.md", "docs/USER-GUIDE.md"], {"tools"}),
+    ("channels README", ["channels/README.md"], {"tools"}),
+    ("a documentation picture", ["docs/img/fm.png"], {"tools"}),
+    ("the screenshot table", ["scripts/docs-screens.sh"], {"tools"}),
+    ("a golden frame the docs may use", ["firmware/source-changes/simulator/tests/golden/fm_list/x.png"], {"sim", "hil", "tools"}),
+    ("the launcher layout the guide lists", ["firmware/tools/build_release.py"], {"tools"}),
     ("one host tool", ["firmware/source-changes/set_boot_logo.py"], {"tools"}),
     ("one host tool and its test", ["firmware/source-changes/flash_bf.py", "firmware/tests/test_flash_bf.py"], {"tools"}),
     ("a channel list", ["channels/frs.csv"], {"tools"}),
@@ -108,7 +115,7 @@ CASES = [
     ("group table (also read by channel_plan.py)", ["firmware/firmware-source/src/app/group_table.rs"],
      {"sim", "tools", "images", "web"}),
     ("simulator scenario (golden frames are also the HIL's reference)",
-     ["firmware/source-changes/simulator/tests/scenarios/fm_basic.txt"], {"sim", "hil"}),
+     ["firmware/source-changes/simulator/tests/scenarios/fm_basic.txt"], {"sim", "hil", "tools"}),
     ("simulator style goldens", ["firmware/source-changes/simulator/tests/golden-d74/x.png"], {"sim"}),
     ("simulator code", ["firmware/source-changes/simulator/main.rs"], {"sim"}),
     ("HIL tool", ["hil/vision.py"], {"hil"}),

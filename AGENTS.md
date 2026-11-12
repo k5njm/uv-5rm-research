@@ -7,6 +7,8 @@ Conventions for this repo (borrowed from the sibling `beepy-ui` project's workfl
 - `firmware/source-changes/simulator/` host simulator, scenarios (`tests/scenarios`), golden frames (`tests/golden`).
 - `hil/` hardware-in-the-loop host tools and the injector firmware (untested on hardware).
 - `firmware/tools/verify_release.py` offline release gate; `AUDIT.md` findings and roadmap.
+- `README.md`, `docs/USER-GUIDE.md` (every screen, key and setting), `docs/RADIO-CHECKLIST.md` (what to check on the radio after a flash) and `docs/img/`
+  (screenshots, made by `scripts/docs-screens.sh` from the simulator's golden frames, never by hand).
 
 ## Rules
 - App logic is pure and integer-only where possible; hardware access lives behind the `Api`. Put unit tests in `logic.rs`
@@ -15,7 +17,7 @@ Conventions for this repo (borrowed from the sibling `beepy-ui` project's workfl
   before `run_scenarios.sh --update`.
 - Visual styles are cargo features (`style-d74|proxx|ft5d`, default classic) of an app; build with `MKAPP_FEATURES=style-d74 mkapp.py ...`; each style has its own golden dir. Classic must stay pixel-identical unless intentionally changed.
 - Receive-only apps must never call `api.tone_on` (it keys the transmitter) or key PTT. Scenarios enforce this.
-- App arena is 8,192 bytes at `0x200002D0` (`abi::ARENA_ADDR`; 256 bytes of headroom below it for the core's statics, the link fails under 64 -- see `memory.x`; moving it means every `app.x`, `memory.x`, the ABI and a rebuild of every app); core firmware has about 2.0 KB of flash free (2,092 bytes in `fw-default.bin` after the fault handler): new features are overlay apps.
+- App arena is 8,192 bytes at `0x200002D0` (`abi::ARENA_ADDR`; 256 bytes of headroom below it for the core's statics, the link fails under 64 -- see `memory.x`; moving it means every `app.x`, `memory.x`, the ABI and a rebuild of every app); core firmware has 1,372 bytes of flash free in `fw-default.bin` (60,068 of 61,440, measured 2026-11-12; `build_core.sh` prints it): new features are overlay apps.
 - Build overlays with `firmware/firmware-source/tools/mkapp.py` (needs `rust-objcopy`, `rust-nm`, `rust-size` on PATH; llvm-* symlinks work).
 - Never commit radio backups (`my-backup/`, `*.img`), secrets, or third-party logos/music.
 - Development is local-first. Flash only an image built by `scripts/dev.sh release` whose sha256 equals the pin in
@@ -26,6 +28,14 @@ Conventions for this repo (borrowed from the sibling `beepy-ui` project's workfl
   a branch made from `origin/main` tracks it, and a bare push then goes to `main` (AUDIT 41).
 - Do not merge or push to upstream (jakegarrett13-afk) repos; import their PRs as source on a branch, tested.
 
+## Documentation
+- The user guide is checked against the code, not remembered: when a key, label, default or screen changes, change `docs/USER-GUIDE.md` in the same commit (and
+  `docs/RADIO-CHECKLIST.md` if a step changes), then rerun `scripts/docs-screens.sh` after the golden frames. `firmware/tests/test_docs.py` (in `tools-test`) fails when a link or
+  image is broken, an image is not in `scripts/docs-screens.sh`'s table or is unused, a picture has no alt text, or the guide's launcher table, channel-group table or settings
+  reference disagrees with `build_release.py`, `group_table.rs` or `apps/settings/common.rs`.
+- Say what has not been seen on the radio. Mark simulator pictures as simulator pictures. Write keys as `MENU`, `EXIT`, `UP`, `A/B`, hold `#`; no doc promises a hold on `MENU`
+  (the keypad sends none).
+
 ## Build environment
 Build and test in the container, not on the host: `scripts/dev.sh check` (OrbStack/Docker; image in `dev/Dockerfile`, pinned Rust,
 cache volumes per architecture). Core firmware is always built under linux/amd64 emulation (the CI environment): the BK4819 image built on native arm64 differs from x86 (AUDIT 18). `scripts/dev.sh repro` builds both and requires everything to match except that one known image.
@@ -35,7 +45,8 @@ exception to "serial stays on the host": CHIRP runs in a container and reaches t
 
 CI (`.github/workflows/ci.yml`) is path-filtered: the `changes` job runs `scripts/ci_changed.py` (a table of which files each
 job reads, found from the code: the simulator's `#[path]` includes, what `mkapp.py` and `build_core.sh` consume, what the tool
-tests open) and a pull request runs only the jobs its files can affect (`gate`, `sim`, `tools`, `hil`, `images`, `web`). A push
+tests open) and a pull request runs only the jobs its files can affect (`gate`, `sim`, `tools`, `hil`, `images`, `web`). A change to `README.md`, `docs/*.md`, `docs/img/` or the screenshot
+table runs `tools`, because `test_docs.py` checks them. A push
 to `main` runs all of them; so does a change to a workflow, `scripts/dev.sh`, the Dockerfile, the toolchain pin, the ABI file,
 or a file the table does not list. `ci-ok` always runs and is the one check to require. When a step starts reading a new path,
 add it to `RULES` in `scripts/ci_changed.py`; `firmware/tests/test_ci_filters.py` (in `tools-test`) fails for an unlisted

@@ -69,21 +69,22 @@ Based on hardware reverse engineering by `amoxu` (`Baofeng-UV-5RM-5RH-RE`) and `
   - `PC13`: Latch Enable (LE)
   - `PA2`: Serial Clock (SCK)
   - `PA3`: Serial Data (SDA)
-* **Modulation Modes:** FM, NFM, AM (airband), and FSK modem (used by `TEXT` app).
+* **Modulation Modes:** FM, NFM, AM (airband), and FSK modem (used by the `TEXT` app and the FSK PROBE app).
 * **Power Amplifiers:** Discrete dual-band power amp stages for VHF/UHF yielding ~8-10W on high, ~5W on mid, ~1-2W on low.
 
 ### External Memory
 * **Chip:** XMC **25QH16CJIG** (or Winbond equivalent 25Q16)
 * **Capacity:** 16 Mbit (2 MByte) SPI NOR Flash
 * **Usage:**
-  - `0x000000 - 0x01FFFF`: Channel table and radio configurations
-  - `0x14C000+`: Modular app overlay slots (`OVL1` format, 9 slots of 32 KB each)
-  - Boot logo bitmap (`160x128` RGB565 raw pixels = 40,960 bytes)
-  - App data storage (e.g. saved `TEXT` messages, scan lists)
+  - `0x000000 - 0x01FFFF`: Channel table (1,000 x 32 bytes at 0x0000) and radio configurations (VFO 0x8000, settings 0x9000, DTMF 0xA000, stock FM list 0xC000, calibration 0xF000)
+  - `0x0C0000`: Boot logo bitmap (`160x128` RGB565 raw pixels = 40,960 bytes)
+  - `0x14C000+`: Modular app overlay slots (`OVL1` format, 9 slots of 32 KB each, to 0x194000)
+  - App data region after the slots (`flash_map.rs` is the authority; each user checks its own range): satellite table `0x194000`, FSK PROBE capture
+    `0x1B0000-0x1D0000`, FM station names `0x1D8000` (two 4 KB halves), channel details `0x1E0000` (20 bytes per channel), TEXT message log `0x1F0000`
 
 ### Display & Peripherals
 * **LCD:** 1.77-inch TFT color display (160 x 128 resolution, RGB565, ST7735-compatible controller).
-* **Audio:** Internal speaker driven by audio amp; FM broadcast radio IC (BK1088 or integrated).
+* **Audio:** Internal speaker driven by audio amp; FM broadcast receiver is a separate tuner chip, an RDA5807 per the core's driver (`src/drivers/rda5807.rs`), which is why broadcast FM is the FM app and not a VFO band.
 * **Keypad:** Matrix keypad with LED backlight.
 * **Flashlight:** High-brightness white LED top-mounted.
 
