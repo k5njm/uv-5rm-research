@@ -8,31 +8,7 @@ use crate::device::radio::{FreqRanges, SubAudio};
 use crate::flash_map::Settings;
 use cortex_m::peripheral::SYST;
 
-pub(crate) struct ChanMode {
-    pub name: &'static str,
-    pub short: &'static str,
-    /// Inclusive channel numbers as printed on the reference sheet (from 1).
-    ranges: &'static [(u16, u16)],
-}
-
-const ALL: &[(u16, u16)] = &[(1, MAX_CHANNEL_NUM + 1)];
-
-pub(crate) const MODES: [ChanMode; 13] = [
-    ChanMode { name: "ALL", short: "ALL", ranges: ALL },
-    ChanMode { name: "WEATHER", short: "WX", ranges: &[(1, 7)] },
-    ChanMode { name: "POLICE FIRE EMS", short: "PD/FD", ranges: &[(14, 105)] },
-    ChanMode { name: "FED & GOV", short: "FED", ranges: &[(106, 146)] },
-    ChanMode { name: "UTILITIES", short: "UTIL", ranges: &[(147, 157)] },
-    ChanMode { name: "RAILROAD", short: "RAIL", ranges: &[(158, 167)] },
-    ChanMode { name: "AIR TRAFFIC", short: "AIR", ranges: &[(168, 233)] },
-    ChanMode { name: "REPEATERS", short: "RPT", ranges: &[(234, 304), (327, 344)] },
-    ChanMode { name: "FRS", short: "FRS", ranges: &[(305, 326)] },
-    ChanMode { name: "GMRS", short: "GMRS", ranges: &[(305, 344)] },
-    ChanMode { name: "MURS", short: "MURS", ranges: &[(345, 349)] },
-    ChanMode { name: "FRS GMRS MURS", short: "F/G/M", ranges: &[(305, 349)] },
-    // Channel list stays open here; the scan itself sweeps the typed range.
-    ChanMode { name: "CUSTOM RANGE", short: "RANGE", ranges: ALL },
-];
+pub(crate) use super::group_table::{contains, ChanMode, MODES};
 
 const CUSTOM: u8 = MODES.len() as u8 - 1;
 
@@ -84,14 +60,6 @@ fn range_valid(lo: u32, hi: u32) -> bool {
     lo < hi && hw.allows(lo) && hw.allows(hi)
 }
 
-/// `num` is a flash slot, counting from 0.
-pub(super) fn contains(mode: u8, num: u16) -> bool {
-    let printed = num + 1;
-    MODES[mode as usize]
-        .ranges
-        .iter()
-        .any(|&(a, b)| (a..=b).contains(&printed))
-}
 
 pub(super) fn is_custom(mode: u8) -> bool {
     mode == CUSTOM

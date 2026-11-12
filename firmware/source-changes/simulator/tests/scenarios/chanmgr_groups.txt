@@ -1,0 +1,22 @@
+# CHAN MGR follows channel groups: the title names the group, * and # step through groups, rows show number, name, frequency.
+chan 0 162400000 WX-1
+chan 1 162425000 WX-2
+chan 233 147120000 147720000 K5RWK
+chan 234 146940000 146340000 W5ABC
+group 7                   # the radio is in REPEATERS
+app chanmgr
+shot repeaters
+key pound                 # next group: FRS (nothing stored)
+shot frs_empty
+key star
+key star                  # back two: AIR TRAFFIC
+shot air_traffic_empty
+key pound
+key pound
+key pound
+key pound
+key pound
+key pound
+shot custom_range         # too long for the position: "GROUP: CUSTOM RANGE"
+key pound                 # wraps past CUSTOM RANGE to ALL
+shot all

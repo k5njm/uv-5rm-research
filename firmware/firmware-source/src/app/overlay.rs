@@ -933,6 +933,50 @@ extern "C" fn api_chan_write(num: u16, buf: *const u8, len: u16) -> bool {
 }
 
 #[inline(never)]
+extern "C" fn api_group_name(index: u8, out: *mut u8, cap: u16) -> u16 {
+    let Some(group) = super::modes_table().get(index as usize) else {
+        return 0;
+    };
+    if out.is_null() {
+        return 0;
+    }
+    let n = group.name.len().min(cap as usize);
+    unsafe { core::ptr::copy_nonoverlapping(group.name.as_ptr(), out, n) };
+    n as u16
+}
+
+#[inline(never)]
+extern "C" fn api_chan_in_group(index: u8, num: u16) -> bool {
+    (index as usize) < super::modes_table().len()
+        && num <= super::MAX_CHANNEL_NUM
+        && super::modes::contains(index, num)
+}
+
+#[inline(never)]
+extern "C" fn api_current_group() -> u8 {
+    app_ref().chan_mode_index() as u8
+}
+
+#[inline(never)]
+extern "C" fn api_toast(text: *const u8, len: u16) {
+    if text.is_null() || len == 0 {
+        // removed: whatever list was under it must repaint in full
+        unsafe { *core::ptr::addr_of_mut!(LIST_CACHE) = None };
+        return;
+    }
+    let lcd_ptr = ctx().lcd;
+    if lcd_ptr.is_null() {
+        return;
+    }
+    let lcd = unsafe { &mut *lcd_ptr };
+    let bytes = unsafe { core::slice::from_raw_parts(text, len as usize) };
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    if let Ok(label) = core::str::from_utf8(&bytes[..end]) {
+        crate::ui::toast::draw_toast(lcd, label, crate::ui::toast::OK);
+    }
+}
+
+#[inline(never)]
 extern "C" fn api_get_master_freq() -> u32 {
     app_ref().master_freq_hz()
 }
@@ -1527,4 +1571,8 @@ static API: Api = Api {
     rf_reg_write: api_rf_reg_write,
     delay_us: api_delay_us,
     play_cue: api_play_cue,
+    group_name: api_group_name,
+    chan_in_group: api_chan_in_group,
+    current_group: api_current_group,
+    toast: api_toast,
 };

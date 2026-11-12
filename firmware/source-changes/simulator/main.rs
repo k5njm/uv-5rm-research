@@ -76,6 +76,8 @@ pub mod ui {
     pub mod backdrop;
     #[path = "../../../firmware-source/src/ui/list.rs"]
     pub mod list;
+    #[path = "../../../firmware-source/src/ui/toast.rs"]
+    pub mod toast;
 }
 
 const W: usize = 160;
@@ -414,6 +416,33 @@ static mut COORDS: Option<(i32, i32)> = None;
 static mut BACKLIGHT_HOLD: bool = false;
 extern "C" fn backlight_hold(on: bool) {
     unsafe { BACKLIGHT_HOLD = on };
+}
+/// The firmware's own group table and membership test.
+#[path = "../../firmware-source/src/app/group_table.rs"]
+#[allow(dead_code)]
+mod group_table;
+/// The group the simulated radio is using (scenario step `group N`).
+pub static mut GROUP: u8 = 0;
+extern "C" fn group_name(index: u8, out: *mut u8, cap: u16) -> u16 {
+    let Some(g) = group_table::MODES.get(index as usize) else { return 0 };
+    let n = g.name.len().min(cap as usize);
+    unsafe { std::ptr::copy_nonoverlapping(g.name.as_ptr(), out, n) };
+    n as u16
+}
+extern "C" fn chan_in_group(index: u8, num: u16) -> bool {
+    (index as usize) < group_table::MODES.len() && num <= 999 && group_table::contains(index, num)
+}
+extern "C" fn current_group() -> u8 {
+    unsafe { GROUP }
+}
+/// Same drawing code as the firmware; removing the toast forces the list under it to repaint, as on the radio.
+extern "C" fn toast(text: *const u8, len: u16) {
+    if text.is_null() || len == 0 {
+        unsafe { LIST_CACHE = None };
+        return;
+    }
+    let label = cstr(unsafe { std::slice::from_raw_parts(text, len as usize) });
+    ui::toast::draw_toast(sim(), label, ui::toast::OK);
 }
 extern "C" fn settings_get(id: u16) -> u32 {
     match id {
@@ -756,6 +785,10 @@ static API: Api = Api {
     rf_reg_write,
     delay_us,
     play_cue,
+    group_name,
+    chan_in_group,
+    current_group,
+    toast,
 };
 
 type Entry = fn(&Api, AppEvent) -> AppResult;

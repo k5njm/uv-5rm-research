@@ -9,8 +9,14 @@ use super::{TextBuf, SCREEN_H, SCREEN_W};
 
 const BG: Rgb565 = Rgb565::BLACK;
 const FG: Rgb565 = Rgb565::WHITE;
-const TITLE_BG: Rgb565 = Rgb565::new(11, 0, 0);
-const SELECT_BG: Rgb565 = Rgb565::new(16, 0, 0);
+// Colours carry meaning: a light title bar, blue for "you are here", amber for "you are changing this",
+// grey for values that are only being shown.
+const TITLE_BG: Rgb565 = Rgb565::new(27, 54, 27);
+const TITLE_FG: Rgb565 = Rgb565::BLACK;
+const SELECT_BG: Rgb565 = Rgb565::new(4, 24, 26);
+const EDIT_BG: Rgb565 = Rgb565::new(31, 42, 0);
+const EDIT_FG: Rgb565 = Rgb565::BLACK;
+const VALUE_DIM: Rgb565 = Rgb565::new(18, 36, 18);
 
 const ROW_HEIGHT: i32 = FONT_6X10.character_size.height as i32 + 4;
 const TITLE_HEIGHT: i32 = ROW_HEIGHT;
@@ -20,7 +26,7 @@ const RIGHT_MARGIN: i32 = 4;
 
 const ARROW_GAP: i32 = 6;
 
-const TITLE_MAX: usize = 16;
+const TITLE_MAX: usize = 26; // a full row of the 6-pixel font
 const VALUE_MAX: usize = 18;
 
 pub(crate) trait ListSource {
@@ -258,11 +264,12 @@ fn draw_row<D>(
             Point::new(0, row_top),
             Size::new(SCREEN_W as u32, ROW_HEIGHT as u32),
         )
-        .into_styled(PrimitiveStyle::with_fill(SELECT_BG))
+        .into_styled(PrimitiveStyle::with_fill(if show_arrows { EDIT_BG } else { SELECT_BG }))
         .draw(lcd)
         .ok();
     }
-    let fg = FG;
+    let fg = if is_selected && show_arrows { EDIT_FG } else { FG };
+    let value_fg = if is_selected { fg } else { VALUE_DIM };
     let baseline = row_top + FONT_6X10.baseline as i32 + 2;
 
     let mut label: TextBuf<20> = TextBuf::new();
@@ -306,7 +313,7 @@ fn draw_row<D>(
         } else if label_is_empty {
             draw_value_left(lcd, value.as_str(), baseline, fg);
         } else {
-            draw_value(lcd, value.as_str(), baseline, fg);
+            draw_value(lcd, value.as_str(), baseline, value_fg);
         }
     }
 }
@@ -329,7 +336,7 @@ where
     Text::new(
         text,
         Point::new(x, baseline_y),
-        MonoTextStyle::new(&FONT_6X10, FG),
+        MonoTextStyle::new(&FONT_6X10, TITLE_FG),
     )
     .draw(lcd)
     .ok();

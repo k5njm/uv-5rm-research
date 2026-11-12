@@ -1,4 +1,5 @@
 mod convert;
+mod group_table;
 mod input;
 mod keyfn;
 pub(crate) use keyfn::KEYFN_MAX;

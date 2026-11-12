@@ -7,6 +7,7 @@ mod list;
 mod modes;
 mod scan;
 mod standby;
+pub(crate) mod toast;
 
 pub(crate) use list::{draw_list, Cache, ListSource};
 

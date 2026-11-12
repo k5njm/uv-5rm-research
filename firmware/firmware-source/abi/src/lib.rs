@@ -195,6 +195,17 @@ pub struct Api {
     /// Local-speaker-only tone sequence; never keys the transmitter; honours the user's beep setting.
     /// `cues` points to `count` entries, at most 8.
     pub play_cue: extern "C" fn(cues: *const Cue, count: u16),
+    /// Channel groups. Writes the name of group `index` (ASCII, no terminator, at most `cap` bytes) and returns its
+    /// length; 0 means there is no such group, so the number of groups is the first index that returns 0.
+    pub group_name: extern "C" fn(index: u8, out: *mut u8, cap: u16) -> u16,
+    /// Whether channel slot `num` (from 0) belongs to group `index`. Apps must ask instead of assuming how membership
+    /// is stored (today: the group's channel-number ranges).
+    pub chan_in_group: extern "C" fn(index: u8, num: u16) -> bool,
+    /// The group the radio is using now.
+    pub current_group: extern "C" fn() -> u8,
+    /// A notice box in the middle of the screen (like TX PROHIBITED), drawn over whatever is there. Call it after
+    /// `draw_list` on every Draw while it should show. `len` 0 removes it: the next `draw_list` repaints in full.
+    pub toast: extern "C" fn(text: *const u8, len: u16),
 }
 
 /// One tone of a [`Api::play_cue`] sequence: `hz_div10` = frequency / 10 (88 = 880 Hz), `ms` = duration.
