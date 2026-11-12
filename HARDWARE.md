@@ -137,3 +137,75 @@ Validation done here (static, no hardware): 15 of its 17 new register constants 
 
 **Better K6 source, from upstream issue #18:** the YP07 author points to [`sophiel-meow/bf-k61-firmware-aura`](https://github.com/sophiel-meow/bf-k61-firmware-aura), open-source Rust firmware for the K6 family. It has a working [FD6818 driver](https://github.com/sophiel-meow/bf-k61-firmware-aura/blob/master/src/driver/fd6818.rs) and an [FD6818B driver on its `fd6818b` branch](https://github.com/sophiel-meow/bf-k61-firmware-aura/blob/fd6818b/src/drivers/fd6818b.rs), which the issue says was being ported into the 5RH firmware. **Compared (2026-11-08, Aura `fd6818b` branch, last driver commit `de011b9` of 2026-09-03, GPL-3.0 like this repo):** our `src/drivers/fd6818b.rs` is a port of it. All 143 shared constants and the FSK, modulation, squelch, sub-audio, AGC and TX paths are identical apart from rustfmt reflow and the bus plumbing (AT32F421 GPIO instead of KD32F328). Aura's FD6818B values (`REG_37` `0x9D1F`/`0x9F1F`, `REG_14`/`REG_49` `0x0210`/`0x2AB2`) are our default-build values; the `0x1D0F`/`0x0019` set exists only in our `bk4819` feature. Ours adds: separate RX (GPIO5/6) and TX (GPIO3/4) band switches (Aura drives GPIO2/3 for the PA path and GPIO5 as the K6's TX LED), `set_agc_fix`, `pa_target`/`set_band_quiet`, `reg_read`/`reg_write` (the new ABI), and long provenance comments on the PA gain word. Nothing in Aura's driver is missing from ours, so there is nothing to merge, and Aura has not touched the file since. The core's FSK reference init (`enter_fsk_mode`, unused: `REG_72 = 0x3065` = 1200 baud, `REG_5D = 0x0F00`) independently confirms the `baud * 10.32444` formula and the 13/26 MHz crystal assumption. **Caveat:** since the driver is a K6 port, "matches Aura" says the code was ported faithfully, not that the YP07 behaves like a K6 (upstream reports TX/RX working on a YP07; this repo has verified nothing on hardware).
 
+
+## 6. FSK modem registers (FSK PROBE, 2026-11-12)
+
+Written to find out why the first FSK PROBE capture (404.800 MHz, noise, 4800 baud, sync 0x086D 0x5388) held only a sync
+interrupt and, 119.7 ms later, one word with the done flag. Sources, in order of trust:
+
+* **FD** = Fudan "FD6818B Registers Definition" 2025/1/11 (`build-out/refs/FD6818B.Registers.Definition.pdf`, sha256 `3a2d14e1...`,
+  pages 3, 4, 8, 10, 11, 12), read from the rendered pages because the text layer loses the table layout. A vendor register
+  list for this chip, but unofficial in provenance and **not measured on the YP07**.
+* **TEXT** = `apps/textapp/src/logic.rs`: sends and receives 32-byte FSK packets on this very radio at 450 baud (owner-tested).
+* **K6** = Baofeng's `cnt7/BAOFENG-UV-K6-Firmware` `src/Driver/DevFD6818.c` (read, nothing copied; licence BFPL-1.0) and our
+  `src/drivers/fd6818b.rs` (a port of the Aura driver). Different board, same chip family.
+* **K5** = `egzumer/uv-k5-firmware-custom` `app/aircopy.c`, `app/app.c`, `driver/bk4819.c`, `driver/bk4819-regs.h` (Apache-2.0
+  code for the BK4819, a relative). The BK4819 PDF in section 5 is a product brief with no register map.
+* **RS41** = rdz_ttgo_sonde `RX_FSK/src/RS41.cpp` (read for facts only).
+
+"Confirmed" means the cited source says it; **nothing is verified on the YP07 except what TEXT does and the one capture**.
+
+| Register | Field | Meaning | Source | Status |
+|---|---|---|---|---|
+| 0x02 (read; write 0 latches/clears) | 15 / 14 / 13 / 12 / 1 | FSK TX finished / FIFO almost empty / RX finished (done) / FIFO almost full / RX sync found | FD p3; K5 `bk4819-regs.h`; TEXT | confirmed (TEXT uses 15, 13, 12, 1 on this chip) |
+| 0x02 | write 0 then read | the read returns the flags latched by the write | TEXT `poll_modem`, K5 | confirmed by TEXT |
+| 0x0C | 0 | interrupt request (any enabled flag) | FD p4; TEXT | confirmed |
+| 0x0B (read) | 7 / 6 / 4 | FSK sync negative found / positive found / CRC pass | FD p4 | unverified (never read before; FSK PROBE now records bits 7:6 at each sync) |
+| 0x3F | 15 / 14 / 13 / 12 / 1 | enable for the same flags as 0x02 | FD p8; K6 comment `0x3000 rx sucs/fifo_af irq mask`; TEXT writes 0x3002 | confirmed |
+| 0x58 | 0 | FSK enable | FD p10; K6 | confirmed |
+| 0x58 | 3:1 | RX bandwidth: 000 FSK 1.2K, 100 FSK 2.4K, 001 FFSK 1200/1800, 010 NOAA SAME | FD p10 | confirmed (meaning); which suits 4800 baud RS41 is **unverified** (probe default now 2.4K) |
+| 0x58 | 5:4 | preamble type 11=0xAA, 10=0x55, 00 by sync byte 0 MSB | FD p10 | confirmed; TX only, unused |
+| 0x58 | 9:8 | "FSK RX gain" (values not given). 0x0301 sets both | FD p10; TEXT value | unverified; kept from TEXT, which works at 450 baud |
+| 0x58 | 12:10 / 15:13 | RX mode / TX mode (000 = FSK 1.2K/2.4K) | FD p10 | confirmed, left 000 |
+| 0x59 | 15 / 14 | clear TX FIFO / clear RX FIFO, "1 = clear" | FD p11; K6 `REG_59 \| 0x4000` then `\| 0x1000`; TEXT `rx_restart`; K5 | confirmed. Whether the clear is level (held) or edge is **unverified** |
+| 0x59 | 13 | FSK scramble | FD p11 | confirmed; left 0 (RS41 is scrambled by the sonde, descrambled in software) |
+| 0x59 | 12 / 11 | enable FSK RX / TX | FD p11; K6; TEXT `CTRL_RX_ON = 1<<12` | confirmed |
+| 0x59 | 10 / 9 | invert FSK data on RX / TX | FD p11 | confirmed (meaning); which polarity an RS41 needs is **unverified** (option INV) |
+| 0x59 | 8 | not in the document | FD p11 | the old probe set it; no longer |
+| 0x59 | 7:4 | TX preamble length, 0 = 1 byte ... 15 = 16 | FD p11; TEXT TX uses 15<<4 | confirmed, unused on RX |
+| 0x59 | 3 | sync length: 0 = 2 bytes (REG_5A), 1 = 4 bytes (5A, 5B) | FD p11; TEXT comment "4-byte sync" and `CTRL_RX = 1<<3`; K5 0x0068; K6 0x0028 | **confirmed** |
+| 0x5A, 0x5B | 15:8, 7:0 | sync bytes 0,1 and 2,3; "Sync Byte 0 first" | FD p11 | confirmed (meaning); bit order within a byte and word order in the FIFO **unverified** (keys 8 / 9) |
+| 0x5C | 6 | CRC enable. 0x5625 (TEXT) = off, 0x5665 (K5, K6) = on | FD p11; TEXT; K6 | confirmed for bit 6; other bits undocumented, left as TEXT |
+| 0x5D | 15:8 and 7:5 | packet length in bytes minus one, 11 bits (low 8, high 3); "0xF means 16 bytes" | FD p11; K5 (0x4700 = 72 bytes); K6 (`(8*2-1)<<8`) | confirmed for the low 8 bits by two drivers; **the high 3 bits are only in FD, unverified on the chip** |
+| 0x5E | 9:3 / 2:0 | TX FIFO (128 words) almost-empty threshold, default 64 / RX FIFO (8 words) almost-full threshold, default 4 | FD p11 | confirmed (meaning). TEXT writes (64<<3)\|1 and gets one word per interrupt: **confirmed on this chip for threshold 1**. K5 leaves the default 4 and reads 4 words per interrupt. Whether "almost full" means >= or > the threshold, and whether the flag repeats while the FIFO stays above it, is **unverified** |
+| 0x5F | 15:0 | FIFO word. First byte on air in the low byte (TEXT's packing); a read removes a word | FD p11; TEXT | unverified for received data; never peeked |
+| 0x70 | 15 / 14:8 / 7 / 6:0 | TONE1 enable / gain / TONE2 enable / TONE2-FSK gain | FD p12; K6 writes 0x00E0 for FSK; TEXT (1<<7)\|96 | confirmed |
+| 0x71 | | TONE1/scramble frequency word | FD p12 | not touched by the probe |
+| 0x72 | 15:0 | TONE2/FSK frequency word = baud * 10.32444 (13/26 MHz crystal) or * 10.48576 | FD p12; K6 0x3065 = 1200; TEXT 4646 = 450 | confirmed formula; the crystal is **unverified** (TEXT would agree with itself either way) |
+| 0x73 | 4 / 13:11 | AFC disable / AFC range | FD p12 | **not on the allow-list**; AFC is on by default (0 = enabled), range at maximum. Not changed |
+| 0x67 | 8:0 | RSSI = value/2 - 160 dBm | FD p11 | confirmed (already used) |
+
+RS41 needs (RS41.cpp): 4800 baud 2-level FSK; the header `08 6D 53 88 44 69 48 1F`; 320 bytes (`RS41MAXLEN`); the SX1278 is told 8 sync
+bytes and then 312 payload bytes, with AFC and AGC on; bits are reversed and XORed with a 64-byte mask afterwards. The FD6818B
+matches at most 4 sync bytes, so the first four bytes after the sync (`44 69 48 1F`) arrive as data and **316 bytes** follow
+the sync, if the chip does not deliver the sync bytes (as in K5's aircopy, unverified here).
+
+### What explains the first capture
+
+1. **Sync looser than 32 bits: high confidence.** The old probe wrote REG_59 as bits 12, 10, 8 and never bit 3. FD, TEXT, K5
+   and K6 all say bit 3 selects 4 sync bytes, so the chip matched only 16 bits (0x086D). A 16-bit match on noise is about
+   1 in 65,536 per bit position, 4800 positions a second: about 0.2 events in 3 s. One sync in 2.93 s fits. No register for
+   bit-error tolerance exists in FD.
+2. **Words not streaming: likely, not proven.** The second REG_59 write was `CTRL_RX | (1<<14)`: the constant named
+   `CTRL_RX_ON` was bit 14, which is *clear RX FIFO*, not the enable (bit 12). So the FIFO was told to clear on every write and
+   never released. If the clear is level, the FIFO stays empty; that matches a sync, no almost-full interrupts, and a done
+   flag. TEXT, K5 and K6 all write the bit back to 0 before enabling. The threshold (1) and the one-word-per-interrupt read
+   were not the problem: they are TEXT's. The single word 0xFCB7 with the done flag is not explained (whatever the done path
+   leaves in the FIFO).
+3. **Reception ends at the length: confirmed as designed, the width is unverified.** REG_5D was 64<<8, i.e. 65 bytes
+   (minus-one encoding), 108 ms at 4800 baud; the capture shows 119.7 ms, about 11 ms or 7 bytes more, **unexplained**
+   (baud/crystal error, sync bytes counted, or tick latency on the sync record). An RS41 frame needs 316 bytes: FD says the
+   field is 11 bits (0x3B20). If the chip ignores the top three bits, 316 would wrap to 60 bytes.
+
+FSK PROBE now sets bit 3, releases the clear bit using TEXT's restart sequence, writes REG_5D as 0x3B20, counts words itself
+and ends a frame at 158 words whatever the chip does, and offers options for the open readings (LEN, TH, INV, BW, SYNC).

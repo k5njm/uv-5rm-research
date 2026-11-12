@@ -393,7 +393,7 @@ impl Run<'_> {
             ["expect", "captured", n] => {
                 // FSK PROBE's capture as probe_capture.py would read it: a header, then records until an erased one
                 let nor = nor();
-                let got = if &nor[0x1B_0000..0x1B_0008] == b"FSKCAP1\0" {
+                let got = if &nor[0x1B_0000..0x1B_0008] == b"FSKCAP2\0" {
                     nor[0x1B_0100..0x1D_0000].chunks(8).take_while(|r| r[6] != 0xFF).count()
                 } else {
                     usize::MAX
