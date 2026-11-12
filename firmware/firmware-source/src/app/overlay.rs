@@ -1270,8 +1270,12 @@ extern "C" fn api_tx_state() -> u32 {
 
 #[inline(never)]
 extern "C" fn api_app_fault(line: u32) -> ! {
-    let _ = line;
-    SCB::sys_reset();
+    // transmitter off, a message with the slot and `line`, then a reset (fault.rs)
+    let slot = match app_ref().mode {
+        Mode::External(slot) => slot,
+        _ => crate::fault_text::SLOT_NONE,
+    };
+    crate::fault::stop(crate::fault_text::Fault::App { slot, line })
 }
 
 #[inline(never)]
