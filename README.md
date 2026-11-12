@@ -52,6 +52,7 @@ These pictures are rendered by the host simulator from the firmware's own drawin
 
 ## Read next
 
+* **[Install guide](docs/INSTALL.md):** for someone with a release bundle: the one-command installer (`install.py`), what it backs up and writes, the setup file, recovery.
 * **[User guide](docs/USER-GUIDE.md):** the keys, screens, settings, channel groups, transmit safety and every app.
 * **[First-flash runbook](docs/FIRST-FLASH-RUNBOOK.md):** read-only steps first, the cable, what can and cannot be restored.
 * [HARDWARE.md](HARDWARE.md): the radio's hardware and the purchase check. [AUDIT.md](AUDIT.md): findings and what is verified.
@@ -70,7 +71,7 @@ These pictures are rendered by the host simulator from the firmware's own drawin
 | Host tools | No network calls in the Python tools or HTML pages (audited Nov 2026) |
 | Reproducibility | CI-built images are the reference. The core image is built under linux/amd64 (the BK4819 variant differs on arm64, AUDIT row 18). The committed `.BF` does not reproduce from source |
 | Tests | Unit tests, a host simulator with scripted scenarios and golden frames, tool tests against a fake radio, and a release gate. See [AGENTS.md](AGENTS.md); run `scripts/dev.sh check` (needs Docker or OrbStack). CI runs only the jobs a pull request's files can affect |
-| Releases | A `v*` tag builds the install bundle (core `.BF`, apps, host tools, channel lists, runbook, checksums) with `scripts/dev.sh bundle`, in CI and locally; the core must equal the pinned hash. Experimental: flash at your own risk, back up calibration first |
+| Releases | A `v*` tag builds the install bundle (core `.BF`, apps, `install.py`, host tools, channel lists, runbook, checksums) with `scripts/dev.sh bundle`, in CI and locally; the core must equal the pinned hash. Experimental: flash at your own risk, back up calibration first |
 | Reversibility | Effectively one way for the YP07 (see the caution above) |
 
 ## Credits and licence

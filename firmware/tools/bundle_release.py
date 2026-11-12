@@ -35,15 +35,16 @@ PINNED_CORE = "fw-default.bin"                              # its sha256 must eq
 # Host tools a user needs to install the release (see docs/FIRST-FLASH-RUNBOOK.md), relative to firmware/source-changes/.
 # radio_read.py is not in the brief's list but the runbook's read-only backup step (A5) is that script.
 TOOLS = ["flash_bf.py", "cps_tool.py", "dump_nor.py", "install_apps.py", "restore_backup.py", "channel_extras.py",
-         "channel_plan.py", "boot_logo_raw.py", "wrap_bf.py", "radio_read.py", "fm_stations.py", "probe_capture.py"]
+         "channel_plan.py", "boot_logo_raw.py", "wrap_bf.py", "radio_read.py", "fm_stations.py", "probe_capture.py",
+         "bootloader_probe.py"]          # the last one: install.py waits for the bootloader with it
 # Files those tools read by relative path: flash_bf.py -> ../variants.json, channel_plan.py -> ../firmware-source/src/app/group_table.rs.
 # Local imports and `cps_tool.py` (read as text by the others) are covered by TOOLS; test_bundle_release.py checks the closure.
-DATA = ["firmware/variants.json", "firmware/firmware-source/src/app/group_table.rs", "docs/FIRST-FLASH-RUNBOOK.md", "LICENSE"]
+DATA = ["firmware/variants.json", "firmware/firmware-source/src/app/group_table.rs", "docs/FIRST-FLASH-RUNBOOK.md", "docs/INSTALL.md", "LICENSE"]
 CHANNELS_DIR = "channels"          # *.csv and README.md, and fm/*.csv (FM station lists)
 
-# --- THE INSTALLER GOES HERE ---------------------------------------------------------------------------------------
-# An installer script (install.py) is being written separately. When this file exists it is copied to the bundle root
-# and listed in the bundle's file list; when it does not, the bundle is built without it and nothing fails.
+# --- THE INSTALLER ---------------------------------------------------------------------------------------------------
+# install.py is copied to the bundle root (it finds firmware/source-changes/, channels/ and release/ next to itself). It runs
+# the tools above as programs, so every script it names must be in TOOLS (test_bundle_release.py checks the closure).
 INSTALLER_SOURCE = "firmware/source-changes/install.py"
 INSTALLER_DEST = "install.py"
 # -------------------------------------------------------------------------------------------------------------------
@@ -145,8 +146,24 @@ def forbidden_in(stage):
 def install_md(version):
     return f"""# UV-5RM open firmware {version}: install
 
-This is experimental firmware. You flash it at your own risk, on a radio you can afford to lose. The first step is a
-backup of the radio's calibration (it cannot be restored once lost).
+This is experimental firmware. You flash it at your own risk, on a radio you can afford to lose. It has run on one radio
+(a 5RHNRFB-YP07); the installer below has only been tried against simulated radios. The first step is a backup of the
+radio, including its calibration (which cannot be restored once lost): the installer does that before it writes anything.
+
+**Fastest way: the installer.** You need Python 3.9 or newer and `pip install pyserial`, and the programming cable
+(the two-pin K-plug, not USB-C; read `docs/FIRST-FLASH-RUNBOOK.md` > The cable first).
+
+    python3 install.py --dry-run       # menus, a summary, and what it WOULD do; sends no write command to a radio
+    python3 install.py                 # the same menus, then (after you type INSTALL) the real install
+    python3 install.py --config setup.json   # repeat a saved setup
+
+It identifies the radio (stock, this firmware, or flash mode), backs it up first, checks every file against
+`release/SHA256SUMS`, flashes the core only if needed (and tells you which keys to hold), proves the calibration did not
+change, then writes the apps, channels, channel details, FM stations and boot screen, reading each back. At the end it says
+what was written, where the backups are, and for anything that failed, what state the radio is in and how to recover.
+The guide, with the menus shown as text, the setup-file schema and recovery, is `docs/INSTALL.md` in this folder.
+
+**Manual way (the fallback):**
 
 1. Read `docs/FIRST-FLASH-RUNBOOK.md` first, all of it. It is the procedure: the cable, the read-only checks, what can
    and cannot be restored, the order of the steps. Do the read-only steps before anything is written.
@@ -157,8 +174,6 @@ backup of the radio's calibration (it cannot be restored once lost).
    (`layout.json` gives their slot order).
 5. Channel lists are in `channels/` (CHIRP CSV, one file per group; `channels/README.md` explains):
    `python3 firmware/source-changes/channel_plan.py build channels -o channels.img`, then the runbook's restore step.
-
-If `install.py` is present in this folder, it automates steps 2 and 4; the runbook still applies.
 """
 
 
@@ -187,10 +202,9 @@ def build_stage(rel, stage, version, root=ROOT):
         if n.endswith(".csv"):
             _copy(os.path.join(fdir, n), os.path.join(stage, CHANNELS_DIR, "fm", n))
     installer = os.path.join(root, INSTALLER_SOURCE)
-    if os.path.isfile(installer):
-        _copy(installer, os.path.join(stage, INSTALLER_DEST))
-    else:
-        print(f"  (no {INSTALLER_SOURCE}: the bundle is built without an installer)")
+    if not os.path.isfile(installer):
+        raise BundleError(f"{INSTALLER_SOURCE} is missing: a release without the installer is refused")
+    _copy(installer, os.path.join(stage, INSTALLER_DEST))
     with open(os.path.join(stage, "INSTALL.md"), "w") as f:
         f.write(install_md(version))
     bad = forbidden_in(stage)

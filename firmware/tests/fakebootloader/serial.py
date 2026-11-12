@@ -10,6 +10,10 @@ Faults in $FAKE_BL_DIR/faults.json (persistent):
   {"silent": true}                   never answers (radio not in flash mode / cable out)
   {"die_after_packages": N}          stops answering after N accepted packages (cable pulled)
   {"flash_fail_at": SEQ}             answers E3 for that package
+
+Every command that reaches the model is appended to $FAKE_BL_DIR/log.txt as "cmd 0x01" (handshake), "cmd 0x04" (package
+count), "cmd 0x03 <seq>" (a package: this is a flash write) and "cmd 0x45" (end), so a test can show that nothing but
+handshakes were sent.
 """
 import json, os, struct
 
@@ -95,6 +99,8 @@ class Serial:
             return
         if "die_after_packages" in f and self.state["got"] >= f["die_after_packages"] and cmd == CMD_UPDATE:
             return
+        with open(os.path.join(_d(), "log.txt"), "a") as lg:
+            lg.write(f"cmd {cmd:#04x}" + (f" {self.state['got']}" if cmd == CMD_UPDATE else "") + "\n")
         if cmd == CMD_HANDSHAKE:
             if data != b"BOOTLOADER":
                 return self._reply(0xE1, 0)

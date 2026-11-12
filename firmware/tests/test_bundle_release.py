@@ -1,6 +1,8 @@
 """The release bundle (firmware/tools/bundle_release.py): what goes in, what must never go in, checksums, the pin check.
 Runs with the standard library only. (scripts/dev.sh tools-test)"""
 import ast, hashlib, importlib.util, json, os, re, shutil, subprocess, sys, tempfile, unittest, zipfile
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import test_flash_bf as tfb
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FW = os.path.dirname(HERE)
@@ -21,9 +23,9 @@ def sha(b):
 def make_release(d, extras=EXTRAS, mutate=None):
     """A fake `scripts/dev.sh release` output with a valid SHA256SUMS."""
     os.makedirs(d, exist_ok=True)
-    blobs = {"fw-default.BF": b"BF" * 50, "fw-default.bin": b"CORE" * 40}
+    blobs = {"fw-default.BF": tfb.wrap(tfb.image()), "fw-default.bin": b"CORE" * 40}    # a core flash_bf.py --check-only accepts
     for n in SLOTS + list(extras):
-        blobs[n] = b"OVL1" + n.encode() * 3
+        blobs[n] = b"OVL1" + b"ABI!" + b"\0" * 4 + n[:-4].upper().encode().ljust(16, b"\0") + n.encode() * 3    # one ABI, a title at 12:28
     for n, b in blobs.items():
         with open(os.path.join(d, n), "wb") as f:
             f.write(b)
@@ -60,32 +62,61 @@ class Contents(Base):
     def test_file_list(self):
         stage, zip_path, files = self.bundle()
         want = {"INSTALL.md", "LICENSE", "docs/FIRST-FLASH-RUNBOOK.md", "firmware/variants.json",
-                "firmware/firmware-source/src/app/group_table.rs", "release/layout.json", "release/SHA256SUMS",
+                "firmware/firmware-source/src/app/group_table.rs", "docs/INSTALL.md", "install.py", "release/layout.json", "release/SHA256SUMS",
                 "release/fw-default.BF", "release/fw-default.bin"}
         want |= {f"release/{n}" for n in SLOTS + EXTRAS}
         want |= {f"firmware/source-changes/{t}" for t in ["flash_bf.py", "cps_tool.py", "dump_nor.py", "install_apps.py",
                                                          "restore_backup.py", "channel_extras.py", "channel_plan.py",
                                                          "boot_logo_raw.py", "wrap_bf.py", "fm_stations.py",
-                                                         "probe_capture.py"]}
+                                                         "probe_capture.py", "bootloader_probe.py"]}
         want |= {f"channels/{n}" for n in os.listdir(os.path.join(ROOT, "channels")) if n.endswith(".csv")}
         want |= {f"channels/fm/{n}" for n in os.listdir(os.path.join(ROOT, "channels", "fm")) if n.endswith(".csv")}
         self.assertTrue(want <= set(files), sorted(want - set(files)))
         extra = set(files) - want - {"channels/README.md", "firmware/source-changes/radio_read.py"}
         self.assertEqual(extra, set(), "unexpected files in the bundle")
 
-    def test_installer_is_optional_and_picked_up_when_present(self):
-        _, _, files = self.bundle()
-        self.assertNotIn("install.py", files)                       # absent today: no failure
-        fake = os.path.join(self.tmp, "root")                       # a root that does have one
+    def test_installer_is_in_the_bundle_and_its_absence_is_refused(self):
+        stage, _, files = self.bundle()
+        self.assertIn("install.py", files)
+        with open(os.path.join(stage, "install.py"), "rb") as a, open(os.path.join(ROOT, br.INSTALLER_SOURCE), "rb") as b:
+            self.assertEqual(a.read(), b.read())
+        with open(os.path.join(stage, "INSTALL.md")) as f:
+            md = f.read()
+        self.assertLess(md.index("python3 install.py"), md.index("Manual way"))       # the installer comes first, the runbook is the fallback
+        self.assertIn("docs/FIRST-FLASH-RUNBOOK.md", md)
+        fake = os.path.join(self.tmp, "root")                                       # a root without it
         shutil.copytree(os.path.join(ROOT, "channels"), os.path.join(fake, "channels"))
         for rel in br.DATA + [f"firmware/source-changes/{t}" for t in br.TOOLS]:
             os.makedirs(os.path.dirname(os.path.join(fake, rel)), exist_ok=True)
             shutil.copy(os.path.join(ROOT, rel), os.path.join(fake, rel))
-        os.makedirs(os.path.dirname(os.path.join(fake, br.INSTALLER_SOURCE)), exist_ok=True)
-        with open(os.path.join(fake, br.INSTALLER_SOURCE), "w") as f:
-            f.write("print('installer')\n")
-        files = br.build_stage(self.rel, os.path.join(self.tmp, "stage2"), "v1", root=fake)
-        self.assertIn("install.py", files)
+        with self.assertRaises(br.BundleError) as cm:
+            br.build_stage(self.rel, os.path.join(self.tmp, "stage2"), "v1", root=fake)
+        self.assertIn("install.py", str(cm.exception))
+
+    def test_installer_dry_run_works_from_the_unpacked_bundle_with_no_repo_around_it(self):
+        stage, zip_path, _ = self.bundle()
+        unpacked = os.path.join(self.tmp, "unpacked")
+        with zipfile.ZipFile(zip_path) as z:
+            z.extractall(unpacked)
+        top = os.path.join(unpacked, "uv5rm-v9.9.9")
+        setup = os.path.join(self.tmp, "setup.json")
+        with open(setup, "w") as f:
+            json.dump({"schema": 1, "port": None, "board": "5RHNRFB-YP07", "release": os.path.join(top, "release"), "core": "auto",
+                       "apps": SLOTS, "channels": {"WEATHER": os.path.join(top, "channels", "weather.csv"),
+                                                   "FRS": os.path.join(top, "channels", "frs.csv")},
+                       "fm_stations": os.path.join(top, "channels", "fm", "dallas.csv")}, f)
+        p = subprocess.run([sys.executable, "-I", os.path.join(top, "install.py"), "--config", setup, "--dry-run"],
+                           cwd=top, capture_output=True, text=True, timeout=120)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("WILL BE WRITTEN", p.stdout)
+        self.assertIn("dry run", p.stdout)
+        self.assertIn("channels, group WEATHER: 7", p.stdout)
+        self.assertIn("board gate: 5RHNRFB-YP07 -> default", p.stdout)
+        # menus work there too (no radio: plan only)
+        p = subprocess.run([sys.executable, "-I", os.path.join(top, "install.py"), "--release", os.path.join(top, "release"), "--dry-run"],
+                           cwd=top, capture_output=True, text=True, input="none\n5RHNRFB-YP07\nd\nok\nn\nok\nn\n\n3\n\n", timeout=120)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("Step 4 of 7", p.stdout)
 
     def test_runbook_commands_work_in_the_bundle_layout(self):
         """The bundle mirrors the repo so the tools find ../variants.json and group_table.rs; prove it by running one."""
@@ -102,7 +133,7 @@ class Contents(Base):
         siblings = {n for n in os.listdir(src) if n.endswith(".py")}
         stage, _, files = self.bundle()
         have = {os.path.basename(f) for f in files if f.startswith("firmware/source-changes/")}
-        for t in br.TOOLS:
+        for t in br.TOOLS + ["install.py"]:
             text = open(os.path.join(src, t), encoding="utf-8").read()
             for node in ast.walk(ast.parse(text)):
                 mods = [a.name for a in node.names] if isinstance(node, ast.Import) else \

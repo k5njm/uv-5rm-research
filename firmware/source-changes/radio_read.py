@@ -1,12 +1,24 @@
 """Read-only dump of a Baofeng 5RM, following CHIRP's BF5RM download sequence.
 
+  radio_read.py PORT OUT.img [--cal CAL.bin]
+
 Only the handshake below and 'R' read frames can leave this script: send() refuses
 anything else, so there is no path that writes to the radio.
+--cal also saves the calibration page (0xF000-0x10000, 4,096 bytes) the stock firmware answers read frames for
+(AUDIT 26: not XOR-coded on the wire), so a copy exists from BEFORE a flash. It is not part of the 0x8380-byte image.
 """
 import os, struct, sys, time
 import serial
 
-PORT, OUT = sys.argv[1], sys.argv[2]
+_a = sys.argv[1:]
+CAL = None
+if "--cal" in _a:
+    _i = _a.index("--cal")
+    CAL = _a[_i + 1] if _i + 1 < len(_a) else None
+    del _a[_i:_i + 2]
+if len(_a) != 2 or ("--cal" in sys.argv and not CAL):
+    raise SystemExit(__doc__)
+PORT, OUT = _a
 IDENT = b"PROGRAMBFNORMALU"
 MAGICS = [(b"\x46", 16), (b"\x4d", 15),
           (b"\x53\x45\x4E\x44\x21\x05\x0D\x01\x01\x01\x04\x11\x08\x05"
@@ -59,9 +71,21 @@ try:
             if len(d) != BLOCK + 4:
                 raise SystemExit(f"Short read at {addr:#06x}: got {len(d)} bytes after {len(data)} bytes total")
             data += crypt(d[4:])
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    cal = bytearray()
+    if CAL:
+        for addr in range(0xF000, 0x10000, BLOCK):
+            send(struct.pack(">BHB", 0x52, addr, BLOCK))
+            d = s.read(BLOCK + 4)
+            if len(d) != BLOCK + 4:
+                raise SystemExit(f"Short calibration read at {addr:#06x}: got {len(d)} bytes")
+            cal += d[4:]
+    os.makedirs(os.path.dirname(os.path.abspath(OUT)), exist_ok=True)
     with open(OUT, "wb") as f:
         f.write(data)
+    if CAL:
+        with open(CAL, "wb") as f:
+            f.write(cal)
+        print("read", len(cal), "bytes of calibration ->", CAL)
     print("read", len(data), "bytes ->", OUT)
 finally:
     s.close()
