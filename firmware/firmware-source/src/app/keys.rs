@@ -211,6 +211,7 @@ fn dispatch_app_menu(app: &mut App, syst: &mut SYST, ev: KeyEvent) {
             KeyId::Menu if ev.kind == KeyEventKind::Single => {
                 let index = app.launcher_index;
                 if launcher::is_available_at(app, index) {
+                    app.app_from_menu = true;
                     super::overlay::enter(app, syst, index as u8);
                 }
             }
@@ -226,6 +227,7 @@ fn dispatch_app_menu(app: &mut App, syst: &mut SYST, ev: KeyEvent) {
                         && launcher::is_available_at(app, index)
                     {
                         app.launcher_index = index;
+                        app.app_from_menu = true;
                         super::overlay::enter(app, syst, index as u8);
                     }
                 }

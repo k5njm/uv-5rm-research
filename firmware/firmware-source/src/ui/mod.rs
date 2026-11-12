@@ -4,7 +4,6 @@ mod icons;
 mod launcher;
 mod list;
 mod modes;
-mod scan;
 mod standby;
 pub(crate) mod toast;
 
@@ -36,7 +35,6 @@ pub struct UiState {
     last_mode: Option<app::Mode>,
     standby: standby::Cache,
     list: list::Cache,
-    scan: scan::Cache,
     range: modes::RangeCache,
 }
 
@@ -46,7 +44,6 @@ impl UiState {
             last_mode: None,
             standby: standby::Cache::new(),
             list: list::Cache::new(),
-            scan: scan::Cache::new(),
             range: modes::RangeCache::new(),
         }
     }
@@ -90,7 +87,6 @@ pub fn draw(
     if state.last_mode != Some(mode) {
         state.standby = standby::Cache::new();
         state.list = list::Cache::new();
-        state.scan = scan::Cache::new();
         state.range = modes::RangeCache::new();
     }
     state.last_mode = Some(mode);
@@ -98,7 +94,6 @@ pub fn draw(
         app::Mode::AppMenu => {
             launcher::draw_app_menu(lcd, app, &mut state.list)
         }
-        app::Mode::Scan => scan::draw_scan(lcd, app, &mut state.scan),
         app::Mode::ModeMenu => {
             modes::draw_menu(lcd, app, &mut state.list)
         }

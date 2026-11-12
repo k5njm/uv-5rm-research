@@ -346,7 +346,8 @@ fn leave_app(app: &mut App, syst: &mut SYST) {
         HANDOFF_LEN = 0;
         ARENA_EXT = 0;
     }
-    app.mode = Mode::AppMenu;
+    // back to where it was opened from: the APPS list, or the main screen when a key opened it
+    app.mode = if app.app_from_menu { Mode::AppMenu } else { Mode::Standby };
     unsafe {
         APP_TX_ENABLED = false;
         APP_HOLDS_RX = false;

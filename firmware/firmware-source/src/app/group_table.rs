@@ -67,27 +67,38 @@ pub(crate) fn group_slot(mode: u8, pos: u16) -> Option<u16> {
 
 /// Bands a VFO scan stays inside (Hz, inclusive): the amateur bands this radio covers and the services people
 /// listen to. Scanning from the VFO sweeps the band the frequency is in, not the synthesizer's whole range.
-pub(crate) const SCAN_BANDS: [(u32, u32); 9] = [
-    (87_500_000, 108_000_000),  // FM broadcast
-    (118_000_000, 137_000_000), // air band
-    (144_000_000, 148_000_000), // 2 m
-    (151_820_000, 154_600_000), // MURS
-    (156_000_000, 162_025_000), // marine VHF
-    (162_400_000, 162_550_000), // NOAA weather
-    (222_000_000, 225_000_000), // 1.25 m
-    (420_000_000, 450_000_000), // 70 cm
-    (462_550_000, 467_725_000), // FRS / GMRS
+pub(crate) const SCAN_BANDS: [(u32, u32, &str); 9] = [
+    (87_500_000, 108_000_000, "FM"),
+    (118_000_000, 137_000_000, "AIR"),
+    (144_000_000, 148_000_000, "2M"),
+    (151_820_000, 154_600_000, "MURS"),
+    (156_000_000, 162_025_000, "MARINE"),
+    (162_400_000, 162_550_000, "WX"),
+    (222_000_000, 225_000_000, "1.25M"),
+    (420_000_000, 450_000_000, "70CM"),
+    (462_550_000, 467_725_000, "GMRS"),
 ];
 
 /// The band to scan from `freq_hz`: the listed band it is in, otherwise the 1 MHz it is in.
 pub(crate) fn scan_band(freq_hz: u32) -> (u32, u32) {
-    for &(lo, hi) in SCAN_BANDS.iter() {
+    for &(lo, hi, _) in SCAN_BANDS.iter() {
         if (lo..=hi).contains(&freq_hz) {
             return (lo, hi);
         }
     }
     let lo = freq_hz / 1_000_000 * 1_000_000;
     (lo, lo + 1_000_000)
+}
+
+/// Short name of the listed band `freq_hz` is in ("2M"); empty outside them. Shown in the status bar in VFO mode,
+/// where a channel group's name would mean nothing.
+pub(crate) fn band_name(freq_hz: u32) -> &'static str {
+    for &(lo, hi, name) in SCAN_BANDS.iter() {
+        if (lo..=hi).contains(&freq_hz) {
+            return name;
+        }
+    }
+    ""
 }
 
 #[cfg(test)]
@@ -123,6 +134,8 @@ mod tests {
         assert_eq!(scan_band(446_000_000), (420_000_000, 450_000_000));
         assert_eq!(scan_band(162_550_000), (162_400_000, 162_550_000));
         assert_eq!(scan_band(300_250_000), (300_000_000, 301_000_000)); // no listed band: the megahertz it is in
+        assert_eq!(band_name(146_520_000), "2M");
+        assert_eq!(band_name(300_250_000), "");
     }
 }
 

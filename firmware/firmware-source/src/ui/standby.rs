@@ -72,6 +72,8 @@ pub(super) struct Snapshot {
     dual_standby: bool,
     vox: bool,
     key_locked: bool,
+    scan: u8,
+    tag: &'static str,
     master_index: usize,
     dtmf_dial_active: bool,
     dtmf_dial_len: usize,
@@ -146,13 +148,15 @@ impl Snapshot {
         self.tx_prohibited || self.no_channels_notice
     }
 
-    fn flags(&self) -> (bool, bool, bool, bool, bool) {
+    fn flags(&self) -> (bool, bool, bool, bool, bool, u8, &'static str) {
         (
             self.is_transmitting,
             self.power_save,
             self.dual_standby,
             self.vox,
             self.key_locked,
+            self.scan,
+            self.tag,
         )
     }
 
@@ -186,6 +190,8 @@ impl Snapshot {
             dual_standby: app.dual_standby_enabled(),
             vox: app.vox_enabled(),
             key_locked: app.is_key_locked(),
+            scan: app.scan_indicator(),
+            tag: app.status_tag(),
             master_index,
             dtmf_dial_active: app.dtmf_dial_active(),
             dtmf_dial_len: app.dtmf_dial_len(),
@@ -475,6 +481,16 @@ where
             }
         }
     }
+    // scanning happens on this screen: the frequency or channel below changes as it steps
+    let scan = match app.scan_indicator() {
+        1 => "SCAN UP",
+        2 => "SCAN DN",
+        _ => "",
+    };
+    if !scan.is_empty() {
+        text(lcd, scan, &FONT_5X8, x, baseline, AMBER);
+        x += (scan.len() as i32 + 1) * TINY_W;
+    }
     if app.vox_enabled() {
         text(lcd, "VOX", &FONT_5X8, x, baseline, AMBER);
         x += 4 * TINY_W;
@@ -482,7 +498,7 @@ where
     if app.is_key_locked() {
         icons::draw_padlock(lcd, x, 2, AMBER);
     }
-    let short = app.chan_mode_short();
+    let short = app.status_tag();
     text(
         lcd,
         short,

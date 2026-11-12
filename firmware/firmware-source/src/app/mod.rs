@@ -154,6 +154,9 @@ pub struct App<'a> {
     /// main stack, not in `.bss`, so this does not move the app arena.
     details: [[u8; flash_map::addr::CHAN_DETAIL_LEN]; 2],
     detail_of: [u16; 2],
+    /// The running app was opened from the APPS list (EXIT goes back to it) and not by a key (EXIT goes to the
+    /// main screen).
+    app_from_menu: bool,
     dual_standby: bool,
     dual_hold_ticks: u16,
     tot_ticks: u16,
@@ -358,6 +361,7 @@ impl<'a> App<'a> {
             tx_block: 0,
             details: [[0; flash_map::addr::CHAN_DETAIL_LEN]; 2],
             detail_of: [u16::MAX; 2],
+            app_from_menu: false,
             flashlight,
             dual_standby: settings.dual_standby,
             dual_hold_ticks: DUAL_STANDBY_HOLD_TICKS,
@@ -939,6 +943,27 @@ impl<'a> App<'a> {
     pub fn put_channel_number(&self, num: u16, w: &mut dyn crate::fmtlite::Sink) {
         let pos = group_table::group_pos(self.chan_mode, num).unwrap_or(num + 1);
         w.put_u32_w(pos as u32, 2, b'0');
+    }
+
+    /// The short tag in the status bar: the channel group on a memory channel, the band ("2M") in VFO mode.
+    pub fn status_tag(&self) -> &'static str {
+        let s = &self.sides[self.master];
+        if s.vfo_chan == ChVfoMode::Channel {
+            self.chan_mode_short()
+        } else {
+            group_table::band_name(s.rx_freq_hz)
+        }
+    }
+
+    /// 0 = not scanning, 1 = scanning up, 2 = scanning down. Scanning is shown on the main screen.
+    pub fn scan_indicator(&self) -> u8 {
+        if self.mode != Mode::Scan {
+            0
+        } else if scan::direction_up(self) {
+            1
+        } else {
+            2
+        }
     }
 
     /// Detail text of the channel side `index` is on; empty in VFO mode or when none was loaded.

@@ -69,6 +69,7 @@ pub(super) fn invoke(app: &mut App, syst: &mut SYST, func: KeyFunction) {
         KeyFunction::Reverse => app.toggle_reverse(syst),
         KeyFunction::App(slot) => {
             if super::overlay::slot_valid(app, slot) {
+                app.app_from_menu = false; // EXIT returns to the main screen
                 super::overlay::enter(app, syst, slot);
             }
         }
