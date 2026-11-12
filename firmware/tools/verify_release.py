@@ -27,7 +27,8 @@ MIN_FW_HEADROOM = 64  # bytes of core flash that must stay free (88 today): alar
 MIN_ARENA_SPARE = 64  # bytes of 8 KB arena each app must leave free (TEXT has 73)
 # Stricter floors, per segment, for packages that were split to make room (so they cannot quietly fill up again):
 # CHAN MGR's list must keep 1 KB free, its editor 1.5 KB.
-SEG_MIN_SPARE = {"chanmgr.app": [1024, 1536]}
+# SETTINGS (four segments from one source) keeps 500 B free in each of the first three and 400 B in presets.
+SEG_MIN_SPARE = {"chanmgr.app": [1024, 1536], "settings.app": [500, 500, 500, 400]}
 
 
 def unxor(block, key):

@@ -1,10 +1,11 @@
 """Install a ready-made 160x128 RGB565 boot logo (for example build-out/personal/boot-logo.rgb565). No Pillow needed.
 
-  boot_logo_raw.py PORT LOGO.rgb565 BACKUP.rgb565
+  boot_logo_raw.py PORT LOGO.rgb565 BACKUP.rgb565 [--dry-run]
 
 Saves the logo that is in the radio to BACKUP first (an existing BACKUP with different contents is never overwritten),
 skips the write if the radio already has this logo, reads all 40,960 bytes back after writing, and puts the old logo
 back if the readback differs. Sends ONE handshake: if the reply is not heard (plug not fully seated) it stops.
+--dry-run reads the logo and says whether it would write; it sends no write command and saves no backup.
 To undo: run it again with BACKUP as the logo. For photos and other image files use set_boot_logo.py (needs Pillow).
 Radio on, at its main frequency screen, running the open firmware. UNVERIFIED on real hardware.
 """
@@ -16,9 +17,11 @@ src = source[:source.index("def do_logo")]
 assert "for _ in range(5):" in src
 exec(src.replace("for _ in range(5):", "for _ in range(1):", 1))
 
-if len(sys.argv) != 4:
+DRY = "--dry-run" in sys.argv
+_argv = [a for a in sys.argv[1:] if a != "--dry-run"]
+if len(_argv) != 3:
     raise SystemExit(__doc__)
-port, logo_path, backup_path = sys.argv[1:]
+port, logo_path, backup_path = _argv
 with open(logo_path, "rb") as f:
     logo = f.read()
 if len(logo) != LOGO_SIZE:
@@ -39,6 +42,11 @@ def write_logo(img):
 
 
 current = read_logo()
+if DRY:
+    print("the radio already has this logo; nothing written" if current == logo else "dry run: the logo differs; it would be replaced (nothing written)")
+    cps.end()
+    print("done; radio restarting")
+    raise SystemExit(0)
 if os.path.exists(backup_path):
     with open(backup_path, "rb") as f:
         if f.read() != current:

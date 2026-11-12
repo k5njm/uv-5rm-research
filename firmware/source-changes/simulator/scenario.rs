@@ -14,15 +14,21 @@
 //!                       master/signal/chan may appear before or after `app`; they are applied after the reset
 //!   air HEX [HEX...]   the simulated FSK modem hears a sync, then these 16-bit words (hex), one per poll
 //!                       (a package of several segments, like `chanmgr`, runs as in the firmware: `Chain` switches segment)
-//!   handoff GROUP ACTION  preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items)
+//!   expect handoff HEX...  the handoff buffer, as hex bytes (what a settings segment passed on with Chain)
+//!   expect setting OFFSET V...  bytes of the settings record from OFFSET, decimal
+//!   handoff GROUP ACTION [ROW]  preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items
+//!                       2=about 3=grid locator, ROW the list row to come back to)
 //!   handoff fm DECI        preload it as the core does for a broadcast frequency typed on the main screen (tenths of MHz)
 //!   fmstation DECI NAME [DETAIL...]   one station in the FM app's flash table (`_` in NAME is a space, `-` is no name);
 //!                       before or after `app`. The simulated tuner hears 90.1 94.5 98.1 101.1 104.5 MHz
 //!   fmtable bad         a table whose header is damaged: the FM app must ignore it
 //!   fmcore DECI...      the core's bare FM station list (what the FM app shows when there is no table)
+//!   setting OFFSET V...   bytes of the settings record the app reads, written together through the core's clamp (settings app)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
-//!   key K               single press. K = 0-9 star pound menu exit up down ab
-//!   hold K              long press
+//!   key K               single press (Press, Single, Release). K = 0-9 star pound menu exit up down ab side1 side2
+//!   hold K              long press: Press, Long, Release as the keypad sends them. Only up down exit star pound 0 side1 side2 have one
+//!                       (device/keypad.rs); any other key is an error here, because the radio would see a plain press
+//!   repeat K N          up or down held past 1.5 s: Press, Long, N Repeat events, Release
 //!   step MS             radio time advanced per tick by `wait` (default 5; larger = faster)
 //!   wait SECS           run ticks + draws for SECS of radio time
 //!   shot NAME           save NAME.png and compare with the golden of the same name
@@ -33,6 +39,9 @@
 //!   expect fmlive N     live stations in the FM table, as the app would read it; `expect fmtable none` for no valid table
 //!   expect rfrefused N  RF register writes the core's allow-list refused
 //!   expect captured N   records FSK PROBE left in its flash capture range
+//!   expect vfo HZ CODE  what the app handed the core with api.save_master_vfo (tone code 0 = none); `expect vfo none` if nothing
+//!   txshot NAME         the NEXT key or hold: also save the frame the app had on screen at the moment the transmitter was keyed
+//!                       (the first delay while transmitting), as NAME.png compared with the golden like `shot`
 //!   expect rxonly       (default on) fails the scenario if the app keyed PTT or the tone function
 //!   allow tx            disables the rx-only safety check for this scenario
 //! The same file is meant to drive the real radio through hil/ (keys via the injector,
@@ -58,7 +67,7 @@ fn lookup(name: &str) -> Option<Entry> {
             a,
             e,
         ),
-        #[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system"))]
+        #[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system", feature = "settings-presets"))]
         "settings" => |a, e| settings::app_entry(a, e),
         _ => return None,
     })
@@ -90,6 +99,8 @@ fn key_id(k: &str) -> Option<u8> {
         "up" => 14,
         "down" => 15,
         "ab" => 17,
+        "side1" => 19,
+        "side2" => 20,
         d if d.len() == 1 && d.as_bytes()[0].is_ascii_digit() => d.as_bytes()[0] - b'0',
         _ => return None,
     })
@@ -187,7 +198,7 @@ fn png_decode_own(png: &[u8], w: usize, h: usize) -> Option<Vec<u8>> {
     Some(rgb)
 }
 
-fn frame_rgb() -> Vec<u8> {
+pub(crate) fn frame_rgb() -> Vec<u8> {
     let mut out = Vec::with_capacity(W * H * 3);
     for &p in &sim().fb {
         out.push((((p >> 11) & 0x1F) * 255 / 31) as u8);
@@ -254,6 +265,7 @@ struct Run<'a> {
     step_ms: u32,
     last_exit: bool,
     rx_only: bool,
+    tx_shot: Option<String>,
     pass: u32,
     fail: u32,
 }
@@ -265,6 +277,10 @@ impl Run<'_> {
 
     fn shot(&mut self, shot: &str) {
         let rgb = frame_rgb();
+        self.shot_rgb(shot, rgb);
+    }
+
+    fn shot_rgb(&mut self, shot: &str, rgb: Vec<u8>) {
         let png = png_encode(W, H, &rgb);
         let dir = self.o.out.join(&self.name);
         std::fs::create_dir_all(&dir).unwrap();
@@ -409,14 +425,32 @@ impl Run<'_> {
                 Ok(d) => unsafe { HANDOFF = d.to_le_bytes().to_vec() }, // as the core does for a typed broadcast frequency
                 _ => self.check(false, "handoff fm needs tenths of a MHz"),
             },
-            ["handoff", group, action] => match (group.parse::<u8>(), action.parse::<u8>()) {
-                (Ok(g), Ok(a)) => unsafe { HANDOFF = vec![0xA5, g, a] }, // start a later settings segment as Chain would
-                _ => self.check(false, "handoff needs GROUP ACTION numbers"),
+            ["handoff", group, action] | ["handoff", group, action, _] => {
+                let row = t.get(3).map_or(Some(0), |r| r.parse::<u8>().ok());
+                match (group.parse::<u8>(), action.parse::<u8>(), row) {
+                    // start a later settings segment as Chain would: group (or the row a view starts on), action, row to return to
+                    (Ok(g), Ok(a), Some(r)) => unsafe { HANDOFF = vec![0xA5, g, a, r] },
+                    _ => self.check(false, "handoff needs GROUP ACTION [ROW] numbers"),
+                }
+            }
+            // one byte of the settings record (offsets as in `Settings` in flash_map.rs), to start from a record that is
+            // not the simulator's all-zero one
+            ["setting", off, vals @ ..] if !vals.is_empty() => match (off.parse::<usize>(), vals.iter().map(|v| v.parse::<u8>()).collect::<Result<Vec<_>, _>>()) {
+                (Ok(o), Ok(v)) if o + v.len() <= 168 => unsafe {
+                    // the bytes go in together and through the same clamp as a committed record (Settings::from_bytes), so a
+                    // value the core would change is refused here (a position is four bytes: give them in one step)
+                    let mut rec = SETTINGS;
+                    rec[o..o + v.len()].copy_from_slice(&v);
+                    normalize_settings(&mut rec);
+                    self.check(rec[o..o + v.len()] == v[..], &format!("setting {o} {v:?}: the core would store {:?} (Settings::from_bytes clamps it)", &rec[o..o + v.len()]));
+                    SETTINGS = rec;
+                },
+                _ => self.check(false, "setting needs a byte offset and values (0-255) inside the 168-byte record"),
             },
-            ["coords", "none"] => { unsafe { COORDS = None }; self.redraw() }
+            ["coords", "none"] => { set_coords(None); self.redraw() }
             ["coords", la, lo] => match (la.parse::<f64>(), lo.parse::<f64>()) {
                 (Ok(a), Ok(o)) => {
-                    unsafe { COORDS = Some(((a * 1e5).round() as i32, (o * 1e5).round() as i32)) };
+                    set_coords(Some(((a * 1e5).round() as i32, (o * 1e5).round() as i32)));
                     self.redraw();
                 }
                 _ => self.check(false, "coords needs two decimal degrees"),
@@ -425,6 +459,10 @@ impl Run<'_> {
                 let (Some(app), Some(id)) = (self.app, key_id(k)) else {
                     return self.check(false, &format!("bad key step `{}`", t.join(" ")));
                 };
+                if t[0] == "hold" && !keypad_long(id) {
+                    // device/keypad.rs: this key never sends a Long event, so the radio would read the hold as a plain press
+                    return self.check(false, &format!("the keypad sends no long press for `{k}`: `{}`", t.join(" ")));
+                }
                 // The key runs on a helper thread: a factory reset never returns (it reboots the radio), so the
                 // simulated call parks its thread and this one carries on, having seen the call.
                 let before = crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst);
@@ -441,6 +479,21 @@ impl Run<'_> {
                     }
                     std::thread::sleep(std::time::Duration::from_micros(200));
                 }
+                if let Some(name) = self.tx_shot.take() {
+                    match unsafe { TX_CAPTURE.take() } {
+                        Some(Some(rgb)) => self.shot_rgb(&name, rgb),
+                        _ => self.check(false, &format!("txshot {name}: the transmitter was never keyed")),
+                    }
+                }
+            }
+            ["repeat", k, n] => {
+                let (Some(app), Some(id), Ok(n)) = (self.app, key_id(k), n.parse::<u32>()) else {
+                    return self.check(false, &format!("bad repeat step `{}`", t.join(" ")));
+                };
+                if !keypad_repeat(id) {
+                    return self.check(false, &format!("the keypad repeats only up and down, not `{k}`"));
+                }
+                self.last_exit = hold_repeat(app, id, n);
             }
             ["step", ms] => self.step_ms = ms.parse().unwrap_or(5).max(1),
             ["wait", s] => match s.parse::<f64>() {
@@ -453,6 +506,19 @@ impl Run<'_> {
             ["expect", "reset"] => {
                 let n = crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst);
                 self.check(n > 0, "the app asked for a factory reset")
+            }
+            // what the app left for the next segment (settings app): the bytes of the handoff buffer, in hex
+            ["expect", "handoff", bytes @ ..] => {
+                let want = bytes.iter().map(|b| u8::from_str_radix(b, 16)).collect::<Result<Vec<_>, _>>();
+                let got = unsafe { HANDOFF.clone() };
+                self.check(want.as_ref().ok() == Some(&got), &format!("handoff buffer is {} (got {:02X?})", bytes.join(" "), got));
+            }
+            // bytes of the settings record, from OFFSET, in decimal
+            ["expect", "setting", off, vals @ ..] => {
+                let off = off.parse::<usize>().unwrap_or(usize::MAX);
+                let want = vals.iter().map(|v| v.parse::<u8>()).collect::<Result<Vec<_>, _>>();
+                let got = unsafe { SETTINGS.get(off..off + vals.len()).map(|g| g.to_vec()) };
+                self.check(got.is_some() && want.as_ref().ok() == got.as_ref(), &format!("settings bytes {off}.. are {} (got {got:?})", vals.join(" ")));
             }
             ["expect", "noreset"] => {
                 let n = crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst);
@@ -488,6 +554,19 @@ impl Run<'_> {
             ["expect", "rfrefused", n] => {
                 let got = unsafe { RF_WRITES_REFUSED };
                 self.check(n.parse::<u32>().ok() == Some(got), &format!("{n} refused RF register write(s) (got {got})"));
+            }
+            ["expect", "vfo", "none"] => {
+                let got = sim().vfo_saved;
+                self.check(got.is_none(), &format!("nothing handed to the VFO (got {got:?})"));
+            }
+            ["expect", "vfo", hz, code] => {
+                let want = hz.parse::<u32>().ok().zip(code.parse::<u16>().ok());
+                let got = sim().vfo_saved;
+                self.check(want.is_some() && got == want, &format!("VFO handed {hz} Hz, tone code {code} (got {got:?})"));
+            }
+            ["txshot", n] => {
+                unsafe { TX_CAPTURE = Some(None) };
+                self.tx_shot = Some(n.to_string());
             }
             ["allow", "tx"] => self.rx_only = false,
             _ => self.check(false, &format!("unrecognised step `{}`", t.join(" "))),
@@ -541,7 +620,7 @@ pub fn run_file(o: &Opts) -> u32 {
         std::process::exit(2)
     });
     println!("scenario {name}");
-    let mut r = Run { o, master: 146_520_000, setup: Vec::new(), name, app: None, step_ms: 5, last_exit: false, rx_only: true, pass: 0, fail: 0 };
+    let mut r = Run { o, master: 146_520_000, setup: Vec::new(), name, app: None, step_ms: 5, last_exit: false, rx_only: true, tx_shot: None, pass: 0, fail: 0 };
     for (i, l) in text.lines().enumerate() {
         r.line(i + 1, l);
     }

@@ -1,0 +1,32 @@
+# Settings, segment PRESETS, locator entry: keys a place does not take are ignored, an entry that is not four or six
+# characters is refused with a line in the strip, EXIT deletes, and EXIT on an empty entry goes back without changing
+# anything. A stored position of 0 N 0 E.
+setting 32 0 0 0 0 0 0 0 0   # a stored position of 0 N 0 E
+handoff 0 3 3
+app settings
+shot start
+key 0                     # no letters on 0
+key 1
+key 8                     # T U V are past R
+shot nothing_accepted
+key 7
+key 7
+key 7                     # P Q R
+shot field_letter_r
+key 7                     # S is not offered: back to P
+shot field_letter_p
+key 2                     # accepts the P; A
+key pound
+key 1
+shot three_characters     # PA1
+key menu                  # not a locator yet
+shot refused              # strip: Need 4 or 6 characters
+expect handoff A5 00 03 03
+key exit                  # deletes the 1
+shot after_delete
+key exit
+key exit
+shot emptied
+key exit                  # nothing left to delete: back to SYSTEM
+expect handoff A5 05 01 03
+expect setting 32 0 0 0 0 0 0 0 0

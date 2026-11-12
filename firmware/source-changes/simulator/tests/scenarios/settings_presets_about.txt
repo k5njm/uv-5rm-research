@@ -1,0 +1,21 @@
+# Settings, segment PRESETS: the about view SYSTEM > VERSION hands over to (firmware, build, radio, board, MCU, RF chip id and
+# the ABI hash apps must match). UP and DOWN move its cursor; EXIT goes back to SYSTEM on the row it came from.
+# MODEL CAVEATS: the simulator's RF chip id is 0x0000; the APP ABI row shows the hash of firmware/firmware-source/abi:
+# it changes whenever the ABI does, and this frame then has to be updated (look at it first).
+handoff 0 2 7             # started from VERSION (SYSTEM row 7), cursor on the first row
+app settings
+shot about
+key down
+key down
+key down
+key down
+shot about_mcu_row
+key down
+shot about_chip_row
+key down
+shot about_abi_row
+key down
+shot about_wraps
+expect handoff A5 00 02 07
+key exit
+expect handoff A5 05 01 07   # SYSTEM, its list, row 7 (VERSION)

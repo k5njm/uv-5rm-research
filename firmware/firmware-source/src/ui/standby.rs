@@ -484,9 +484,14 @@ where
         }
     }
     // scanning happens on this screen: the frequency or channel below changes as it steps
-    let scan = match app.scan_indicator() {
-        1 => "SCAN UP",
-        2 => "SCAN DN",
+    // With room to spare (no PS/DWR/VOX flag ahead of or after it) the label also says how to stop: EXIT. UP and
+    // DOWN reverse the direction; they are not named because the label already shows the direction.
+    let roomy = x == 4 && !app.vox_enabled();
+    let scan = match (app.scan_indicator(), roomy) {
+        (1, true) => "SCAN UP EXIT",
+        (1, false) => "SCAN UP",
+        (2, true) => "SCAN DN EXIT",
+        (2, false) => "SCAN DN",
         _ => "",
     };
     if !scan.is_empty() {

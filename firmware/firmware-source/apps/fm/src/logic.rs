@@ -450,6 +450,12 @@ fn say(a: &mut App, msg: u8) {
 }
 
 fn key(api: &Api, a: &mut App, id: u8, kind: u8) -> AppResult {
+    // The core also hands apps Press (0) and Release (1) around every Single (device/keypad.rs, app/mod.rs poll_keys: all
+    // events are dispatched back to back). Acting on them here would clear the notice the Single just raised before it is
+    // ever drawn: found by making the simulator send them (docs/TEST-DOUBLES.md).
+    if kind < KIND_SINGLE {
+        return AppResult::Continue;
+    }
     let press = kind == KIND_SINGLE || kind == KIND_REPEAT;
     a.toast = 0;
     if a.seek_left > 0 {

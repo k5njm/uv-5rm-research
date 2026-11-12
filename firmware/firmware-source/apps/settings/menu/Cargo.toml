@@ -18,6 +18,7 @@ g_disp = []
 g_keys = []
 g_ani = []
 g_system = []
+g_presets = []
 
 [dependencies]
 bf5rh-abi = { path = "../../../abi" }

@@ -1,0 +1,13 @@
+# Band Sweep: after one pass MENU listens to the selected hit; MENU again puts that frequency on the main screen's VFO and leaves.
+master 146000000
+signal 146520000 120 -1 always
+app bandsweep
+wait 7
+shot hits
+key menu
+shot listening
+expect noexit
+expect vfo none
+key menu
+expect exit
+expect vfo 146525000 0

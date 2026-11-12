@@ -1,0 +1,11 @@
+# 128 bins keep fewer waterfall rows than the area holds: the rest must be blank, not stale.
+master 146520000
+signal 146520000 110 -1 always
+app spectrum
+key 4
+wait 1
+key 4
+wait 1
+key 4
+wait 8
+shot bins128

@@ -117,6 +117,15 @@ for n, i in enumerate(to_write, 1):
     label, addr, data = want[i]
     cps.send(WRITE, addr, data)
     if cps.send(READ, addr)[2] != data:
+        if label.startswith("channel"):
+            # A channel sector is erased once per session; a second write to the same record only clears bits
+            # (flash programs AND into what is there), so the old contents cannot be put back from here. The next
+            # session erases the sector again and rewrites every channel the image has in it: just run this again.
+            print(f"{label}: READ-BACK DIFFERS; this session cannot rewrite it")
+            cps.end()
+            raise SystemExit(f"RESTORE STOPPED at {label}, which was written wrongly and stays wrong until this tool is run "
+                             f"again (it is safe to re-run: a new session erases the sector and rewrites all of it). "
+                             f"Undo file: {before_path}")
         print(f"{label}: READ-BACK DIFFERS; putting the old contents back")
         cps.send(WRITE, addr, before[i])
         cps.end()

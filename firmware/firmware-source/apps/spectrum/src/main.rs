@@ -8,6 +8,7 @@ const KIND_REPEAT: u8 = 4;
 const KEY_ASTERISK: u8 = 10;
 const KEY_POUND: u8 = 11;
 const KEY_MENU: u8 = 12;
+const KEY_AB: u8 = 17;
 const KEY_EXIT: u8 = 13;
 const KEY_UP: u8 = 14;
 const KEY_DOWN: u8 = 15;
@@ -15,6 +16,7 @@ const KEY_SIDE1: u8 = 19;
 const KEY_SIDE2: u8 = 20;
 
 const F5: u8 = 0; // 5x8
+const F6: u8 = 1; // 6x10
 
 const BLACK: u16 = 0x0000;
 const WHITE: u16 = 0xFFFF;
@@ -23,17 +25,23 @@ const GRID: u16 = 0x2124;
 const TRACE: u16 = 0x07E0; // bright green
 const PEAKLINE: u16 = 0x8400; // dim yellow
 const TRIGLINE: u16 = 0xF800; // red
-const MARKER: u16 = 0xFFE0; // yellow
-const CYAN: u16 = 0x07FF;
+const AMBER: u16 = 0xFD40; // what MENU would tune to
+// The house look of the list screens (src/ui/list.rs): light title bar, dark hint strip.
+const TITLE_BG: u16 = 0xDEDB;
+const TITLE_FG: u16 = 0x0000;
+const HINT_BG: u16 = 0x2124;
+const HINT_FG: u16 = 0xA514;
 
 const SCREEN_W: usize = 160;
-const HEADER_Y: i16 = 1;
-const GRAPH_TOP: i16 = 11;
-const GRAPH_BOTTOM: i16 = 71;
-const WF_TOP: i16 = 73;
-const WF_H: usize = 32;
-const LINE1_Y: i16 = 110;
-const LINE2_Y: i16 = 119;
+const TITLE_H: u16 = 14;
+const GRAPH_TOP: i16 = 15;
+const GRAPH_BOTTOM: i16 = 66;
+const WF_TOP: i16 = 68;
+const WF_H: usize = 24;
+const LINE1_Y: i16 = 94;
+const LINE2_Y: i16 = 103;
+const HINT_TOP: i16 = 112;
+const TOAST_100US: u32 = 15_000;
 
 const WF_POOL: usize = 1024;
 
@@ -73,7 +81,6 @@ const TRIGGER_MARGIN_STEP_DB: i16 = 2;
 const INITIAL_FLOOR_DBM: i16 = -100;
 
 const BLACKLIST_SENTINEL: u16 = u16::MAX;
-const PEAK_HOLD_STEPS: u16 = 1024;
 const LISTEN_HANG_100US: u32 = 3000;
 const LISTEN_DROP_DB: u16 = 10;
 const DEFAULT_AGC_RANK: i8 = 0;
@@ -116,10 +123,7 @@ struct State {
     parked_floor_raw: u16,
     agc_rank: i8,
 
-    peak_bin: u16,
-    peak_valid: bool,
-    peak_rssi: u16,
-    peak_age: u16,
+    toast_left: u32,
 
     auto_listen: bool,
     listening: bool,
@@ -167,10 +171,7 @@ static mut STATE: State = State {
     noise_max_raw: 0,
     parked_floor_raw: 0,
     agc_rank: DEFAULT_AGC_RANK,
-    peak_bin: 0,
-    peak_valid: false,
-    peak_rssi: 0,
-    peak_age: 0,
+    toast_left: 0,
     auto_listen: false,
     listening: false,
     listen_bin: 0,
@@ -251,9 +252,6 @@ impl State {
     fn relaunch(&mut self) {
         self.rssi_bins = [0; MAX_BINS];
         self.scan_pos = 0;
-        self.peak_valid = false;
-        self.peak_rssi = 0;
-        self.peak_age = 0;
         self.peak_y = [GRAPH_BOTTOM as u8; SCREEN_W];
         self.noise_max_raw = 0;
         self.parked_floor_raw = 0;
@@ -350,6 +348,35 @@ impl State {
         }
     }
 
+    /// The strongest bin right now: every bin holds its latest reading (at most one pass old), so this is the
+    /// last complete pass with the bins already redone in the current one. Blacklisted and unread bins are 0.
+    fn strongest(&self) -> Option<(u16, u16)> {
+        let mut best: Option<(u16, u16)> = None;
+        for i in 0..self.bins() as usize {
+            let v = self.bin_value(i);
+            if v > 0 && best.map_or(true, |(_, b)| v > b) {
+                best = Some((i as u16, v));
+            }
+        }
+        best
+    }
+
+    /// What MENU would tune to: the bin being listened to, else the strongest bin, but only if it stands above the
+    /// trigger line (the red dashes), so noise is never offered.
+    fn target(&self) -> Option<(u16, u16)> {
+        let (bin, v) = if self.listening {
+            (self.listen_bin, self.listen_rssi)
+        } else {
+            self.strongest()?
+        };
+        let floor_plus = self.floor_raw.saturating_add(self.trigger_margin_db as u16);
+        if v >= self.trigger_level.max(floor_plus) {
+            Some((bin, v))
+        } else {
+            None
+        }
+    }
+
     fn column_value(&self, x: usize) -> u16 {
         let bins = self.bins() as usize;
         if bins <= 1 {
@@ -425,8 +452,15 @@ fn dwell(api: &Api, units: u16) {
     while (api.uptime_100us)().wrapping_sub(t0) < units as u32 {}
 }
 
-fn tick(api: &Api, _dt_100us: u32) -> AppResult {
+fn tick(api: &Api, dt_100us: u32) -> AppResult {
     let st = state();
+    if st.toast_left > 0 {
+        st.toast_left = st.toast_left.saturating_sub(dt_100us);
+        if st.toast_left == 0 {
+            (api.toast)(core::ptr::null(), 0);
+            st.full_redraw = true;
+        }
+    }
     if st.entering_freq {
         return AppResult::Continue;
     }
@@ -491,18 +525,6 @@ fn step_scan(api: &Api, st: &mut State) {
             st.sweep_max = rssi;
             st.sweep_max_bin = pos;
         }
-
-        if !st.peak_valid
-            || rssi > st.peak_rssi
-            || st.peak_age >= PEAK_HOLD_STEPS
-        {
-            st.peak_valid = true;
-            st.peak_bin = pos;
-            st.peak_rssi = rssi;
-            st.peak_age = 0;
-        } else {
-            st.peak_age = st.peak_age.saturating_add(1);
-        }
     }
 
     st.scan_pos += 1;
@@ -515,6 +537,7 @@ fn start_listening(api: &Api, st: &mut State, bin: u16, freq: u32) {
     let now = (api.uptime_100us)();
     st.listening = true;
     st.listen_bin = bin;
+    st.listen_rssi = st.rssi_bins[bin as usize];
     st.listen_max_raw = 0;
     st.listen_above_100us = now;
     st.listen_start_100us = now;
@@ -603,7 +626,8 @@ fn key(api: &Api, id: u8, kind: u8) -> AppResult {
         }
         0 => change_dwell(st, true),
         6 => change_dwell(st, false),
-        KEY_MENU => {
+        KEY_MENU => return go_to_target(api, st),
+        KEY_AB => {
             st.auto_listen = !st.auto_listen;
             if st.auto_listen {
                 st.listen_inhibit = false;
@@ -628,6 +652,23 @@ fn key(api: &Api, id: u8, kind: u8) -> AppResult {
         _ => return AppResult::Continue,
     }
     AppResult::Continue
+}
+
+/// Tunes the main screen's VFO to the marked frequency and leaves, the way BAND SWEEP's hold-MENU does:
+/// `save_master_vfo` puts the active side in VFO mode on that frequency with no tone. With nothing above the trigger
+/// line it stays here and says so.
+fn go_to_target(api: &Api, st: &mut State) -> AppResult {
+    match st.target() {
+        Some((bin, _)) => {
+            (api.save_master_vfo)(st.freq_at(bin), 0);
+            AppResult::Exit
+        }
+        None => {
+            st.toast_left = TOAST_100US;
+            st.dirty = true;
+            AppResult::Continue
+        }
+    }
 }
 
 fn pan(st: &mut State, up: bool) {
@@ -692,10 +733,8 @@ fn change_dwell(st: &mut State, up: bool) {
 }
 
 fn blacklist_peak(st: &mut State) {
-    if st.peak_valid {
-        st.rssi_bins[st.peak_bin as usize] = BLACKLIST_SENTINEL;
-        st.peak_valid = false;
-        st.peak_rssi = 0;
+    if let Some((bin, _)) = st.strongest() {
+        st.rssi_bins[bin as usize] = BLACKLIST_SENTINEL;
         st.dirty = true;
     }
 }
@@ -828,10 +867,9 @@ fn recompute_trace(st: &mut State) {
 fn render_graph(api: &Api, st: &State) {
     let row = unsafe { &mut *core::ptr::addr_of_mut!(ROW) };
     let trig_y = rssi_to_y(st.trigger_level, st.rssi_ceiling);
-    let marker_x = if st.peak_valid {
-        bin_to_column(st, st.peak_bin) as i32
-    } else {
-        -1
+    let marker_x = match st.target() {
+        Some((bin, _)) => bin_to_column(st, bin) as i32,
+        None => -1,
     };
 
     for y in GRAPH_TOP..=GRAPH_BOTTOM {
@@ -839,7 +877,11 @@ fn render_graph(api: &Api, st: &State) {
         let grid_row = (y - GRAPH_TOP) % 22 == 0 || y == GRAPH_BOTTOM;
         for x in 0..SCREEN_W {
             let ty = st.trace_y[x] as i16;
-            row[x] = if y == ty {
+            // a small down-pointing triangle at the top of the marked column
+            let tri = marker_x >= 0 && y - GRAPH_TOP < 3 && (x as i32 - marker_x).abs() <= 2 - (y - GRAPH_TOP) as i32;
+            row[x] = if tri {
+                AMBER
+            } else if y == ty {
                 TRACE
             } else if y > ty {
                 fill
@@ -852,7 +894,7 @@ fn render_graph(api: &Api, st: &State) {
                     BLACK
                 }
             } else if x as i32 == marker_x {
-                MARKER
+                AMBER
             } else if grid_row || x % 32 == 0 {
                 GRID
             } else {
@@ -894,6 +936,11 @@ fn render_waterfall(api: &Api, st: &State) {
             y += 1;
         }
     }
+    // 128 bins keep fewer rows than the area holds
+    let used = y - WF_TOP;
+    if (used as usize) < WF_H {
+        (api.fill_rect)(0, y, SCREEN_W as u16, WF_H as u16 - used as u16, BLACK);
+    }
 }
 
 fn bin_to_column(st: &State, bin: u16) -> usize {
@@ -911,6 +958,7 @@ fn draw(api: &Api) -> AppResult {
             draw_status(api, st);
             st.status_dirty = false;
         }
+        draw_toast(api, st);
         return AppResult::Continue;
     }
 
@@ -925,23 +973,47 @@ fn draw(api: &Api) -> AppResult {
     render_waterfall(api, st);
     draw_header(api, st);
     draw_status(api, st);
+    draw_toast(api, st);
 
     st.dirty = false;
     st.status_dirty = false;
     AppResult::Continue
 }
 
-fn draw_header(api: &Api, st: &State) {
-    (api.fill_rect)(0, HEADER_Y, SCREEN_W as u16, 8, BLACK);
+fn draw_toast(api: &Api, st: &State) {
+    if st.toast_left > 0 {
+        (api.toast)(b"NO SIGNAL".as_ptr(), 9);
+    }
+}
 
+/// Light title bar as on the list screens: window start, name, window stop (4 decimals, so all three fit).
+fn draw_header(api: &Api, st: &State) {
+    (api.fill_rect)(0, 0, SCREEN_W as u16, TITLE_H, TITLE_BG);
     let mut left = Buf::new();
     left.freq(api, st.window_start_hz);
-    text(api, 0, HEADER_Y, &left, WHITE);
-
+    left.n = left.n.saturating_sub(1);
+    (api.draw_text)(2, 2, left.as_slice().as_ptr(), left.n as u16, TITLE_FG, TITLE_BG, F6);
+    (api.draw_text)(56, 2, b"SPECTRUM".as_ptr(), 8, TITLE_FG, TITLE_BG, F6);
     let mut right = Buf::new();
     right.freq(api, st.window_start_hz + st.span_hz());
-    let w = right.as_slice().len() as i16 * 5;
-    text(api, SCREEN_W as i16 - w, HEADER_Y, &right, WHITE);
+    right.n = right.n.saturating_sub(1);
+    let w = right.n as i16 * 6;
+    (api.draw_text)(SCREEN_W as i16 - 2 - w, 2, right.as_slice().as_ptr(), right.n as u16, TITLE_FG, TITLE_BG, F6);
+}
+
+/// What the keys do now, in the strip every list screen has at the bottom.
+fn draw_hint(api: &Api, st: &State) {
+    let hint: &[u8] = if st.entering_freq {
+        b"0-9 digits  MENU ok  EXIT"
+    } else if st.listening {
+        b"MENU tune here  EXIT leave"
+    } else if st.target().is_some() {
+        b"MENU tune peak  EXIT leave"
+    } else {
+        b"UP DN pan  5 freq  EXIT"
+    };
+    (api.fill_rect)(0, HINT_TOP, SCREEN_W as u16, 16, HINT_BG);
+    (api.draw_text)(4, HINT_TOP + 3, hint.as_ptr(), hint.len() as u16, HINT_FG, HINT_BG, F6);
 }
 
 fn draw_status(api: &Api, st: &State) {
@@ -959,7 +1031,7 @@ fn draw_status(api: &Api, st: &State) {
             });
         }
         line1.s(b" MHz");
-        text_line(api, LINE1_Y, &line1, MARKER);
+        text_line(api, LINE1_Y, &line1, AMBER);
     } else if st.listening {
         line1.s(b"RX ");
         line1.freq(api, st.freq_at(st.listen_bin));
@@ -967,15 +1039,15 @@ fn draw_status(api: &Api, st: &State) {
         line1.i(api, rssi_to_dbm(st.listen_rssi));
         line1.s(b"dBm");
         text_line(api, LINE1_Y, &line1, TRACE);
-    } else if st.peak_valid {
-        line1.s(b"P ");
-        line1.freq(api, st.freq_at(st.peak_bin));
+    } else if let Some((bin, v)) = st.target() {
+        line1.s(b"PEAK ");
+        line1.freq(api, st.freq_at(bin));
         line1.ch(b' ');
-        line1.i(api, rssi_to_dbm(st.peak_rssi));
+        line1.i(api, rssi_to_dbm(v));
         line1.s(b"dBm");
-        text_line(api, LINE1_Y, &line1, CYAN);
+        text_line(api, LINE1_Y, &line1, AMBER);
     } else {
-        line1.s(b"PAN ");
+        line1.s(b"NO SIGNAL  PAN ");
         line1.u(api, st.pan_step_hz / 1000);
         line1.ch(b'k');
         text_line(api, LINE1_Y, &line1, GRAY);
@@ -1013,6 +1085,7 @@ fn draw_status(api: &Api, st: &State) {
         line2.ch(b'!');
     }
     text_line(api, LINE2_Y, &line2, GRAY);
+    draw_hint(api, st);
 }
 
 #[cfg(target_os = "none")]

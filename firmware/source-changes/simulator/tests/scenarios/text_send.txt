@@ -1,0 +1,15 @@
+# TEXT: type HI, send it with MENU. Red title while keyed, then the try counter in the strip.
+allow tx
+app textapp
+key 4
+key 4
+wait 1.2
+key 4
+key 4
+key 4
+wait 1.2
+txshot on_air_send
+key menu
+shot sent_waiting
+wait 8
+shot retried

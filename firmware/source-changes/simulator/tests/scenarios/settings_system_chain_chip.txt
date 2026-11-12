@@ -1,0 +1,10 @@
+# Settings, SYSTEM: MENU on RF CHIP ID hands over to the about view, starting on its RF CHIP row (5), to come back to
+# SYSTEM row 8.
+# MODEL: the simulated record starts as the core's Settings::DEFAULT (clamped like Settings::from_bytes); `setting` steps move what the scenario needs away from it.
+handoff 5 1
+app settings
+key up                    # wraps to the last row, RESET ALL
+key up                    # RF CHIP ID
+shot chip_id_row
+key menu
+expect handoff A5 05 02 08
