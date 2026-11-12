@@ -181,8 +181,8 @@ impl BandLock {
             BandLock::Pmr => "PMR446",
             BandLock::GmrsFrsMurs => "GMRS/FRS",
             BandLock::Ca => "CA HAM",
-            BandLock::All => "NO TX",
-            BandLock::None => "ALL BANDS",
+            BandLock::All => "NONE",
+            BandLock::None => "ALL",
         }
     }
 

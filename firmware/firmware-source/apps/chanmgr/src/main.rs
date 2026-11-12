@@ -467,9 +467,8 @@ impl Field {
 }
 
 struct ChanList {
-    /// Every stored channel (used to find a free slot).
-    occupied: [u8; OCCUPIED_BYTES],
-    /// Stored channels that belong to the group being shown: what the list displays.
+    /// Stored channels that belong to the group being shown: what the list displays. (One map only: the app has
+    /// little memory to spare, so a free slot is found by asking the radio when a channel is created.)
     member: [u8; OCCUPIED_BYTES],
     selected: Option<u16>,
 }
@@ -477,7 +476,6 @@ struct ChanList {
 impl ChanList {
     const fn blank() -> Self {
         ChanList {
-            occupied: [0; OCCUPIED_BYTES],
             member: [0; OCCUPIED_BYTES],
             selected: None,
         }
@@ -485,19 +483,17 @@ impl ChanList {
 
     fn scan(api: &Api) -> Self {
         let group = shown_group();
-        let mut occupied = [0u8; OCCUPIED_BYTES];
         let mut member = [0u8; OCCUPIED_BYTES];
         let mut buf = [0u8; CHAN_SIZE];
         for n in 0..=MAX_CHANNEL_NUM {
-            if (api.chan_read)(n, buf.as_mut_ptr(), CHAN_SIZE as u16) {
-                occupied[n as usize / 8] |= 1 << (n % 8);
-                if (api.chan_in_group)(group, n) {
-                    member[n as usize / 8] |= 1 << (n % 8);
-                }
+            if (api.chan_in_group)(group, n)
+                && (api.chan_read)(n, buf.as_mut_ptr(), CHAN_SIZE as u16)
+            {
+                member[n as usize / 8] |= 1 << (n % 8);
             }
         }
         let selected = (0..=MAX_CHANNEL_NUM).find(|&n| Self::bit(&member, n));
-        ChanList { occupied, member, selected }
+        ChanList { member, selected }
     }
 
     fn bit(occupied: &[u8; OCCUPIED_BYTES], n: u16) -> bool {
@@ -592,6 +588,8 @@ fn default_channel(freq_hz: u32) -> Channel {
     let deci_hz = freq_hz / 10;
     ch.set_rx_freq_deci_hz(deci_hz);
     ch.set_tx_freq_deci_hz(deci_hz);
+    ch.flags |= 0x04; // in the scan list: group scans skip channels without it
+    ch.tx_power = 1; // LOW: raise it on purpose, not by default
     ch
 }
 
@@ -790,8 +788,9 @@ fn dispatch_list(
             }
             // a new channel goes into the first free slot that belongs to the group being shown
             None => match (0..=MAX_CHANNEL_NUM).find(|&n| {
-                !ChanList::bit(&list.occupied, n)
-                    && (api.chan_in_group)(shown_group(), n)
+                let mut buf = [0u8; CHAN_SIZE];
+                (api.chan_in_group)(shown_group(), n)
+                    && !(api.chan_read)(n, buf.as_mut_ptr(), CHAN_SIZE as u16)
             }) {
                 Some(num) => {
                     let working = default_channel((api.get_master_freq)());
@@ -1234,7 +1233,7 @@ fn format_field_value(
         Field::Save => false,
         Field::Delete => {
             if edit.is_editing(index) {
-                write_str(out, "Sure? MENU");
+                write_str(out, "MENU = DELETE");
                 true
             } else {
                 false
@@ -1349,7 +1348,8 @@ fn draw(api: &Api) -> AppResult {
         Phase::List(_) => group_title(api, &mut title_buf),
         Phase::Detail(edit) => {
             if edit.is_new {
-                write_str(&mut title_buf, "NEW");
+                write_str(&mut title_buf, "NEW ");
+                fmt_ch_num(&mut title_buf[4..], edit.num);
             } else {
                 fmt_ch_num(&mut title_buf, edit.num);
             }
@@ -1360,9 +1360,16 @@ fn draw(api: &Api) -> AppResult {
     // The strip at the bottom says what the keys do in this state.
     let hint: &[u8] = match &state.phase {
         Phase::List(_) => b"MENU open   * # group",
-        Phase::Detail(edit) if !edit.editing => b"MENU edit    EXIT back",
+        // leaving the editor without SAVE drops the changes, so EXIT says so
+        Phase::Detail(edit) if !edit.editing => match field_at(edit.field_index) {
+            Field::Save => b"MENU save    EXIT discard",
+            Field::Delete => b"MENU delete  EXIT discard",
+            _ => b"MENU edit    EXIT discard",
+        },
         Phase::Detail(edit) => match field_at(edit.field_index) {
-            Field::Name | Field::Freq | Field::Offset => b"0-9 type MENU ok EXIT del",
+            Field::Name => b"0-9 UP/DN MENU ok EXIT del",
+            Field::Freq | Field::Offset => b"0-9 type MENU ok EXIT del",
+            Field::Delete => b"MENU delete it  EXIT keep",
             _ => b"UP/DN  MENU ok  EXIT undo",
         },
         Phase::Exit => b"",

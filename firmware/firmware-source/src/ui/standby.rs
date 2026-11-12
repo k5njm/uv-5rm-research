@@ -245,7 +245,15 @@ where
     }
 
     if app.tx_prohibited() {
-        draw_overlay(lcd, "TX PROHIBITED", ALERT);
+        // say why, in the words the settings use
+        let why = match app.tx_block() {
+            app::TX_BLOCK_INHIBIT => "TX INHIBIT IS ON",
+            app::TX_BLOCK_RX_ONLY => "RX-ONLY CHANNEL",
+            app::TX_BLOCK_BAND => "OUTSIDE TX BANDS",
+            app::TX_BLOCK_BUSY => "CHANNEL BUSY",
+            _ => "TX PROHIBITED",
+        };
+        draw_overlay(lcd, why, ALERT);
     } else if app.no_channels_notice() {
         // Name the group: with a group other than ALL selected, channels outside its number range are skipped.
         if app.chan_mode_index() == 0 {

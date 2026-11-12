@@ -1,3 +1,9 @@
+/// Reasons a PTT press is refused (`App::tx_block`).
+pub(crate) const TX_BLOCK_INHIBIT: u8 = 1;
+pub(crate) const TX_BLOCK_RX_ONLY: u8 = 2;
+pub(crate) const TX_BLOCK_BAND: u8 = 3;
+pub(crate) const TX_BLOCK_BUSY: u8 = 4;
+
 mod convert;
 mod group_table;
 mod input;
@@ -141,6 +147,8 @@ pub struct App<'a> {
     key_lock: bool,
     transmitting: bool,
     tx_prohibited: bool,
+    /// Why the last PTT press was refused, for the notice (`TX_BLOCK_*`).
+    tx_block: u8,
     dual_standby: bool,
     dual_hold_ticks: u16,
     tot_ticks: u16,
@@ -342,6 +350,7 @@ impl<'a> App<'a> {
             key_lock: false,
             transmitting: false,
             tx_prohibited: false,
+            tx_block: 0,
             flashlight,
             dual_standby: settings.dual_standby,
             dual_hold_ticks: DUAL_STANDBY_HOLD_TICKS,
@@ -879,6 +888,9 @@ impl<'a> App<'a> {
     }
     pub fn tx_prohibited(&self) -> bool {
         self.tx_prohibited
+    }
+    pub fn tx_block(&self) -> u8 {
+        self.tx_block
     }
 
     pub fn is_key_locked(&self) -> bool {

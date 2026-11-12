@@ -71,7 +71,7 @@ where
     draw_frequency(lcd, app.watching_freq_hz(), 60, FG);
 
     Text::new(
-        "UP/DN STEP  #/EXIT STOP",
+        "UP/DN step   EXIT stop",
         Point::new(4, 120),
         MonoTextStyle::new(&FONT_6X10, FG),
     )

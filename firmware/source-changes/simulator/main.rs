@@ -516,6 +516,13 @@ impl ui::list::ListSource for BufferListSource {
             _ => false,
         }
     }
+    // As the firmware's BufferListSource: without this no frame shows the text cursor of a typed field.
+    fn cursor(&mut self, i: usize) -> Option<usize> {
+        match self.window_row(i) {
+            Some(r) if r.cursor >= 0 => Some(r.cursor as usize),
+            _ => None,
+        }
+    }
 }
 
 static mut LIST_CACHE: Option<ui::list::Cache> = None;

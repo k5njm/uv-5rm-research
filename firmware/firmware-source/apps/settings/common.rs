@@ -468,8 +468,8 @@ impl SettingsGroup {
             SettingsGroup::Display => &[Abr, AutoLk],
             #[cfg(feature = "g_keys")]
             SettingsGroup::Keys => &[
-                Side1Short, Side1Long, Side2Short, Side2Long, BandShort,
-                BandLong, VmLong,
+                // BAND's short press always opens the channel groups (core `keys.rs`), so it is not offered
+                Side1Short, Side1Long, Side2Short, Side2Long, BandLong, VmLong,
             ],
             #[cfg(feature = "g_ani")]
             SettingsGroup::Ani => &[AniTx, AniCall],
@@ -566,7 +566,7 @@ impl SettingItem {
             AniCall => "ANI CALL",
 
             #[cfg(feature = "g_system")]
-            FLock => "TX BAND LOCK",
+            FLock => "TX BANDS",
             #[cfg(feature = "g_system")]
             Lat => "LATITUDE",
             #[cfg(feature = "g_system")]
@@ -673,8 +673,8 @@ fn band_lock_label(v: u8) -> &'static str {
         5 => "PMR446",
         6 => "GMRS/FRS",
         7 => "CA HAM",
-        8 => "NO TX",
-        9 => "ALL BANDS",
+        8 => "NONE",
+        9 => "ALL",
         _ => "CE HAM",
     }
 }
@@ -1257,7 +1257,14 @@ fn adjust(api: &Api, st: &mut ItemsState, item: SettingItem, up: bool) {
 
         #[cfg(feature = "g_keys")]
         Side1Short | Side1Long | Side2Short | Side2Long | BandShort
-        | BandLong | VmLong => clamp_step(cur, up, 0, KEYFN_MAX),
+        | BandLong | VmLong => {
+            // 5 and 9 are retired functions (FM and search became apps): never land on them
+            let mut v = clamp_step(cur, up, 0, KEYFN_MAX);
+            while v == 5 || v == 9 {
+                v = clamp_step(v, up, 0, KEYFN_MAX);
+            }
+            v
+        }
 
         #[cfg(feature = "g_ani")]
         AniTx => 1 - cur,
@@ -1265,7 +1272,7 @@ fn adjust(api: &Api, st: &mut ItemsState, item: SettingItem, up: bool) {
         AniCall => clamp_step(cur, up, -1, CONTACT_COUNT - 1),
 
         #[cfg(feature = "g_system")]
-        BootMode => clamp_step(cur, up, 0, 2),
+        BootMode => if up { 2 } else { 0 }, // 1 (message) draws the same logo: not offered
         #[cfg(feature = "g_system")]
         BootSnd => {
             if st.settings.boot_display_mode == 0 {
@@ -1519,9 +1526,9 @@ fn value_text_for(
         #[cfg(feature = "g_system")]
         Info => {
             let s = if st.info_page == 0 {
-                "UV-5RH"
+                "UV-5RM OPEN FW"
             } else {
-                "BF5RH-FW"
+                "SEE BOOT SCREEN"
             };
             write_str(out, s)
         }
@@ -1539,7 +1546,7 @@ fn value_text_for(
         #[cfg(feature = "g_system")]
         Reset => {
             if editing_this {
-                write_str(out, "Sure? MENU")
+                write_str(out, "MENU = WIPE")
             } else {
                 0
             }
@@ -1550,9 +1557,8 @@ fn value_text_for(
         BootMode => write_str(
             out,
             match current_value(api, st, item) {
-                1 => "MESSAGE",
-                2 => "LOGO",
-                _ => "NONE",
+                0 => "OFF",
+                _ => "LOGO",
             },
         ),
         #[cfg(feature = "g_system")]
@@ -1747,6 +1753,43 @@ fn value_text_for(
         #[cfg(feature = "g_ani")]
         AniTx => on_off(out, current_value(api, st, item)),
 
+        // 0 = no limit, otherwise steps of 15 seconds (the core's `tot_seconds`)
+        #[cfg(feature = "g_radio")]
+        Tot => {
+            let v = current_value(api, st, item);
+            if v == 0 {
+                write_str(out, "OFF")
+            } else {
+                let mut w = Out::new(out);
+                w.u32(v as u32 * 15, 1);
+                w.str(" SEC");
+                w.len
+            }
+        }
+        // the same words CHAN MGR uses for this field
+        #[cfg(feature = "g_radio")]
+        Sftd => write_str(
+            out,
+            match current_value(api, st, item) {
+                1 => "+",
+                2 => "-",
+                _ => "OFF",
+            },
+        ),
+        // contact index from 0; shown as CHAN MGR shows it
+        #[cfg(feature = "g_ani")]
+        AniCall => {
+            let v = current_value(api, st, item);
+            if v < 0 {
+                write_str(out, "NONE")
+            } else {
+                let mut w = Out::new(out);
+                w.byte(b'#');
+                w.u32(v as u32 + 1, 1);
+                w.len
+            }
+        }
+
         #[allow(unreachable_patterns)]
         _ => {
             let mut w = Out::new(out);
@@ -1786,7 +1829,12 @@ fn draw(api: &Api) -> AppResult {
             st.editing
                 && !matches!(
                     st.item(),
-                    SettingItem::Offse | SettingItem::BattCal
+                    // typed fields, and the reset confirmation (UP/DN do nothing there)
+                    SettingItem::Offse
+                        | SettingItem::BattCal
+                        | SettingItem::Lat
+                        | SettingItem::Lon
+                        | SettingItem::Reset
                 ),
         ),
         _ => return AppResult::Continue,
@@ -1815,6 +1863,15 @@ fn draw(api: &Api) -> AppResult {
                     write_str(&mut rows[i].label, item.label());
                     let n = value_text_for(api, st, gi, &mut rows[i].value);
                     rows[i].has_value = n > 0;
+                    // a typed field shows a text cursor after what has been typed (and so the "changing" colour)
+                    if st.is_editing(gi)
+                        && matches!(
+                            item,
+                            SettingItem::Offse | SettingItem::BattCal | SettingItem::Lat | SettingItem::Lon
+                        )
+                    {
+                        rows[i].cursor = n.min(17) as i16;
+                    }
                 }
                 _ => {}
             }
@@ -1834,7 +1891,13 @@ fn draw(api: &Api) -> AppResult {
 
     // The strip at the bottom says what the keys do in this state (EXIT while changing a value undoes it).
     let hint: &[u8] = match &state.phase {
-        Phase::Items(st) if st.editing => b"UP/DN MENU save EXIT undo",
+        Phase::Items(st) if st.editing => match st.item() {
+            SettingItem::Reset => b"MENU wipe all  EXIT cancel",
+            SettingItem::Info | SettingItem::ChipId => b"UP/DN page    EXIT back",
+            SettingItem::Lat | SettingItem::Lon => b"0-9  * N/S E/W  MENU ok",
+            SettingItem::Offse | SettingItem::BattCal => b"0-9 type MENU ok EXIT del",
+            _ => b"UP/DN MENU save EXIT undo",
+        },
         Phase::Items(_) => b"MENU change  EXIT back",
         _ => b"MENU open    EXIT back",
     };

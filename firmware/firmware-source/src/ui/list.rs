@@ -298,16 +298,18 @@ fn draw_row<D>(
         return; // blank row below the end of a shorter list
     }
 
+    // "You are changing this": a value with arrows, or a typed field (it has a text cursor).
+    let editing = is_selected && (show_arrows || source.cursor(index).is_some());
     if is_selected {
         Rectangle::new(
             Point::new(0, row_top),
             Size::new(SCREEN_W as u32, ROW_HEIGHT as u32),
         )
-        .into_styled(PrimitiveStyle::with_fill(if show_arrows { EDIT_BG } else { SELECT_BG }))
+        .into_styled(PrimitiveStyle::with_fill(if editing { EDIT_BG } else { SELECT_BG }))
         .draw(lcd)
         .ok();
     }
-    let fg = if is_selected && show_arrows { EDIT_FG } else { FG };
+    let fg = if editing { EDIT_FG } else { FG };
     let value_fg = if is_selected { fg } else { VALUE_DIM };
     let baseline = row_top + FONT_6X10.baseline as i32 + 2;
 

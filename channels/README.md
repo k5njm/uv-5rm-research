@@ -9,10 +9,10 @@ Nothing here has been written to a real radio yet; the whole path is tested only
   `all.csv` is the exception: channels go to their own `Location` (1-1000).
 - Groups overlap, so each file uses only its group's own slots: weather 1-7, repeaters 234-304, frs 305-326,
   gmrs 327-344 (repeater pairs), murs 345-349.
-- `weather.csv`, `frs.csv`, `gmrs.csv` and `murs.csv` are the standard US lists and are the same everywhere.
-  `repeaters.csv` is local (Dallas area). This radio is not certified for FRS, GMRS or MURS: those lists are for
-  listening unless you know your licence and the rules allow it; the radio's TX BAND LOCK and TX INHIBIT settings decide
-  what it will transmit on. `gmrs.csv` has no tones: add the one your local repeater uses.
+- `weather.csv`, `frs.csv` and `murs.csv` are the standard US lists and are the same everywhere. `repeaters.csv` (ham)
+  and `gmrs.csv` (GMRS repeaters, with their tones) are local to the Dallas area. This radio is not certified for FRS,
+  GMRS or MURS: those lists are for listening unless you know your licence and the rules allow it; the radio's TX BANDS
+  and TX INHIBIT settings decide what it will transmit on.
 - `Detail` (location or description, at most 16 ASCII characters) is accepted and checked but NOT yet stored on the radio.
 - Required columns: `Name`, `Frequency`; the rest of the CHIRP columns are optional (see the docstring for the rules).
 - Names are at most 12 printable ASCII characters. They are never truncated; a longer name fails the build.

@@ -1,0 +1,9 @@
+# Settings, SYSTEM: the reset row says what MENU will do and the hint offers a way out; TX BANDS reads as what may transmit.
+handoff 5 1
+app settings
+key up                    # wraps to the last item, RESET ALL
+shot reset_row
+key menu                  # arm it (nothing is wiped yet)
+shot reset_armed
+key exit                  # cancel
+shot reset_cancelled

@@ -40,9 +40,17 @@ pub(super) fn set_ptt(app: &mut App, syst: &mut SYST, pressed: bool) {
             || (!external && app.sides[app.master].rx_only)
         {
             app.tx_prohibited = true;
+            app.tx_block = if app.settings.tx_forbid {
+                super::TX_BLOCK_INHIBIT
+            } else {
+                super::TX_BLOCK_RX_ONLY
+            };
             return;
         }
         if app.settings.busy_lock && app.radio.rssi_open() {
+            // say so: a PTT press that does nothing reads as a fault
+            app.tx_prohibited = true;
+            app.tx_block = super::TX_BLOCK_BUSY;
             return;
         }
 
@@ -81,7 +89,9 @@ pub(super) fn set_ptt(app: &mut App, syst: &mut SYST, pressed: bool) {
                 }
             }
         } else {
+            // refused by the radio: outside the TX BANDS setting, or an AM channel
             app.tx_prohibited = true;
+            app.tx_block = super::TX_BLOCK_BAND;
         }
     } else if pressed {
         app.vox_active = false;
