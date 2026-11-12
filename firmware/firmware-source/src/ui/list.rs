@@ -4,7 +4,6 @@ use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::text::Text;
 
-use super::backdrop::draw_backdrop;
 use super::{TextBuf, SCREEN_H, SCREEN_W};
 
 const BG: Rgb565 = Rgb565::BLACK;
@@ -229,12 +228,7 @@ fn draw_full<D>(
     }
     let bottom = LIST_TOP + VISIBLE_ROWS as i32 * ROW_HEIGHT;
     if HINT_TOP > bottom {
-        draw_backdrop(
-            lcd,
-            &mut |addr, buf| source.read_flash(addr, buf),
-            bottom,
-            HINT_TOP - bottom,
-        );
+        clear_rows(lcd, bottom, HINT_TOP - bottom);
     }
 }
 
@@ -256,6 +250,18 @@ where
     )
     .draw(lcd)
     .ok();
+}
+
+/// Plain background behind rows. (Lists used to paint a dimmed copy of the boot logo here; under text it only
+/// made the rows harder to read.)
+fn clear_rows<D>(lcd: &mut D, top: i32, height: i32)
+where
+    D: DrawTarget<Color = Rgb565>,
+{
+    Rectangle::new(Point::new(0, top), Size::new(SCREEN_W as u32, height as u32))
+        .into_styled(PrimitiveStyle::with_fill(BG))
+        .draw(lcd)
+        .ok();
 }
 
 fn draw_title<D>(lcd: &mut D, title: &str)
@@ -286,12 +292,7 @@ fn draw_row<D>(
     let row_top = LIST_TOP + slot as i32 * ROW_HEIGHT;
     let is_selected = index < total && index == selected;
     if !is_selected {
-        draw_backdrop(
-            lcd,
-            &mut |addr, buf| source.read_flash(addr, buf),
-            row_top,
-            ROW_HEIGHT,
-        );
+        clear_rows(lcd, row_top, ROW_HEIGHT);
     }
 
     if index >= total {

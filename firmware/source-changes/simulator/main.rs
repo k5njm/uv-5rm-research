@@ -73,8 +73,6 @@ pub mod ui {
 
     pub use crate::fmtlite::TextBuf;
 
-    #[path = "../../backdrop.rs"]
-    pub mod backdrop;
     #[path = "../../../firmware-source/src/ui/list.rs"]
     pub mod list;
     #[path = "../../../firmware-source/src/ui/toast.rs"]

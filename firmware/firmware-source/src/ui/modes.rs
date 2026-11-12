@@ -1,5 +1,4 @@
 use crate::fmtlite::Sink;
-use super::backdrop::draw_backdrop;
 use super::list::{draw_list, Cache, ListSource};
 use super::{TextBuf, SCREEN_H};
 use crate::app::{self, modes_table};
@@ -7,6 +6,7 @@ use embedded_graphics::mono_font::ascii::{FONT_6X10, FONT_9X18};
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
+use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::text::Text;
 
 const FG: Rgb565 = Rgb565::WHITE;
@@ -122,12 +122,10 @@ where
     }
     cache.snap = Some(snap);
 
-    draw_backdrop(
-        lcd,
-        &mut |addr, buf| app.storage_mut().read_raw(addr, buf),
-        0,
-        SCREEN_H,
-    );
+    Rectangle::new(Point::new(0, 0), Size::new(super::SCREEN_W as u32, SCREEN_H as u32))
+        .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK))
+        .draw(lcd)
+        .ok();
     small(lcd, "CUSTOM RANGE (MHZ)", 12, FG);
 
     for (stage, label, hz, y) in [(0u8, "START", lo, 40), (1u8, "STOP", hi, 66)] {

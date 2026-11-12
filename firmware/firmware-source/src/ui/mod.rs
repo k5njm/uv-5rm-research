@@ -1,6 +1,5 @@
 pub(crate) mod boot;
 pub(crate) mod cps;
-mod backdrop;
 mod icons;
 mod launcher;
 mod list;
