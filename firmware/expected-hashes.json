@@ -1,9 +1,9 @@
 {
-  "fskprobe.app": "07eb5bed52e4545bac207bdc829f25487a4b1378b98e5e033629f0db269fa14e",
-  "fw-bk4819.bin": "95701f5bc0ee4c25093f1e76658d8bf6f6494579dcf5fb5f87bcf1d9a175bb3a",
-  "fw-default.bin": "017cae6974a8e234ada6474f76a2f5fb5d18a869829a82781bd72bf076c4813b",
-  "hamtools-classic.app": "df6d77b3e06731e6d9f59ba192c3e0ec222291cfcddab3d6f468f7c8349b0225",
-  "hamtools-d74.app": "66809c3cec9e7d2574ed4fe87cd35f4cf12c2c1d0584cdce2fded5518d817a7a",
-  "hamtools-ft5d.app": "c0ea18c4c2cc5115e4fbb0d48085c9cd24e8db606f21355d70d0191506b99fa1",
-  "hamtools-proxx.app": "355a88c7cb202980c46d704f12dc5fcdcc5c5070022ca1536ee5de465ba5a261"
+  "fskprobe.app": "80c44627c703ecb9d1bc6c094f7f78b8aaae5df0a9eeb5808dbdf46ec55c5074",
+  "fw-bk4819.bin": "db70df1d62747ee60067c26fd08bed270a26466e2dd344cf4b5e731533414bb4",
+  "fw-default.bin": "8704a1397d81a95d7a05a8962718df9e25d3a18d210a93fa2a58684500192960",
+  "hamtools-classic.app": "25b7f9ada30515564ecb8c0f70bec3be3c150b9fb1c259a77aefea52ea296d4d",
+  "hamtools-d74.app": "8a8b548bc15fe8a4d0abbc612bbf6f6584a8de073705f2c2b515147c14d49783",
+  "hamtools-ft5d.app": "5987352f54a543bd9d235f722f4a305a9313684bbca3ba3d708a00de7f2ceb4b",
+  "hamtools-proxx.app": "5da2c947c96324420b26368fc8c90485fb6635b50e27f1d1186d673b9a40054a"
 }

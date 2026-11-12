@@ -950,6 +950,10 @@ impl<'a> ListSource for BufferListSource<'a> {
             _ => None,
         }
     }
+
+    fn armed(&mut self, index: usize) -> bool {
+        matches!(self.window_row(index), Some(row) if row.cursor == bf5rh_abi::ROW_ARMED)
+    }
 }
 
 #[inline(never)]

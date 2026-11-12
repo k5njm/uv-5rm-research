@@ -1313,6 +1313,8 @@ fn draw(api: &Api) -> AppResult {
                     rows[i].cursor =
                         if edit.is_editing(gi) && field == Field::Name {
                             edit.name_edit.cursor as i16
+                        } else if edit.is_editing(gi) && field == Field::Delete {
+                            bf5rh_abi::ROW_ARMED
                         } else {
                             -1
                         };
@@ -1348,7 +1350,7 @@ fn draw(api: &Api) -> AppResult {
         Phase::Detail(edit) => match field_at(edit.field_index) {
             Field::Name => b"0-9 UP/DN MENU ok EXIT del",
             Field::Freq | Field::Offset => b"0-9 type MENU ok EXIT del",
-            Field::Delete => b"MENU delete it  EXIT keep",
+            Field::Delete => b"MENU confirm  EXIT cancel",
             _ => b"UP/DN  MENU ok  EXIT undo",
         },
         Phase::Exit => b"",
