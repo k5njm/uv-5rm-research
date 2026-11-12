@@ -1,0 +1,6 @@
+Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,Mode,TStep,Skip,Comment
+35,WX400,162.400000,off,0.000000,,88.5,88.5,023,NN,FM,5.00,S,"KEC56 - Dallas, 162.400 NOAA WX RX ONLY. Do not transmit."
+39,WX425,162.425000,off,0.000000,,88.5,88.5,023,NN,FM,5.00,S,"KHA99 - Muenster, 162.425 NOAA WX RX ONLY. Do not transmit."
+38,WX475,162.475000,off,0.000000,,88.5,88.5,023,NN,FM,5.00,S,"162.475 NOAA WX RX ONLY (Collin County list, weather.gov/fwd/radioinfo). Do not transmit."
+37,WX500,162.500000,off,0.000000,,88.5,88.5,023,NN,FM,5.00,S,"KWN31 - Cumby, 162.500 NOAA WX RX ONLY. Do not transmit."
+36,WX550,162.550000,off,0.000000,,88.5,88.5,023,NN,FM,5.00,S,"KEC55 - Fort Worth, 162.550 NOAA WX RX ONLY. Do not transmit."
