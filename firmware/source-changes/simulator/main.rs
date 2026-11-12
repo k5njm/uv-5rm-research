@@ -134,6 +134,9 @@ fn sim() -> &'static mut Sim {
 
 fn reset(master: u32) {
     unsafe {
+        AUDIO_OPEN = false;
+        MONITOR = false;
+        SPEAKER_ON = false;
         SIM = Some(Sim {
             now: 1000,
             fb: vec![0; W * H],
@@ -239,6 +242,11 @@ extern "C" fn rf_reg_write(addr: u8, value: u16) -> bool {
 /// Speaker-only cue sequences the app asked for (never keys the transmitter: a cue must not move the PTT counters).
 static mut CUES: Vec<Vec<(u16, u16)>> = Vec::new();
 extern "C" fn play_cue(cues: *const bf5rh_abi::Cue, count: u16) {
+    // Radio::play_cue returns at once when beeps are off or audio is open; otherwise the speaker is OFF afterwards
+    if unsafe { SETTINGS[9] == 0 || AUDIO_OPEN } {
+        return;
+    }
+    unsafe { SPEAKER_ON = false };
     let n = (count as usize).min(8);
     let seq = unsafe { std::slice::from_raw_parts(cues, n) }.iter().map(|c| (c.hz_div10, c.ms)).collect();
     unsafe { CUES.push(seq) };
@@ -343,12 +351,41 @@ extern "C" fn nop() {}
 extern "C" fn nop_bool(_: bool) {}
 static mut SPEAKER_ON: bool = false;
 static mut SPEAKER_TURN_ONS: u32 = 0;
+/// The core's `Radio::audio_open` (device/radio.rs): the squelch-driven or app-driven "audio is flowing" flag. The key
+/// beep and `play_cue` do nothing while it is true and, when it is false, leave the speaker switched OFF afterwards
+/// (`play_tone_sequence` ends with `set_speaker(audio_open)`). Set by `set_af_out` (`app_af_out`), cleared by `enter_rx`,
+/// and, while an app holds the receiver, followed from the squelch by `core_poll_squelch` (main.rs `poll_squelch`).
+static mut AUDIO_OPEN: bool = false;
+static mut MONITOR: bool = false;
 extern "C" fn speaker(on: bool) {
     unsafe {
         if on && !SPEAKER_ON {
             SPEAKER_TURN_ONS += 1;
         }
         SPEAKER_ON = on;
+    }
+}
+/// What the core does for every Single or Long key event before it reaches an app (app/keys.rs `dispatch`: `play_beep`):
+/// nothing when beeps are off or audio is open, else the tone plays and the speaker ends up at `audio_open` = OFF.
+/// The mock used to leave the speaker alone, which hid AUDIT 55's FM bug (docs/TEST-DOUBLES.md, fifth instance).
+pub(crate) fn core_key_beep() {
+    unsafe {
+        if SETTINGS[9] != 0 && !AUDIO_OPEN {
+            SPEAKER_ON = false;
+        }
+    }
+}
+/// The core's squelch poll while an app holds the receiver (`enter_rx`, or `set_holds_rx(true)`): audio follows the
+/// squelch (or the monitor flag) and the speaker follows audio. Debounce and the tone check are not modelled.
+fn core_poll_squelch() {
+    if sim().holds_rx {
+        let open = unsafe { MONITOR } || squelch_open();
+        unsafe {
+            if open != AUDIO_OPEN {
+                AUDIO_OPEN = open;
+                SPEAKER_ON = open;
+            }
+        }
     }
 }
 extern "C" fn read_mic() -> u8 {
@@ -737,6 +774,10 @@ extern "C" fn enter_rx() {
     s.tuned = s.cfg_rx;
     s.filter_on = false;
     s.af = false;
+    unsafe {
+        AUDIO_OPEN = false; // Radio::enter_rx
+        SPEAKER_ON = false;
+    }
     s.now = s.now.wrapping_add(20);
 }
 extern "C" fn retune_rx(hz: u32, wide: bool) {
@@ -920,6 +961,13 @@ extern "C" fn holds(on: bool) {
 }
 extern "C" fn af(on: bool) {
     sim().af = on;
+    unsafe {
+        AUDIO_OPEN = on; // Radio::app_af_out
+        SPEAKER_ON = on;
+    }
+}
+extern "C" fn monitor(on: bool) {
+    unsafe { MONITOR = on };
 }
 extern "C" fn agc(_: i8) {}
 
@@ -968,7 +1016,7 @@ static API: Api = Api {
     handoff_read: handoff_r,
     set_bandwidth,
     set_sql_level: nop_u8,
-    set_monitor: nop_bool,
+    set_monitor: monitor,
     enter_rx,
     retune_rx,
     read_rf_gains: read_gains,
@@ -1021,6 +1069,7 @@ fn run(app: Entry, secs: u32) {
         sim().now = sim().now.wrapping_add(50); // main loop gap between ticks
         let dt = sim().now.wrapping_sub(last);
         last = sim().now;
+        core_poll_squelch();
         app(&API, AppEvent::Tick { dt_100us: dt });
         app(&API, AppEvent::Draw);
     }
@@ -1039,7 +1088,7 @@ const K_REPEAT: u8 = 4;
 /// VM 16, A/B 17, Band 18, Side1 19, Side2 20). MENU is not on the list, so no app can ever see a long MENU on the
 /// radio. A test below checks this table against the source.
 pub(crate) fn keypad_long(id: u8) -> bool {
-    matches!(id, 0 | 10 | 11 | 13 | 14 | 15 | 16 | 18 | 19 | 20)
+    matches!(id, 0 | 10 | 11 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20)
 }
 /// device/keypad.rs `supports_repeat`.
 pub(crate) fn keypad_repeat(id: u8) -> bool {
@@ -1052,6 +1101,9 @@ fn key_events(app: Entry, id: u8, kinds: &[u8]) -> bool {
     for &kind in kinds {
         // overlay.rs dispatch_key does not hand Press or Release to apps; SIM_RAW_KEYS=1 sends them anyway, to exercise
         // the apps' own guards against them (run the scenarios both ways after touching an app's key handler).
+        if kind == K_SINGLE || kind == K_LONG {
+            core_key_beep(); // before the app sees the key, as app/keys.rs dispatch does
+        }
         if kind < K_SINGLE && std::env::var_os("SIM_RAW_KEYS").is_none() {
             continue;
         }
@@ -1290,9 +1342,9 @@ fn on_for(period_s: u32, on_s: u32) -> impl Fn(u32) -> bool {
 
 fn test_sweep() {
     let app: Entry = bandsweep::entry;
-    println!("Band Sweep: VHF with constant and intermittent signals");
-    bs_fresh(146_950_000);
-    add(146_950_000, 100, -1, |_| true);
+    println!("Band Sweep: 148-174 MHz with constant and intermittent signals");
+    bs_fresh(155_000_000);
+    add(160_200_000, 100, -1, |_| true);
     add(162_550_000, 90, -1, |_| true);
     add(155_350_000, 110, -1, on_for(45, 10));
     add(151_880_000, 80, -1, |_| true);
@@ -1305,10 +1357,10 @@ fn test_sweep() {
     shot("bs_3_vhf");
     let dump = bandsweep::debug_dump();
     println!("     {dump}");
-    check(dump.contains("hz=155350000") && dump.contains("hz=146950000") && dump.contains("hz=162550000") && dump.contains("hz=151875000"), "found all four signals");
+    check(dump.contains("hz=155350000") && dump.contains("hz=160200000") && dump.contains("hz=162550000") && dump.contains("hz=151875000"), "found all four signals");
     check(dump.contains("n=4"), "no false signals from noise");
-    let order = dump.find("155350000").unwrap_or(0) < dump.find("146950000").unwrap_or(0)
-        && dump.find("146950000").unwrap_or(0) < dump.find("162550000").unwrap_or(0);
+    let order = dump.find("155350000").unwrap_or(0) < dump.find("160200000").unwrap_or(0)
+        && dump.find("160200000").unwrap_or(0) < dump.find("162550000").unwrap_or(0);
     check(order, "strongest first");
     check(dump.contains("pass_s="), "timed a full pass");
     println!("     pass time: {}", bandsweep::debug_pass());
@@ -1335,12 +1387,28 @@ fn test_sweep() {
     println!("     {dump}");
     check(bandsweep::debug_count() == before - 1 && !dump.contains(&hidden), "Side 1 hides the selected signal and it stays hidden");
 
-    println!("Band Sweep: send to VFO for Spectrum");
+    println!("Band Sweep: MENU toggles listening; VFO/MR sends the frequency to the VFO");
     let selected = bandsweep::debug_selected_hz();
     press(app, 12); // listen to it
     check(sim().vfo_saved.is_none(), "listening alone hands nothing to the VFO");
-    check(press(app, 12), "Menu while listening leaves");
-    check(sim().vfo_saved == Some((selected, 0)), "saved the selected frequency to VFO with no tone");
+    let tuned_before = sim().retunes;
+    check(!press(app, 12), "MENU while listening does not leave");
+    check(!sim().holds_rx, "MENU again stops listening");
+    run(app, 3);
+    check(sim().retunes > tuned_before, "and the sweep resumes");
+    press(app, 12);
+    check(press(app, 16), "VFO/MR while listening leaves");
+    check(sim().vfo_saved == Some((selected, 0)), "saved the heard frequency to the VFO with no tone");
+    app(&API, AppEvent::Leave);
+    bs_fresh(155_000_000);
+    add(155_350_000, 110, -1, |_| true);
+    app(&API, AppEvent::Enter);
+    run(app, 12);
+    check(press(app, 16) && sim().vfo_saved == Some((155_350_000, 0)), "VFO/MR in the sweep view takes the selected hit to the VFO and leaves");
+    app(&API, AppEvent::Leave);
+    bs_fresh(155_000_000);
+    app(&API, AppEvent::Enter);
+    check(!press(app, 16) && sim().vfo_saved.is_none(), "VFO/MR with no hit does nothing");
     app(&API, AppEvent::Leave);
 
     println!("Band Sweep: airband");
@@ -1348,20 +1416,29 @@ fn test_sweep() {
     add(121_500_000, 100, -1, |_| true);
     app(&API, AppEvent::Enter);
     run(app, 12);
-    check(bandsweep::debug_band() == 2, "opens on the band the radio is tuned to");
+    check(bandsweep::debug_band() == 0, "opens on the band the radio is tuned to (AIR)");
     press(app, 12);
     check(sim().modulation == 1 && sim().cfg_rx == 121_500_000, "listens in AM");
     press(app, 13);
     check(sim().modulation == 0, "back to FM for sweeping");
 
     println!("Band Sweep: band, step and custom range");
+    press(app, 18);
+    check(bandsweep::debug_band() == 1 && bandsweep::debug_total() == 8_000_000 / 25_000 + 1, "BAND moves to the next band (136-144) and restarts");
     press(app, 17);
-    check(bandsweep::debug_total() == (220_000_000u32 + 40_000_000 - 200_000_000 - 20_000_000 + 20_000_000) / 25_000 + 1, "A/B moves to the next band and restarts");
+    check(bandsweep::debug_band() == 1, "A/B does nothing in the sweep");
+    hold(app, 18);
+    check(bandsweep::debug_band() == 0, "hold BAND goes back one band");
+    hold(app, 18);
+    check(bandsweep::debug_band() == 14, "and wraps below the first band to the last preset");
+    press(app, 18);
+    check(bandsweep::debug_band() == 0, "BAND wraps past the last preset");
     bs_fresh(440_000_000);
     app(&API, AppEvent::Enter);
-    check(bandsweep::debug_total() == 4801, "UHF 400-520 at 25 kHz is 4801 steps");
+    check(bandsweep::debug_total() == 30_000_000 / 12_500 + 1, "70CM 420-450 opens at its own 12.5 kHz step");
     press(app, 1);
-    check(bandsweep::debug_total() == 9601, "1 changes to 12.5 kHz steps");
+    check(bandsweep::debug_total() == 30_000_000 / 25_000 + 1, "1 changes to 25 kHz steps");
+    press(app, 1);
     run(app, 40);
     println!("     pass time at 12.5 kHz: {}", bandsweep::debug_pass());
     shot("bs_5_uhf");
@@ -1393,13 +1470,14 @@ fn test_sweep() {
 
     println!("Band Sweep: more signals than the list holds");
     bs_fresh(440_000_000);
+    bs_fresh(480_000_000);
     for i in 0..40u32 {
-        add(400_000_000 + i * 2_000_000, 80 + i as u16, -1, |_| true);
+        add(470_000_000 + i * 1_000_000, 80 + i as u16, -1, |_| true);
     }
     app(&API, AppEvent::Enter);
     run(app, 60);
     let dump = bandsweep::debug_dump();
-    check(bandsweep::debug_count() == 24 && dump.contains("hz=478000000"), "keeps the 24 strongest");
+    check(bandsweep::debug_count() == 24 && dump.contains("hz=486000000") && !dump.contains("hz=485000000"), "keeps the 24 strongest");
     for _ in 0..30 {
         press(app, 15);
     }

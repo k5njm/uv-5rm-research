@@ -52,8 +52,6 @@ const TICKS_PER_SECOND: u16 = 100;
 
 const NO_CHANNELS_HOLD_TICKS: u16 = 200;
 
-const RX_BLINK_HALF_PERIOD: u16 = 5;
-
 const DTMF_DIAL_MAX_DIGITS: usize = 16;
 
 const POWER_SAVE_IDLE_TICKS: u16 = 1000;
@@ -180,7 +178,6 @@ pub struct App<'a> {
     /// Ticks remaining to show the "NO CHANNELS" overlay after a VFO/Channel
     /// toggle finds nothing programmed. 0 = not showing.
     no_channels_ticks: u16,
-    blink_phase: u16,
     /// Runtime "current call target" override:
     /// sticky across PTTs, set by a 3-digit manual DTMF dial, cleared
     /// whenever the active channel changes. Falls back to the side's own
@@ -384,7 +381,6 @@ impl<'a> App<'a> {
             rtone_sounding: false,
             rtone_self_keyed: false,
             no_channels_ticks: 0,
-            blink_phase: 0,
             ani_target_override: None,
             dtmf_dial: None,
             battery_cal,
@@ -854,14 +850,6 @@ impl<'a> App<'a> {
     }
     pub fn notice_kind(&self) -> u8 {
         self.notice_kind
-    }
-
-    pub fn poll_blink(&mut self) {
-        self.blink_phase = self.blink_phase.wrapping_add(1);
-    }
-
-    pub fn rx_blink_on(&self) -> bool {
-        (self.blink_phase / RX_BLINK_HALF_PERIOD).is_multiple_of(2)
     }
 
     // key dispatch

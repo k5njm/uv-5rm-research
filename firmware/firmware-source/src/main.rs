@@ -428,7 +428,6 @@ fn main() -> ! {
             app.poll_power_save(&mut cp.SYST);
             app.poll_auto_lock(&mut cp.SYST, rx_active);
             app.poll_backlight();
-            app.poll_blink();
             app.poll_scan(&mut cp.SYST);
 
             if !app.power_save_active() {

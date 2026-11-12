@@ -25,8 +25,8 @@
 //!   fmcore DECI...      the core's bare FM station list (what the FM app shows when there is no table)
 //!   setting OFFSET V...   bytes of the settings record the app reads, written together through the core's clamp (settings app)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
-//!   key K               single press (Press, Single, Release). K = 0-9 star pound menu exit up down ab side1 side2
-//!   hold K              long press: Press, Long, Release as the keypad sends them. Only up down exit star pound 0 side1 side2 have one
+//!   key K               single press (Press, Single, Release). K = 0-9 star pound menu exit up down vm ab band side1 side2
+//!   hold K              long press: Press, Long, Release as the keypad sends them. Only up down exit star pound 0 vm band side1 side2 have one
 //!                       (device/keypad.rs); any other key is an error here, because the radio would see a plain press
 //!   repeat K N          up or down held past 1.5 s: Press, Long, N Repeat events, Release
 //!   step MS             radio time advanced per tick by `wait` (default 5; larger = faster)
@@ -35,7 +35,8 @@
 //!   expect exit|noexit  whether the LAST key made the app exit
 //!   expect reset|noreset  whether the app has asked for a factory reset (the radio would reboot: nothing follows `reset`)
 //!   expect backlight on|off   the app's backlight-hold request
-//!   expect cues N       speaker-only cue sequences played so far (api.play_cue); never keys PTT, checked automatically
+//!   expect speaker on|off   the speaker switch after the core's key beep (Single/Long, beeps on, audio not open: OFF) has run
+//!   expect cues N      speaker-only cue sequences played so far (api.play_cue); never keys PTT, checked automatically
 //!   expect fmlive N     live stations in the FM table, as the app would read it; `expect fmtable none` for no valid table
 //!   expect rfrefused N  RF register writes the core's allow-list refused
 //!   expect captured N   records FSK PROBE left in its flash capture range
@@ -98,7 +99,9 @@ fn key_id(k: &str) -> Option<u8> {
         "exit" => 13,
         "up" => 14,
         "down" => 15,
+        "vm" => 16,
         "ab" => 17,
+        "band" => 18,
         "side1" => 19,
         "side2" => 20,
         d if d.len() == 1 && d.as_bytes()[0].is_ascii_digit() => d.as_bytes()[0] - b'0',
@@ -532,6 +535,12 @@ impl Run<'_> {
             ["expect", "cues", n] => {
                 let got = unsafe { CUES.len() };
                 self.check(n.parse::<usize>().ok() == Some(got), &format!("{n} speaker cue(s) played (got {got})"));
+            }
+            ["expect", "speaker", v @ ("on" | "off")] => {
+                // the speaker switch as the core would leave it: after the key beep (a Single or Long key event with beeps
+                // on and audio not open switches it OFF), the app's own set_speaker / set_af_out, and the squelch poll
+                let on = unsafe { SPEAKER_ON };
+                self.check(on == (*v == "on"), &format!("speaker {v} (it is {})", if on { "on" } else { "off" }));
             }
             ["expect", "captured", n] => {
                 // FSK PROBE's capture as probe_capture.py would read it: a header, then records until an erased one

@@ -1,0 +1,26 @@
+# A seek mutes while the tuner is busy and the speaker is back on when it ends, also after the next key beeps.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 933 WBAP News/Talk
+fmstation 1011 WRR Classical
+handoff fm 920
+app fm
+wait 0.2
+expect speaker on
+hold up
+expect speaker off
+key 5
+expect speaker off
+wait 1
+expect speaker on
+key down
+expect speaker on
+hold down
+expect speaker off
+wait 1
+expect speaker on
+key up
+expect speaker on
+shot last

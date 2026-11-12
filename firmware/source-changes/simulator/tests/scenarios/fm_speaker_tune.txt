@@ -1,0 +1,40 @@
+# AUDIT 55: every key press plays the core's key beep, which leaves the speaker OFF when the core's audio flag is false (the
+# RF chip is parked for FM). The speaker must be on after every way of tuning; the mock now does what the core does.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 933 WBAP News/Talk
+fmstation 1011 WRR Classical
+handoff fm 920
+app fm
+wait 0.2
+expect speaker on
+key up
+expect speaker on
+key down
+expect speaker on
+key down
+wait 0.1
+expect speaker on
+key 1
+key 0
+key 1
+key 1
+expect speaker on
+wait 0.1
+key pound
+expect speaker on
+key star
+expect speaker on
+key 5
+expect speaker on
+key exit
+expect noexit
+expect speaker on
+# holding UP past 1.5 s: the Long starts a seek (muted), the Repeats are ignored while it runs, and it ends with sound
+repeat up 3
+expect speaker off
+wait 1
+expect speaker on
+shot last

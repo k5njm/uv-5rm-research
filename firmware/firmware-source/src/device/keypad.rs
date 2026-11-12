@@ -43,6 +43,7 @@ impl KeyId {
             KeyId::Up
                 | KeyId::Down
                 | KeyId::Vm
+                | KeyId::Ab
                 | KeyId::Band
                 | KeyId::Asterisk
                 | KeyId::Pound

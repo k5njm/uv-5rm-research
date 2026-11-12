@@ -1,4 +1,4 @@
-# Band Sweep: type a custom range (5, start, MENU, stop), then move to the next band with A/B.
+# Band Sweep: type a custom range (5, start, MENU, stop), then move to the next band with BAND.
 master 146000000
 signal 146520000 120 -1 always
 app bandsweep
@@ -19,5 +19,5 @@ key 0
 key 0
 wait 4
 shot custom_sweep
-key ab
+key band
 shot next_band

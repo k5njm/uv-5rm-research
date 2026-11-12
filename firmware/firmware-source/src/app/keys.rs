@@ -141,6 +141,13 @@ fn dispatch_standby(app: &mut App, syst: &mut SYST, ev: KeyEvent) {
                 let func = keyfn::from_u8(long_function(app, ev.key));
                 keyfn::invoke(app, syst, func);
             }
+            // hold A/B: DUAL WATCH on or off (the same switch as SETTINGS > RADIO > DUAL WATCH, remembered)
+            KeyId::Ab => {
+                let on = !app.settings.dual_standby;
+                app.settings.dual_standby = on;
+                app.set_dual_standby(syst, on);
+                app.save_settings();
+            }
             _ => {}
         },
         _ => {}

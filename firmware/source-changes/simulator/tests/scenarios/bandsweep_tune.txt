@@ -1,4 +1,4 @@
-# Band Sweep: after one pass MENU listens to the selected hit; MENU again puts that frequency on the main screen's VFO and leaves.
+# Band Sweep: after one pass MENU listens to the selected hit; VFO/MR puts that frequency on the main screen's VFO and leaves.
 master 146000000
 signal 146520000 120 -1 always
 app bandsweep
@@ -8,6 +8,6 @@ key menu
 shot listening
 expect noexit
 expect vfo none
-key menu
+key vm
 expect exit
-expect vfo 146525000 0
+expect vfo 146512500 0     # 2 m sweeps at 12.5 kHz: the signal at 146.520 falls between two grid points, both read full strength
