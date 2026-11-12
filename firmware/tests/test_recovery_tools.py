@@ -167,7 +167,10 @@ class RestoreBackup(Box):
         self.assertEqual(now[0x8000:0x8040], self.nor0[0x8000:0x8040])                    # VFO
         lo, hi = self.CONTACTS
         self.assertEqual(now[lo:hi], self.nor0[lo:hi])                                    # 20 contacts
-        restored = [(0, SLOT * SLOTS), (0x8000, 0x8040), (lo, hi)]
+        # a contact write is a read-modify-write of its sector through the 0xD000 scratch sector (storage.rs
+        # rmw_sector_record), so the scratch sector now holds a copy of the contacts sector; the older fake never did that
+        restored = [(0, SLOT * SLOTS), (0x8000, 0x8040), (lo, hi), (0xD000, 0xE000)]
+        self.assertEqual(now[0xD000:0xE000], now[0xA000:0xB000], "scratch is a copy of the sector last rewritten")
         for i in range(len(now)):                                                        # everything else untouched
             pass
         mask = bytearray(len(now))
@@ -177,7 +180,6 @@ class RestoreBackup(Box):
         self.assertTrue(others_same, "a region the tool must not touch changed")
         self.assertEqual(now[CAL_LO:CAL_HI], self.nor0[CAL_LO:CAL_HI])                    # calibration
         self.assertEqual(now[0x9000:0x9000 + 168], wiped[0x9000:0x9000 + 168])            # settings: refused by design
-        self.assertEqual(now[0xD000:0xD040], wiped[0xD000:0xD040])                         # scratch
         self.assertEqual(now[0xA000:0xA020], wiped[0xA000:0xA020])                         # ANI header
         self.assertEqual(now[0xA160:0xA2C0], wiped[0xA160:0xA2C0])                         # DTMF tail
         for a in self.writes():                                                           # only ever those addresses
@@ -247,8 +249,21 @@ class RestoreBackup(Box):
                 now = self.nor_now()
                 bad = next(int(l.split()[1], 16) for l in self.log() if l.startswith("W "))
                 size = 32 if label == "channel" else 64 if label == "vfo" else 16
-                self.assertEqual(now[bad:bad + size], wiped[bad:bad + size])               # that record was put back
-                os.remove(os.path.join(self.box, "undo.img"))
+                if label == "channel":
+                    # Flash programs only clear bits and the sector was erased already this session, so the old
+                    # contents cannot be written back (the first version of this test, against a fake that
+                    # overwrote, believed they were). The tool says so and a re-run fixes it.
+                    self.assertNotIn("putting the old contents back", p.stdout)
+                    self.assertIn("run", p.stderr)
+                    self.assertNotEqual(now[bad:bad + size], self.nor0[bad:bad + size])    # still wrong, honestly reported
+                    os.remove(os.path.join(self.radio, "faults.json"))
+                    os.remove(os.path.join(self.box, "undo.img"))
+                    self.restore("--write")
+                    self.assertEqual(self.nor_now()[:SLOT * SLOTS], self.nor0[:SLOT * SLOTS])   # the re-run repairs it
+                    os.remove(os.path.join(self.box, "undo.img"))
+                else:
+                    self.assertEqual(now[bad:bad + size], wiped[bad:bad + size])           # that record was put back
+                    os.remove(os.path.join(self.box, "undo.img"))
                 wb(os.path.join(self.radio, "log.txt"), b"")
 
     def test_cable_pulled_mid_restore_then_rerun_completes_everything(self):

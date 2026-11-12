@@ -215,8 +215,8 @@ class Install(Box):
         self.build()
         # a fake that flips one byte of the second chunk as it stores it: patch the copy in the box
         src = rb(os.path.join(self.box, "serial.py")).decode()
-        src = src.replace("self.nor[base + addr:base + addr + 512] = data\n            self._persist()\n            return self._reply(cmd, addr)\n        if cmd == READ_LOGO",
-                          "self.nor[base + addr:base + addr + 512] = data\n            if addr == 512:\n                self.nor[base + addr] ^= 0xFF\n            self._persist()\n            return self._reply(cmd, addr)\n        if cmd == READ_LOGO")
+        src = src.replace("self._program(base + addr, data)\n        self._persist()",
+                          "self._program(base + addr, data)\n        if addr == 512:\n            self.nor[base + addr] ^= 0xFF\n        self._persist()")
         self.assertIn("addr == 512", src, "the fake changed: update this test")
         wt(os.path.join(self.box, "serial.py"), src)
         p = self.tool("install", "FAKE", os.path.join(self.box, "s.fmst"), ok=False)
@@ -244,8 +244,13 @@ class Port(Box):
                            (0xFE00, b"\x00" * 512)):
             frame, fake = self.frame(0x46, addr, data)
             s = fake.Serial("FAKE")
+            s.write(fake.HANDSHAKE)                  # the radio only takes frames inside a session
+            self.assertEqual(s.read(1), b"\x06")
             s.write(frame)
             reply = bytes(s._rx)
+            if len(data) > 512:     # frame.rs: an oversized frame is dropped without a reply (the host sees silence)
+                self.assertEqual(reply, b"", f"{addr:#x}+{len(data)}")
+                continue
             self.assertEqual(reply[1], 0xEE, f"{addr:#x}+{len(data)} must be refused")
         self.assertEqual(self.nor_now(), self.nor0)
 
@@ -254,6 +259,8 @@ class Port(Box):
         os.environ["FAKE_RADIO_DIR"] = self.radio
         frame, fake = self.frame(0x46, 0, b"\xab" * 512)
         s = fake.Serial("FAKE")
+        s.write(fake.HANDSHAKE)
+        self.assertEqual(s.read(1), b"\x06")
         s.write(frame)
         now = self.nor_now()
         self.assertEqual(now[TBL:TBL + 512], b"\xab" * 512)
@@ -288,8 +295,8 @@ class Constants(unittest.TestCase):
         self.assertEqual(self.num(core, "FM_STATION_ADDR"), fm.ADDR)
         self.assertEqual(self.num(core, "FM_STATION_TABLE"), fm.SIZE)
         self.assertEqual(self.num(frame, "CMD_FM_WRITE"), fm.CMD_FM_WRITE)
-        self.assertIn("base, size = 0x1D8000, 0x2000", fake)
-        self.assertIn("cmd == 0x46", fake)
+        self.assertIn("FMTAB_BASE, FMTAB_SIZE = 0x1D8000, 0x2000", fake)
+        self.assertIn("FM_WRITE = 0x46", fake)
         self.assertEqual(fm.ADDR % 0x1000, 0)
         # clear of the neighbours listed in flash_map.rs's map: FSK PROBE capture to 0x1D0000, extras from 0x1E0000
         self.assertTrue(0x1D0000 <= fm.ADDR and fm.ADDR + fm.SIZE <= 0x1E0000)
