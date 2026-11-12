@@ -60,6 +60,12 @@ RULES = [
     ("firmware/firmware-source/src/ui/list.rs", {"sim"}),
     ("firmware/firmware-source/src/ui/toast.rs", {"sim"}),
     ("firmware/firmware-source/src/app/group_table.rs", {"sim", "tools"}),   # channel_plan.py reads it too
+    # The fakes are checked against the core source they copy (docs/TEST-DOUBLES.md): test_fake_fidelity.py reads the
+    # settings clamps and defaults, the simulator include_str!s them and the keypad's long-press table, and test_hil.py
+    # reads the keypad's long-press and repeat timing.
+    ("firmware/firmware-source/src/flash_map.rs", {"sim", "tools"}),
+    ("firmware/firmware-source/src/app/keyfn.rs", {"sim", "tools"}),
+    ("firmware/firmware-source/src/device/keypad.rs", {"sim", "hil"}),
 
     # --- overlay apps: mkapp.py builds apps/<name> (+ abi); the images job builds hamtools x4 styles and fskprobe --
     # Every app directory counts, including ones the CI step does not build today, so adding one to CI cannot be missed.

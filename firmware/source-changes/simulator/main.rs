@@ -363,12 +363,23 @@ fn nor_clear() {
     nor().iter_mut().for_each(|b| *b = 0xFF);
 }
 
+/// overlay.rs `in_chip`: the core refuses any range that is not wholly inside the 2 MB chip (it would wrap in the 24-bit
+/// SPI address and land in the channel table), for reads, writes and erases alike.
+fn in_chip(addr: u32, len: u32) -> bool {
+    addr as u64 + len as u64 <= 0x20_0000
+}
 extern "C" fn nor_read(addr: u32, out: *mut u8, len: u32) -> bool {
+    if out.is_null() || !in_chip(addr, len) {
+        return false;
+    }
     let s = &nor()[addr as usize..(addr + len) as usize];
     unsafe { std::ptr::copy_nonoverlapping(s.as_ptr(), out, len as usize) };
     true
 }
 extern "C" fn nor_write(addr: u32, data: *const u8, len: u32) -> bool {
+    if data.is_null() || !in_chip(addr, len) {
+        return false;
+    }
     // The only flash apps may write: TEXT's log, FSK PROBE's capture range and the FM station table.
     let end = addr as u64 + len as u64;
     assert!(
@@ -385,6 +396,9 @@ extern "C" fn nor_write(addr: u32, data: *const u8, len: u32) -> bool {
     true
 }
 extern "C" fn nor_erase(addr: u32) -> bool {
+    if !in_chip(addr, 1) {
+        return false;
+    }
     assert!(
         (0x1F_0000..0x1F_4000).contains(&addr)
             || (0x1B_0000..0x1D_0000).contains(&addr)
@@ -424,9 +438,16 @@ fn fm_tuner() -> &'static mut FmTuner {
 fn fm_reset() {
     *fm_tuner() = FmTuner { khz: 100_000, seeking: None, done: false, failed: false, core_list: Vec::new() };
 }
+/// drivers/rda5807.rs: the tuner has 100 kHz steps from 76.0 MHz (65.0 MHz below that); the channel field is 10 bits and
+/// a frequency under the band base saturates to it. What the app reads back (`fm_tuned_freq_khz`) is that quantised value.
+fn fm_quantise(khz: u32) -> u32 {
+    let base = if khz >= 76_000 { 76_000 } else { 65_000 };
+    let chan = (khz.saturating_sub(base) / 100) & 0x3FF;
+    base + chan * 100
+}
 extern "C" fn fm_tune(khz: u32) {
     let t = fm_tuner();
-    t.khz = khz;
+    t.khz = fm_quantise(khz);
     t.seeking = None;
 }
 extern "C" fn fm_seek(up: bool) {
@@ -472,8 +493,13 @@ extern "C" fn fm_load(out: *mut u8, len: u16) -> bool {
 extern "C" fn fm_save(_: *const u8, _: u16) -> bool {
     panic!("the FM app saves its stations in its own flash table, not through fm_channels_save");
 }
-extern "C" fn chan_read(num: u16, out: *mut u8, _len: u16) -> bool {
-    match sim().chans.get(&num) {
+/// overlay.rs api_chan_read: false when the buffer is under 32 bytes, the channel is past 999 (checked since the audit:
+/// it used to read other flash as a channel) or the slot is erased (all 0xFF).
+extern "C" fn chan_read(num: u16, out: *mut u8, len: u16) -> bool {
+    if len < 32 || out.is_null() || num > 999 {
+        return false;
+    }
+    match sim().chans.get(&num).filter(|r| r.iter().any(|&b| b != 0xFF)) {
         Some(r) => {
             unsafe { std::ptr::copy_nonoverlapping(r.as_ptr(), out, 32) };
             true
@@ -481,8 +507,14 @@ extern "C" fn chan_read(num: u16, out: *mut u8, _len: u16) -> bool {
         None => false,
     }
 }
-/// Observer position in 1e-5 degrees; None = not set (what the real firmware reports until entered).
-static mut COORDS: Option<(i32, i32)> = None;
+/// Observer position in 1e-5 degrees; None = not set (what the real firmware reports until entered). Lives in the settings record.
+fn set_coords(c: Option<(i32, i32)>) {
+    let (la, lo) = c.unwrap_or((i32::MAX, i32::MAX));
+    unsafe {
+        SETTINGS[32..36].copy_from_slice(&la.to_le_bytes());
+        SETTINGS[36..40].copy_from_slice(&lo.to_le_bytes());
+    }
+}
 static mut BACKLIGHT_HOLD: bool = false;
 extern "C" fn backlight_hold(on: bool) {
     unsafe { BACKLIGHT_HOLD = on };
@@ -528,19 +560,31 @@ extern "C" fn list_hint(text: *const u8, len: u16) {
     assert!(s.len() <= 26 && s.is_ascii(), "list hint must be at most 26 ASCII characters: {s:?}");
     unsafe { LIST_HINT = s.to_string() };
 }
+/// overlay.rs api_settings_get: ids 0-6 are fields of the live record, 7 the RF chip id (the mock reports 0: unknown).
+/// 5 and 6 are the observer position, which scenario step `coords` writes into the record.
 extern "C" fn settings_get(id: u16) -> u32 {
+    let r = unsafe { &SETTINGS };
+    let i32_at = |o: usize| i32::from_le_bytes([r[o], r[o + 1], r[o + 2], r[o + 3]]) as u32;
     match id {
-        0 => 3,
-        5 => unsafe { COORDS.map_or(i32::MAX, |c| c.0) as u32 },
-        6 => unsafe { COORDS.map_or(i32::MAX, |c| c.1) as u32 },
+        0 => r[0] as u32,
+        1 => r[8] as u32,
+        2 => (r[6] != 0) as u32,
+        3 => r[7] as u32,
+        4 => (r[9] != 0) as u32,
+        5 => i32_at(32),
+        6 => i32_at(36),
         _ => 0,
     }
 }
 extern "C" fn app_fault(line: u32) -> ! {
     panic!("app fault {line}");
 }
+/// overlay.rs api_chan_write: refuses a null buffer, a channel past 999 and a length under 32 (returns false; apps
+/// that ignore the result, like CHAN MGR, would show a save that did not happen).
 extern "C" fn chan_write(num: u16, buf: *const u8, len: u16) -> bool {
-    assert_eq!(len, 32);
+    if buf.is_null() || num > 999 || len < 32 {
+        return false;
+    }
     let mut r = [0u8; 32];
     unsafe { std::ptr::copy_nonoverlapping(buf, r.as_mut_ptr(), 32) };
     if r.iter().all(|&b| b == 0xFF) {
@@ -760,22 +804,80 @@ extern "C" fn tune_cand(hz: u32, _: bool) {
 extern "C" fn save_vfo(hz: u32, code: u16) {
     sim().vfo_saved = Some((hz, code));
 }
-/// Settings record (168 bytes) and side-key config (14 bytes). UNVERIFIED MODEL: starts all zero, which is
-/// good enough to lay out and navigate the screens but is not the firmware's real default record.
-static mut SETTINGS: [u8; 168] = [0; 168];
+/// Settings record (168 bytes), as the core keeps it: `Settings::from_bytes` (flash_map.rs) clamps every field on the way in
+/// and the record starts as `Settings::DEFAULT`. The earlier mock started all zero and stored whatever it was given, so an
+/// app that committed a value the core clamps (a VOX level of 0, a key function past the last) saw it read back unchanged.
+/// This table is the one in tests/fakeserial/serial.py (SETTINGS_RULES); tests/test_fake_fidelity.py checks both against
+/// flash_map.rs. (offset, rule, a, b): "bool" = nonzero -> 1, "min" = min(v, a), "clamp" = clamp(v, a, b).
+const SETTINGS_RULES: &[(usize, &str, u8, u8)] = &[
+    (1, "bool", 0, 0), (2, "bool", 0, 0), (3, "bool", 0, 0), (4, "min", 3, 0), (5, "bool", 0, 0), (6, "bool", 0, 0),
+    (7, "clamp", 1, 9), (9, "bool", 0, 0), (10, "min", 2, 0), (12, "min", 3, 0), (13, "min", 2, 0), (15, "min", 4, 0),
+    (16, "min", 4, 0), (17, "min", 2, 0), (18, "bool", 0, 0), (19, "min", 10, 0), (20, "min", 15, 0),
+    (23, "min", 19, 0), (24, "min", 19, 0), (25, "min", 19, 0), (26, "min", 19, 0), (27, "min", 19, 0), (28, "min", 19, 0),
+    (29, "min", 9, 0), (30, "min", 2, 0), (31, "bool", 0, 0),
+];
+fn normalize_settings(b: &mut [u8; 168]) {
+    for &(off, rule, a, hi) in SETTINGS_RULES {
+        b[off] = match rule {
+            "bool" => (b[off] != 0) as u8,
+            "min" => b[off].min(a),
+            _ => b[off].clamp(a, hi),
+        };
+    }
+    b[14] = ((b[14] as i8).clamp(-127, 127)) as u8;
+    for (off, limit) in [(32usize, 9_000_000i32), (36, 18_000_000)] {
+        let v = i32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]]);
+        if !(-limit..=limit).contains(&v) {
+            b[off..off + 4].copy_from_slice(&i32::MAX.to_le_bytes());
+        }
+    }
+}
+/// `Settings::DEFAULT.to_bytes()`.
+const fn default_settings() -> [u8; 168] {
+    let mut b = [0u8; 168];
+    let set = [(0, 3), (1, 1), (3, 1), (7, 1), (8, 8), (9, 1), (12, 2), (13, 1), (16, 2), (17, 2), (20, 5), (23, 5), (25, 8),
+               (27, 6), (29, 1), (30, 2), (31, 1)];
+    let mut i = 0;
+    while i < set.len() {
+        b[set[i].0] = set[i].1;
+        i += 1;
+    }
+    b[21] = (2537 & 0xFF) as u8;
+    b[22] = (2537 >> 8) as u8;
+    let mut k = 0;
+    while k < 8 {
+        b[32 + k] = [0xFF, 0xFF, 0xFF, 0x7F][k % 4];
+        k += 1;
+    }
+    let tune = [(1, 4), (13, 4), (20, 4), (25, 4), (32, 4), (37, 10)];
+    let mut t = 0;
+    while t < tune.len() {
+        b[72 + t * 2] = tune[t].0;
+        b[73 + t * 2] = tune[t].1;
+        t += 1;
+    }
+    b
+}
+static mut SETTINGS: [u8; 168] = default_settings();
 static mut SIDE_CFG: [u8; 14] = [0; 14];
+/// overlay.rs api_settings_read: a buffer of at least 168 bytes (the mock used to insist on exactly 168).
 extern "C" fn settings_read(b: *mut u8, len: u16) -> bool {
-    if len as usize != 168 {
+    if b.is_null() || (len as usize) < 168 {
         return false;
     }
     unsafe { std::ptr::copy_nonoverlapping(SETTINGS.as_ptr(), b, 168) };
     true
 }
+/// overlay.rs api_settings_preview / commit: parse (clamp), apply. Commit also stores; preview only changes what is live
+/// (the mock has no separate stored copy, so a preview followed by a power cycle is not modelled).
 extern "C" fn settings_w(b: *const u8, len: u16) -> bool {
-    if len as usize != 168 {
+    if b.is_null() || (len as usize) < 168 {
         return false;
     }
-    unsafe { std::ptr::copy_nonoverlapping(b, SETTINGS.as_mut_ptr(), 168) };
+    let mut rec = [0u8; 168];
+    unsafe { std::ptr::copy_nonoverlapping(b, rec.as_mut_ptr(), 168) };
+    normalize_settings(&mut rec);
+    unsafe { SETTINGS = rec };
     true
 }
 extern "C" fn side_read(b: *mut u8, len: u16) -> bool {
@@ -915,16 +1017,66 @@ fn run(app: Entry, secs: u32) {
     }
 }
 
-fn press(app: Entry, id: u8) -> bool {
-    let r = app(&API, AppEvent::Key { id, kind: 2 });
-    app(&API, AppEvent::Draw);
-    matches!(r, AppResult::Exit)
+/// Key events as the core hands them to an app (device/keypad.rs `KeyEventKind`, passed as `ev.kind as u8`).
+/// The earlier simulator sent only Single and Long, and a Long for any key; the keypad sends Press on the way
+/// down, a Single when a key that did not long-press is released, then Release, and only some keys ever send Long.
+const K_PRESS: u8 = 0;
+const K_RELEASE: u8 = 1;
+const K_SINGLE: u8 = 2;
+const K_LONG: u8 = 3;
+const K_REPEAT: u8 = 4;
+
+/// device/keypad.rs `supports_long` (KeyId numbers: digits 0-9, `*` 10, `#` 11, Menu 12, Exit 13, Up 14, Down 15,
+/// VM 16, A/B 17, Band 18, Side1 19, Side2 20). MENU is not on the list, so no app can ever see a long MENU on the
+/// radio. A test below checks this table against the source.
+pub(crate) fn keypad_long(id: u8) -> bool {
+    matches!(id, 0 | 10 | 11 | 13 | 14 | 15 | 16 | 18 | 19 | 20)
+}
+/// device/keypad.rs `supports_repeat`.
+pub(crate) fn keypad_repeat(id: u8) -> bool {
+    matches!(id, 14 | 15)
 }
 
-fn hold(app: Entry, id: u8) -> bool {
-    let r = app(&API, AppEvent::Key { id, kind: 3 });
+/// Sends the events in order and stops as soon as the app asks to leave (the core stops routing to it).
+fn key_events(app: Entry, id: u8, kinds: &[u8]) -> bool {
+    let mut exit = false;
+    for &kind in kinds {
+        // overlay.rs dispatch_key does not hand Press or Release to apps; SIM_RAW_KEYS=1 sends them anyway, to exercise
+        // the apps' own guards against them (run the scenarios both ways after touching an app's key handler).
+        if kind < K_SINGLE && std::env::var_os("SIM_RAW_KEYS").is_none() {
+            continue;
+        }
+        exit = matches!(app(&API, AppEvent::Key { id, kind }), AppResult::Exit);
+        if exit {
+            break;
+        }
+    }
     app(&API, AppEvent::Draw);
-    matches!(r, AppResult::Exit)
+    exit
+}
+
+/// A short press: Press, then Single and Release when the key goes up.
+fn press(app: Entry, id: u8) -> bool {
+    key_events(app, id, &[K_PRESS, K_SINGLE, K_RELEASE])
+}
+
+/// Holding a key for a second or so: Press, Long (only on keys that have one; on any other key nothing happens
+/// until it is released and then it is a plain Single), Release.
+fn hold(app: Entry, id: u8) -> bool {
+    if keypad_long(id) {
+        key_events(app, id, &[K_PRESS, K_LONG, K_RELEASE])
+    } else {
+        key_events(app, id, &[K_PRESS, K_SINGLE, K_RELEASE])
+    }
+}
+
+/// Holding Up or Down past 1.5 s: Press, Long, `n` Repeats (one per 100 ms), Release.
+fn hold_repeat(app: Entry, id: u8, n: u32) -> bool {
+    assert!(keypad_repeat(id), "the keypad only repeats Up and Down");
+    let mut kinds = vec![K_PRESS, K_LONG];
+    kinds.extend(std::iter::repeat(K_REPEAT).take(n as usize));
+    kinds.push(K_RELEASE);
+    key_events(app, id, &kinds)
 }
 
 fn screen_text() -> String {
@@ -943,6 +1095,8 @@ fn shot(name: &str) {
 }
 
 static mut FAILS: u32 = 0;
+/// Checks that cannot pass because the thing they test cannot happen on the radio (printed; never counted as passed).
+static mut SKIPPED: u32 = 0;
 static mut PASSES: u32 = 0;
 
 fn check(cond: bool, what: &str) {
@@ -1174,8 +1328,18 @@ fn test_sweep() {
 
     println!("Band Sweep: send to VFO for Spectrum");
     let selected = bandsweep::debug_selected_hz();
-    check(hold(app, 12), "holding Menu leaves");
-    check(sim().vfo_saved == Some((selected, 0)), "saved the selected frequency to VFO with no tone");
+    // KNOWN BUG (found by making the simulator send only the key events the keypad can send, TEST-DOUBLES.md): the
+    // keypad never emits a long press for MENU (device/keypad.rs `supports_long` has no Menu), so "hold MENU: open in
+    // Spectrum" cannot happen on the radio. The check below ran green for as long as the simulator invented the event.
+    // It is skipped, not deleted, and `known_gaps_are_still_gaps` (cargo test) fails once the keypad can send it.
+    if keypad_long(12) {
+        check(hold(app, 12), "holding Menu leaves");
+        check(sim().vfo_saved == Some((selected, 0)), "saved the selected frequency to VFO with no tone");
+    } else {
+        println!("  SKIP hold MENU sends the frequency to the VFO: the keypad has no long MENU (known bug, not a pass)");
+        unsafe { SKIPPED += 1 };
+        (API.save_master_vfo)(selected, 0); // what the key would have done, so the rest of the scenario still runs
+    }
     app(&API, AppEvent::Leave);
 
     println!("Band Sweep: airband");
@@ -1656,8 +1820,11 @@ fn test_search_qt() {
     sq_open(OUT);
     press(app, KEY_ONE);
     hold(app, KEY_ONE);
-    check(unsafe { SQ_SEG } == 1, "a long press doesn't switch");
-    for _ in 0..41 {
+    // The keypad has no long press for `1` (device/keypad.rs supports_long), so a held 1 is a plain press that acts when it is
+    // released: it switches back. This check used to say "a long press doesn't switch", which the simulator made true by
+    // sending an event the radio never sends.
+    check(unsafe { SQ_SEG } == 0 && unsafe { SQ_CHAINS } == 2, "holding 1 switches on release like any press (no long press exists for it)");
+    for _ in 0..40 {
         press(app, KEY_ONE);
         run(app, 1);
     }
@@ -2784,6 +2951,99 @@ fn test_fskprobe() {
     check(unsafe { RF_WRITES_REFUSED } == refused0, "never wrote a register outside the allow-list");
 }
 
+static mut SEEN: Vec<(u8, u8)> = Vec::new();
+static mut LEAVE_ON: Option<u8> = None;
+/// A stand-in app that records the key events it is handed (and can leave on one kind).
+fn recorder(_: &Api, ev: AppEvent) -> AppResult {
+    if let AppEvent::Key { id, kind } = ev {
+        unsafe {
+            SEEN.push((id, kind));
+            if LEAVE_ON == Some(kind) {
+                return AppResult::Exit;
+            }
+        }
+    }
+    AppResult::Continue
+}
+fn seen() -> Vec<u8> {
+    unsafe { std::mem::take(&mut SEEN).iter().map(|e| e.1).collect() }
+}
+
+/// The mock API against the core's `api_*` functions (firmware-source/src/app/overlay.rs), for the behaviours an app could
+/// otherwise depend on without the core providing them. docs/TEST-DOUBLES.md lists each with its source line.
+fn test_mock_fidelity() {
+    println!("Mock API: the core's refusals, clamps and key events");
+    reset(146_520_000);
+    let rec = [0x11u8; 32];
+    let mut out = [0u8; 32];
+    check(!(API.chan_write)(1000, rec.as_ptr(), 32), "chan_write refuses channel 1000 (the table ends at 999)");
+    check(!(API.chan_write)(5, rec.as_ptr(), 31), "chan_write refuses a buffer under 32 bytes");
+    check((API.chan_write)(5, rec.as_ptr(), 32), "chan_write takes a whole record");
+    check((API.chan_read)(5, out.as_mut_ptr(), 32) && out == rec, "chan_read returns what was written");
+    check(!(API.chan_read)(5, out.as_mut_ptr(), 31), "chan_read refuses a buffer under 32 bytes");
+    check(!(API.chan_read)(6, out.as_mut_ptr(), 32), "chan_read is false for an empty slot");
+    sim().chans.insert(7, [0xFF; 32]);
+    check(!(API.chan_read)(7, out.as_mut_ptr(), 32), "a slot that holds only 0xFF is empty, not a channel");
+    sim().chans.insert(1000, [0x11; 32]);
+    check(!(API.chan_read)(1000, out.as_mut_ptr(), 32), "chan_read refuses channel 1000 as chan_write does (overlay.rs bound)");
+
+    (API.fm_tune_khz)(94_550);
+    check((API.fm_tuned_freq_khz)() == 94_500, "the FM tuner steps by 100 kHz: 94.55 reads back as 94.5");
+    (API.fm_tune_khz)(60_000);
+    check((API.fm_tuned_freq_khz)() == 65_000, "below 65 MHz the tuner sits at its low band edge");
+    (API.fm_tune_khz)(64_999);
+    check((API.fm_tuned_freq_khz)() == 65_000, "64.999 MHz is below the 76 MHz band: the 65 MHz band, channel 0");
+
+    let mut s = [0u8; 168];
+    check((API.settings_read)(s.as_mut_ptr(), 168), "settings_read");
+    check(s[3] == 1 && s[8] == 8 && s[7] == 1, "a fresh radio holds the default record (TX inhibit on, TOT 8, VOX level 1)");
+    s[7] = 0;
+    s[4] = 9;
+    s[23] = 250;
+    s[14] = 0x80;
+    s[32..36].copy_from_slice(&99_000_000i32.to_le_bytes());
+    check((API.settings_commit)(s.as_ptr(), 168), "settings_commit");
+    let mut back = [0u8; 168];
+    (API.settings_read)(back.as_mut_ptr(), 168);
+    check(back[7] == 1 && back[4] == 3 && back[23] == 19 && back[14] == 0x81, "the core clamps a committed record (Settings::from_bytes)");
+    check((API.settings_get)(3) == 1 && (API.settings_get)(5) == i32::MAX as u32, "settings_get reads the live record, out-of-range position is unset");
+    check(!(API.settings_commit)(s.as_ptr(), 167), "settings_commit refuses a buffer under 168 bytes");
+    let mut big = [0u8; 200];
+    check((API.settings_read)(big.as_mut_ptr(), 200), "settings_read takes a larger buffer");
+
+    unsafe { SEEN.clear(); LEAVE_ON = None };
+    press(recorder, 5);
+    // The core's dispatch_key drops Press and Release; without SIM_RAW_KEYS the mock does the same.
+    let raw = std::env::var_os("SIM_RAW_KEYS").is_some();
+    let (pre, post): (&[u8], &[u8]) = if raw { (&[K_PRESS], &[K_RELEASE]) } else { (&[], &[]) };
+    let with = |mid: &[u8]| [pre, mid, post].concat();
+    let _ = seen();
+    press(recorder, 5);
+    check(seen() == with(&[K_SINGLE]), "a short press reaches the app as a Single");
+    hold(recorder, 14);
+    check(seen() == with(&[K_LONG]), "holding Up is a Long");
+    hold(recorder, 1);
+    check(seen() == with(&[K_SINGLE]), "holding 1 never sends a Long: it is a Single on release");
+    hold(recorder, 12);
+    check(seen() == with(&[K_SINGLE]), "holding MENU never sends a Long either");
+    hold_repeat(recorder, 15, 3);
+    check(seen() == with(&[K_LONG, K_REPEAT, K_REPEAT, K_REPEAT]), "holding Down past 1.5 s repeats");
+    unsafe { LEAVE_ON = Some(K_SINGLE) };
+    check(press(recorder, 13), "an app that leaves on Single ...");
+    check(seen() == [pre, &[K_SINGLE][..]].concat(), "... gets no Release afterwards");
+    unsafe { LEAVE_ON = None };
+
+    // flash bounds (overlay.rs in_chip): nothing that is not wholly inside the 2 MB chip
+    let mut b = [0u8; 4];
+    check(!(API.nor_read)(0x1F_FFFE, b.as_mut_ptr(), 4), "nor_read refuses a range that runs past the chip");
+    check(!(API.nor_read)(u32::MAX - 1, b.as_mut_ptr(), 4), "nor_read refuses an address sum that overflows u32");
+    check(!(API.nor_write)(0x20_0000, b.as_ptr(), 4), "nor_write refuses the first address past the chip (it would wrap to channel 0)");
+    check(!(API.nor_write)(0x1F_FFFE, b.as_ptr(), 4), "nor_write refuses a write that runs past the chip");
+    check(!(API.nor_erase_sector)(0x20_0000), "nor_erase_sector refuses an address past the chip");
+    check(!(API.nor_erase_sector)(0xFFFF_F000), "nor_erase_sector refuses a high address");
+    check((API.nor_read)(0x1F_FFFC, b.as_mut_ptr(), 4), "nor_read takes the last four bytes of the chip");
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("bootcard") {
@@ -2809,11 +3069,121 @@ fn main() {
     test_fskprobe();
     test_menus();
     test_rf_api();
+    test_mock_fidelity();
     check(unsafe { TONE_ON_CALLS } == 0, "no app called the transmitting tone function");
     unsafe {
-        println!("\n{} passed, {} failed", PASSES, FAILS);
+        println!("\n{} passed, {} failed, {} skipped (known bugs)", PASSES, FAILS, SKIPPED);
         if FAILS > 0 {
             std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(test)]
+mod fidelity_tests {
+    //! The mock's copies of core tables, checked against the core source they were copied from.
+    use super::*;
+
+    const KEYPAD: &str = include_str!("../../firmware-source/src/device/keypad.rs");
+    const FLASH_MAP: &str = include_str!("../../firmware-source/src/flash_map.rs");
+    const KEYFN: &str = include_str!("../../firmware-source/src/app/keyfn.rs");
+
+    fn between<'a>(s: &'a str, from: &str, to: &str) -> &'a str {
+        let a = s.find(from).unwrap_or_else(|| panic!("`{from}` not found"));
+        let b = a + s[a..].find(to).unwrap_or_else(|| panic!("`{to}` not found"));
+        &s[a..b]
+    }
+
+    fn key_names() -> Vec<String> {
+        between(KEYPAD, "pub enum KeyId {", "}")
+            .lines()
+            .skip(1)
+            .map(|l| l.trim().trim_end_matches(',').to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+
+    fn ids_in(body: &str) -> Vec<u8> {
+        let names = key_names();
+        let mut out: Vec<u8> = body
+            .split("KeyId::")
+            .skip(1)
+            .map(|t| {
+                let n: String = t.chars().take_while(|c| c.is_alphanumeric()).collect();
+                names.iter().position(|x| *x == n).unwrap_or_else(|| panic!("unknown key {n}")) as u8
+            })
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn key_numbers_match_the_core_enum() {
+        let names = key_names();
+        for (id, name) in [(0, "Digit0"), (10, "Asterisk"), (11, "Pound"), (12, "Menu"), (13, "Exit"), (14, "Up"), (15, "Down"), (17, "Ab")] {
+            assert_eq!(names[id], name);
+        }
+    }
+
+    #[test]
+    fn keypad_tables_match_the_core() {
+        let long = ids_in(between(KEYPAD, "fn supports_long", "fn supports_repeat"));
+        let rep = ids_in(between(KEYPAD, "fn supports_repeat", "}"));
+        assert_eq!((0..=20).filter(|&i| keypad_long(i)).collect::<Vec<u8>>(), long, "keypad_long drifted from keypad.rs supports_long");
+        assert_eq!((0..=20).filter(|&i| keypad_repeat(i)).collect::<Vec<u8>>(), rep, "keypad_repeat drifted from keypad.rs supports_repeat");
+    }
+
+    /// When this fails the keypad can send a long MENU: remove the skip in `test_sweep` and the mode menu's note.
+    #[test]
+    fn known_gaps_are_still_gaps() {
+        assert!(!keypad_long(12), "the keypad now sends a long MENU: un-skip `hold MENU` in test_sweep (main.rs)");
+    }
+
+    #[test]
+    fn settings_rules_match_flash_map() {
+        let body = between(FLASH_MAP, "pub fn from_bytes(buf: &[u8; SETTINGS_BYTES])", "pub fn to_bytes(self) -> [u8; SETTINGS_BYTES]");
+        let keyfn: u8 = between(KEYFN, "pub const KEYFN_MAX: u8 = ", ";")["pub const KEYFN_MAX: u8 = ".len()..].trim().parse().unwrap();
+        let mut want: Vec<(usize, String, u8, u8)> = Vec::new();
+        for line in body.lines() {
+            let Some(p) = line.find("buf[") else { continue };
+            let after = &line[p + 4..];
+            let Some((idx, rule)) = after.split_once(']') else { continue };
+            let Ok(off) = idx.parse::<usize>() else { continue };
+            if off == 14 {
+                continue; // rit_offset is signed: checked by the unit test of the fake
+            }
+            let r = rule.trim_start();
+            if r.starts_with("!= 0") {
+                want.push((off, "bool".into(), 0, 0));
+            } else if let Some(a) = r.strip_prefix(".min(") {
+                let a = a.split(')').next().unwrap();
+                want.push((off, "min".into(), if a.contains("KEYFN_MAX") { keyfn } else { a.trim().parse().unwrap() }, 0));
+            } else if let Some(a) = r.strip_prefix(".clamp(") {
+                let mut it = a.split(')').next().unwrap().split(',');
+                want.push((off, "clamp".into(), it.next().unwrap().trim().parse().unwrap(), it.next().unwrap().trim().parse().unwrap()));
+            }
+        }
+        want.sort();
+        want.dedup();
+        let mut have: Vec<(usize, String, u8, u8)> = SETTINGS_RULES.iter().map(|&(o, r, a, b)| (o, r.to_string(), a, b)).collect();
+        have.sort();
+        assert_eq!(have, want, "the mock's SETTINGS_RULES drifted from Settings::from_bytes in flash_map.rs");
+    }
+
+    #[test]
+    fn default_record_matches_flash_map() {
+        let d = between(FLASH_MAP, "pub const DEFAULT: Settings", "pub fn from_bytes(buf: &[u8; SETTINGS_BYTES])");
+        let rec = default_settings();
+        for (field, off) in [("sql_level", 0), ("vox_level", 7), ("tot_level", 8), ("rtone", 12), ("scan_mode", 13), ("backlight_time", 16),
+                             ("channel_display_mode", 17), ("vox_delay", 20), ("side1_short", 23), ("side2_short", 25), ("band_short", 27),
+                             ("band_lock", 29), ("boot_display_mode", 30)] {
+            let line = d.lines().find(|l| l.trim_start().starts_with(&format!("{field}:"))).unwrap_or_else(|| panic!("{field}"));
+            let digits: String = line.split(':').nth(1).unwrap().trim().chars().take_while(|c| c.is_ascii_digit()).collect();
+            assert_eq!(rec[off], digits.parse::<u8>().unwrap(), "{field}");
+        }
+        for (field, off) in [("tail_elimination", 1), ("tx_forbid", 3), ("beeps_switch", 9), ("boot_sound_enabled", 31)] {
+            let line = d.lines().find(|l| l.trim_start().starts_with(&format!("{field}:"))).unwrap();
+            assert_eq!(rec[off], line.contains("true") as u8, "{field}");
         }
     }
 }

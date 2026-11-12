@@ -183,6 +183,30 @@ class Transfer(Box):
         self.assertFalse(self.state()["ended"])
         self.assertEqual(self.state()["got"], 4)
 
+    # Unknown about the real bootloader (docs/TEST-DOUBLES.md): what a repeated package gets. flash_bf.py repeats the same
+    # frame when an ACK does not arrive in 2 s, so a lost ACK is survivable only if the bootloader acknowledges the repeat.
+    def test_a_lost_ack_is_survived_if_the_bootloader_acknowledges_a_repeat(self):
+        self.fault(lose_ack_at=2, duplicate_package="ack")
+        p = self.flash()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertEqual(crypt(self.flash_bytes()[:len(rb(self.bf)) - 16]), self.img)
+
+    def test_a_lost_ack_stops_the_flash_if_the_bootloader_answers_a_repeat_with_a_sequence_error(self):
+        self.fault(lose_ack_at=2, duplicate_package="e2")
+        p = self.flash()
+        self.assertNotEqual(p.returncode, 0)                    # the host gives up after five sequence errors ...
+        self.assertIn("sequence or length", p.stdout)
+        self.assertEqual(self.state()["got"], 3)                # ... with the package it could not confirm in fact stored
+        os.remove(os.path.join(self.bl, "faults.json"))
+        p = self.flash()                                        # and a rerun (the handshake restarts the transfer) completes
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
+    def test_end_that_is_never_answered_still_counts_as_flashed(self):
+        self.fault(no_end_reply=True)                           # the radio may reboot before it answers END
+        p = self.flash()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("radio likely rebooted", p.stdout)
+
     def test_silent_bootloader_fails_at_handshake(self):
         self.fault(silent=True)
         p = self.flash()

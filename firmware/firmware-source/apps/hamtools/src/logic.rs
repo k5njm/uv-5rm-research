@@ -508,6 +508,12 @@ fn busy(s: &State) -> bool {
 }
 
 fn key(s: &mut State, id: u8, kind: u8) -> AppResult {
+    // The core also hands apps Press (0) and Release (1) around every Single (device/keypad.rs, app/mod.rs poll_keys: all
+    // events are dispatched back to back). Acting on them here would clear the notice the Single just raised before it is
+    // ever drawn: found by making the simulator send them (docs/TEST-DOUBLES.md).
+    if kind < KIND_SINGLE {
+        return AppResult::Continue;
+    }
     s.note = b"";
     if id == KEY_EXIT {
         if kind == KIND_LONG || (kind == KIND_SINGLE && !busy(s)) {

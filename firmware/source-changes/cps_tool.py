@@ -70,6 +70,8 @@ class Cps:
             r = self._recv(time.monotonic() + timeout)
             if r is None:
                 continue
+            if r[0] == ERR and r[2][:1] == b"\x01":
+                continue   # ERR_BAD_CRC (frame.rs): the radio did not act on it; the frame was damaged on the way, send it again
             if r[0] == ERR:
                 raise SystemExit(f"RADIO REFUSED cmd {cmd:#x} addr {addr:#x}: error {r[2][:1].hex()}")
             return r
