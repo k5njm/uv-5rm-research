@@ -36,6 +36,13 @@ Even though the radio model is correct, Baofeng frequently updates internal PCB 
 
 5. Turn off the radio without pressing any other keys.
 
+### Result on the purchased radio (2026-11-11)
+* Hold-8 screen: **`5RHNRFB-YP07`**, `Ver: V0.13`. This is the string the `default` build is gated to.
+* Programming port (K-plug, CH340 cable, 115200 baud): ident reply `5RH     +L00000`; band limits 136-174, 400-520, 220-260 MHz.
+* Factory memory holds 22 test channels (452.125 MHz ... 258.925 MHz); backups are in the git-ignored `my-backup/`.
+* The KDH bootloader answers the flasher's handshake (two small side buttons held at power-on).
+* Not confirmable on stock firmware: the RF chip ID (FD6818B, 0x4829). Details: AUDIT 25.
+
 ### Physical Label Check
 - Remove the battery pack.
 - Inspect the specification sticker on the aluminum chassis:

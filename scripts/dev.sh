@@ -5,6 +5,7 @@
 #   sim          original simulator suite        unit       cargo test (app logic.rs tests)
 #   scenarios    [--update] classic + all styles apps       build every HAM TOOLS style with sizes
 #   firmware     build core firmware variants    hil-test   offline HIL pipeline tests
+#   bf           build the core variants and wrap them as flashable build-out/fw-*.BF (prints the sha256 flash_bf.py needs)
 #   hashes       [--update] compare/record sha256 of built images with firmware/expected-hashes.json
 #   manifest     write build-out/manifest.json describing the built images (web builder input)
 #   provenance   rebuild every shipped .app from source and compare bytes
@@ -74,6 +75,10 @@ _firmware_impl() {
       CARGO_TARGET_DIR=/cache/fwbk-$m bash tools/build_core.sh $m /work/build-out/fw-bk4819.bin bk4819; fi; \
     sha256sum /work/build-out/fw-*.bin"
 }
+cmd_bf() {
+  cmd_firmware >/dev/null
+  run "for v in default bk4819; do [ -f build-out/fw-\$v.bin ] && python3 -I firmware/source-changes/wrap_bf.py build-out/fw-\$v.bin build-out/fw-\$v.BF | sed \"s/^/\$v: /\"; done; sha256sum build-out/fw-*.bin build-out/fw-*.BF"
+}
 cmd_hil_test()  { run "python3 hil/test_hil.py > /tmp/hil.log 2>&1 || { tail -30 /tmp/hil.log; exit 1; }; tail -3 /tmp/hil.log"; }
 cmd_tools_test() { run "for t in firmware/tests/test_*.py; do echo \"-- \$t\"; python3 -W error::ResourceWarning \$t > /tmp/t.log 2>&1 || { tail -40 /tmp/t.log; exit 1; }; tail -3 /tmp/t.log | head -2; done"; }
 cmd_hashes()    { cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/pin_hashes.py build-out $*"; }
@@ -128,6 +133,6 @@ case "${1:-}" in
   image) image ;; shell) ensure_image
          docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "uv5rm-target-$ARCH_TAG":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
-  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; size-report) cmd_size_report ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
+  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; size-report) cmd_size_report ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; bf) cmd_bf ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
   *) sed -n '2,10p' "$0"; exit 1 ;;
 esac

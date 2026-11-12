@@ -1,8 +1,16 @@
 # First-flash runbook (read-only steps first)
 
-Status: **written before the radio exists; every tool below is tested only against fakes**
-(`scripts/dev.sh tools-test`). Anything marked UNVERIFIED has not met real hardware. Do the first flash
-on a radio you can afford to lose.
+Status: **steps 1-7 have been done on a real `5RHNRFB-YP07` (V0.13, 2026-11-11, AUDIT 25); nothing has been written to a
+radio yet.** Steps 8 onward and every write tool are still tested only against fakes (`scripts/dev.sh tools-test`). Anything
+marked UNVERIFIED has not met real hardware. Do the first flash on a radio you can afford to lose.
+
+## The cable
+The programming port is the two-pin K-plug (speaker/mic jacks), not USB-C. Use a cable sold for Baofeng (the one that worked
+has a CH340 chip). Before any software runs:
+* The radio must **not** go into transmit when the cable is plugged in. One for another radio did; unplug and do not use it.
+* Push the plug in until it is fully home. A half-seated plug echoes the computer's own bytes back (`ident ack: 50`) while
+  the radio still shows its computer icon; re-seat it and try again.
+* `radio_read.py` must print `ident ack: 06`. Anything else: stop.
 
 ## What is and is not recoverable
 | Thing | Recoverable? | How / why not |
@@ -21,18 +29,23 @@ on a radio you can afford to lose.
 1. Hold `8` while powering on. Photograph the screen. It must be exactly a string in `firmware/variants.json`
    (`5RHNRFB-YP07` -> `default`, `5RHBK` -> `bk4819`). Anything else: stop.
 2. Note the stock firmware version (`VER:` line). Use the listing's 180-day replacement window if the board is wrong.
-3. Save the stock channels with CHIRP (UV-17Pro-family driver) as a second, independent backup.
+3. Save the stock channels with CHIRP (`Baofeng_5RM` driver) as a second, independent backup. Without CHIRP installed:
+   `scripts/chirp-backup.sh PORT` runs CHIRP's command-line tool in a container (needs the cable, so do it with step 5).
 
 **B. Read-only, cable connected (stock firmware running)**
 4. `scripts/dev.sh check` passes; `scripts/dev.sh gate` passes.
 5. `python3 firmware/source-changes/radio_read.py PORT my-backup/factory_memory.img` (cannot write by construction).
 
 **C. Offline checks of the image (no radio)**
-6. `python3 firmware/source-changes/flash_bf.py IMAGE.BF PORT SHA --board <screen text> --variant <variant> --check-only`
+6. Make the `.BF`: CI publishes raw `.bin` images, the flasher takes a wrapped `.BF`. Either `scripts/dev.sh bf` (builds
+   and wraps; the `.bin` hashes must equal `firmware/expected-hashes.json`) or
+   `python3 firmware/source-changes/wrap_bf.py fw-default.bin fw-default.BF` on a downloaded CI image. Then
+   `python3 firmware/source-changes/flash_bf.py IMAGE.BF PORT SHA --board <screen text> --variant <variant> --check-only`
    Must print `board ... accepted` and `serial port not opened`. Use only a **CI-built** image; the committed `.BF` does not reproduce from source (AUDIT 6).
 
 **D. First write: needs the owner's explicit go**
-7. Enter flash mode (both side buttons), `bootloader_probe.py PORT` (handshake only).
+7. Enter flash mode: radio off, hold the **two small side buttons below PTT** (not PTT), power on. Then
+   `bootloader_probe.py PORT` (handshake only; must print `BOOTLOADER ANSWERED`). To leave without flashing, power-cycle.
 8. `flash_bf.py ... --board ... --variant ...` (no `--check-only`). Do not touch the radio or cable.
 9. After the radio restarts: `dump_nor.py PORT my-backup/cal-after-first-flash.bin --cal`; record the sha256 in your notes.
    After every later flash, dump again; the hashes must match. A change means something wrote calibration: stop.

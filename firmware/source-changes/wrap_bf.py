@@ -1,7 +1,10 @@
 """Wrap a raw app image as a one-region .BF, using the rule from uv5rm-wrap-tool's main.c.
 
 Packages 0, 1 and the last two stay plain; the rest XOR with KDHT/RBGI by index % 3.
-Checks the implementation against the factory images before trusting it.
+  wrap_bf.py IMAGE.bin OUT.BF [STOCK_DIR]
+
+With STOCK_DIR (factory .BF files, not in this repo) the transform is first checked against at least five factory
+images. Without it only the round trip of this image is checked, and the output says so.
 """
 import glob, os, struct, sys
 
@@ -29,22 +32,28 @@ def crypt(data):
     return bytes(out)
 
 
-image_path, out_path, stock_dir = sys.argv[1:4]
+if len(sys.argv) not in (3, 4):
+    raise SystemExit(__doc__)
+image_path, out_path = sys.argv[1:3]
+stock_dir = sys.argv[3] if len(sys.argv) == 4 else None
 
 # The transform must undo itself and turn factory files into real firmware.
-checked = 0
-for bf in sorted(glob.glob(os.path.join(stock_dir, "*", "*.BF"))):
-    raw = open(bf, "rb").read()
-    _, s1, _ = struct.unpack(">BLL", raw[:9])
-    enc = raw[16:16 + s1]
-    dec = crypt(enc)
-    assert crypt(dec) == enc, bf
-    sp, reset = struct.unpack("<II", dec[:8])
-    assert 0x20000000 < sp <= 0x20004000 and 0x08001000 < reset < 0x08010000, bf
-    assert b"PROGRAMBFNORMALU" in dec and b"VER:%s" in dec, bf
-    checked += 1
-assert checked >= 5, checked
-print("crypto verified against", checked, "factory images")
+if stock_dir is None:
+    print("factory images not supplied: transform checked by round trip only")
+else:
+    checked = 0
+    for bf in sorted(glob.glob(os.path.join(stock_dir, "*", "*.BF"))):
+        raw = open(bf, "rb").read()
+        _, s1, _ = struct.unpack(">BLL", raw[:9])
+        enc = raw[16:16 + s1]
+        dec = crypt(enc)
+        assert crypt(dec) == enc, bf
+        sp, reset = struct.unpack("<II", dec[:8])
+        assert 0x20000000 < sp <= 0x20004000 and 0x08001000 < reset < 0x08010000, bf
+        assert b"PROGRAMBFNORMALU" in dec and b"VER:%s" in dec, bf
+        checked += 1
+    assert checked >= 5, checked
+    print("crypto verified against", checked, "factory images")
 
 image = open(image_path, "rb").read()
 assert len(image) <= 0xF000, len(image)

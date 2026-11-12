@@ -25,6 +25,8 @@ Conventions for this repo (borrowed from the sibling `beepy-ui` project's workfl
 Build and test in the container, not on the host: `scripts/dev.sh check` (OrbStack/Docker; image in `dev/Dockerfile`, pinned Rust,
 cache volumes per architecture). Core firmware is always built under linux/amd64 emulation (the CI environment): the BK4819 image built on native arm64 differs from x86 (AUDIT 18). `scripts/dev.sh repro` builds both and requires everything to match except that one known image.
 Hardware-facing steps (flashing, serial, webcam, injector) cannot run in a container and stay on the host.
+`scripts/dev.sh bf` builds the core variants and wraps them as flashable `.BF` files. `scripts/chirp-backup.sh PORT` is the one
+exception to "serial stays on the host": CHIRP runs in a container and reaches the port through `scripts/serial_bridge.py` (loopback only).
 
 CI can be rehearsed locally before pushing (and when pushing is blocked): `scripts/ci-replay.sh verify|web` runs the workflow's own
 `run:` steps in a clean x86_64 Ubuntu container with a runner-like Rust (stable, no ARM target). It found nothing wrong after the
