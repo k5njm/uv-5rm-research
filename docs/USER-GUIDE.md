@@ -71,7 +71,10 @@ With the keypad locked, only `SIDE1`, `SIDE2` and a long press of `*` still work
 the keypad after 5, 10 or 15 seconds without a key press.
 
 While scanning, `UP` and `DOWN` change the scan direction, `BAND` stops the scan and opens CH GROUPS, and `EXIT` or a long
-press of `#` stops the scan. In memory mode the scan visits only the channels of the current group that have IN SCAN LIST set.
+press of `#` stops the scan. While it runs, the top left of the main screen reads `SCAN UP EXIT` or `SCAN DN EXIT` (just
+`SCAN UP` / `SCAN DN` when the PS, DWR or VOX flag leaves no room). There is no key that holds on a signal: what the scan does
+when it finds one is the SCAN RESUME setting (TIMED: stays 5 seconds then moves on; CARRIER: stays while the signal lasts, and
+5 seconds after; STOP: stops the scan on it). In memory mode the scan visits only the channels of the current group that have IN SCAN LIST set.
 
 ## The main screen
 
