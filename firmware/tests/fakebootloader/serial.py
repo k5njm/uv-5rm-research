@@ -10,6 +10,7 @@ Faults in $FAKE_BL_DIR/faults.json (persistent):
   {"silent": true}                   never answers (radio not in flash mode / cable out)
   {"die_after_packages": N}          stops answering after N accepted packages (cable pulled)
   {"flash_fail_at": SEQ}             answers E3 for that package
+  {"no_end_reply": true}             takes END and never answers it (the radio reboots first: flash_bf.py tolerates it)
   {"lose_ack_at": SEQ}               takes package SEQ but its ACK never reaches the host (once)
   {"duplicate_package": "e2"|"ack"}  what a repeat of the last accepted package gets. UNKNOWN for the real bootloader:
                                      "e2" (default) answers a sequence error, "ack" answers ACK and ignores it.
@@ -133,6 +134,9 @@ class Serial:
             if self.state["got"] != self.state["total"]:
                 return self._reply(0xE2, 0)
             self.state["ended"] = True
+            if f.get("no_end_reply"):
+                self._save()
+                return
         else:
             return self._reply(0xE5, 0)
         self._save()

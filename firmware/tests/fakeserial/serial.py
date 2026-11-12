@@ -36,6 +36,8 @@ Fault injection ($FAKE_RADIO_DIR/faults.json, consumed once each unless noted):
   {"corrupt_logo_write": true}      flip one byte of the next full logo write
   {"corrupt_settings_write": true}  flip one byte of the next settings write
   {"silent": true}                  never answer the handshake
+  {"garble_next_frame": true}       the next frame arrives with a bad CRC (a flipped bit on the cable): the radio answers
+                                    ERR 0x01 and does not act on it
   {"boot_delay_s": S}  (persistent) ignore everything until S seconds after the port was opened: the radio is
                                     still restarting from the previous session (the real time is unknown)
 """
@@ -125,18 +127,25 @@ def _dir():
 
 def _load(name, default):
     p = os.path.join(_dir(), name)
-    return open(p, "rb").read() if os.path.exists(p) else default
+    if not os.path.exists(p):
+        return default
+    with open(p, "rb") as f:
+        return f.read()
 
 
 def _faults():
     p = os.path.join(_dir(), "faults.json")
-    return json.load(open(p)) if os.path.exists(p) else {}
+    if not os.path.exists(p):
+        return {}
+    with open(p) as f:
+        return json.load(f)
 
 
 def _clear_fault(key):
     f = _faults()
     f.pop(key, None)
-    json.dump(f, open(os.path.join(_dir(), "faults.json"), "w"))
+    with open(os.path.join(_dir(), "faults.json"), "w") as fh:
+        json.dump(f, fh)
 
 
 class FrameReader:
@@ -204,12 +213,13 @@ class Serial:
 
     # ---- port surface ----
     def _note(self, s):
-        open(self.log, "a").write(s + "\n")
+        with open(self.log, "a") as f:
+            f.write(s + "\n")
 
     def _persist(self):
-        open(os.path.join(_dir(), "logo.bin"), "wb").write(self.logo)
-        open(os.path.join(_dir(), "settings.bin"), "wb").write(self.settings)
-        open(os.path.join(_dir(), "nor.bin"), "wb").write(self.nor)
+        for name, blob in (("logo.bin", self.logo), ("settings.bin", self.settings), ("nor.bin", self.nor)):
+            with open(os.path.join(_dir(), name), "wb") as f:
+                f.write(blob)
 
     def reset_input_buffer(self):
         self._rx.clear()
@@ -277,6 +287,10 @@ class Serial:
         self._reply(ERR, addr, bytes([code]))
 
     def _frame(self, r):
+        if r[0] == "frame" and _faults().get("garble_next_frame"):
+            _clear_fault("garble_next_frame")
+            self._note("fault: frame garbled in transit")
+            r = ("crc", r[2])
         if r[0] == "crc":
             return self._error(r[1], ERR_BAD_CRC)
         _, cmd, addr, data = r

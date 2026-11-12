@@ -73,6 +73,52 @@ class Radio(unittest.TestCase):
             return f.read()
 
 
+class Constants(Radio):
+    """The numbers the fake copies from cps/ and flash_map.rs: any change in the source fails here, not on the radio."""
+
+    @staticmethod
+    def consts(src):
+        out = {}
+        for name, expr in re.findall(r"const (\w+): [\w\[\]; ]+ = ([^;]+);", src):
+            e = expr.replace("_", "").strip()
+            if re.fullmatch(r"[0-9a-fA-Fx +*]+", e):
+                try:
+                    out[name] = eval(e)
+                except SyntaxError:
+                    pass
+        return out
+
+    def test_protocol_and_layout_constants_match_the_source(self):
+        frame = self.consts(text(SRC, "cps", "frame.rs"))
+        mod = self.consts(text(SRC, "cps", "mod.rs"))
+        fm = self.consts(text(SRC, "flash_map.rs"))
+        f = self.fake
+        for name, have in (("CMD_READ", f.READ), ("CMD_WRITE", f.WRITE), ("CMD_END", f.END), ("CMD_READ_LOGO", f.READ_LOGO),
+                           ("CMD_WRITE_LOGO", f.WRITE_LOGO), ("CMD_APP_ERASE", f.APP_ERASE), ("CMD_APP_WRITE", f.APP_WRITE),
+                           ("CMD_SAT_WRITE", f.SAT_WRITE), ("CMD_EXTRA_WRITE", f.EXTRA_WRITE), ("CMD_FM_WRITE", f.FM_WRITE),
+                           ("CMD_READ_FLASH_RAW", f.READ_RAW), ("CMD_ERROR", f.ERR), ("ERR_BAD_CRC", f.ERR_BAD_CRC),
+                           ("ERR_BAD_ADDR", f.ERR_BAD_ADDR), ("ERR_BAD_LEN", f.ERR_BAD_LEN), ("MAX_DATA", f.MAX_DATA),
+                           ("BOOT_LOGO_CHUNK", f.CHUNK), ("APP_CHUNK", f.CHUNK), ("SAT_CHUNK", f.CHUNK), ("HEADER", f.HEADER)):
+            self.assertEqual(frame[name], have, name)
+        self.assertEqual(mod["IDLE_TIMEOUT_MS"], int(f.IDLE_S * 1000))
+        self.assertEqual(mod["MAX_CHANNEL_NUM"], f.MAX_CHAN)
+        self.assertEqual(mod["SAT_TABLE_SIZE"], f.SAT_SIZE)
+        self.assertIn(b'HANDSHAKE: &[u8] = b"PROGRAMBF-5RH"', text(SRC, "cps", "mod.rs").encode())
+        self.assertEqual(f.HANDSHAKE, b"PROGRAMBF-5RH")
+        for name, have in (("VFO_INFO_ADDR", f.VFO_ADDR), ("RADIO_IMFOS_ADDR", f.SETTINGS_ADDR), ("DTMF_CODE_ADDR", f.CONTACT_ADDR),
+                           ("CONTACT_SIZE", f.CONTACT_SIZE), ("CONTACT_COUNT", f.CONTACTS), ("FM_ADDR", f.FM_ADDR),
+                           ("RMW_SCRATCH_ADDR", f.SCRATCH_ADDR), ("BOOT_LOGO_ADDR", f.LOGO_ADDR), ("OVERLAY_APP_ADDR", f.SLOT_BASE),
+                           ("OVERLAY_SLOT_SIZE", f.SLOT_SIZE), ("OVERLAY_SLOT_COUNT", f.SLOT_COUNT), ("CHAN_EXTRA_ADDR", f.EXTRA_BASE),
+                           ("CHAN_EXTRA_TABLE", f.EXTRA_SIZE), ("FM_STATION_ADDR", f.FMTAB_BASE), ("FM_STATION_TABLE", f.FMTAB_SIZE),
+                           ("CHAN_SIZE", f.CHAN_SIZE)):
+            self.assertEqual(fm[name], have, name)
+        self.assertEqual(f.SAT_BASE, fm["OVERLAY_APP_ADDR"] + fm["OVERLAY_SLOT_SIZE"] * fm["OVERLAY_SLOT_COUNT"])   # OVERLAY_DATA_ADDR
+        self.assertEqual(f.LOGO_SIZE, 160 * 128 * 2)
+        self.assertEqual(f.SETTINGS_BYTES, 168)
+        self.assertEqual(f.SECTOR, 4096)                                      # drivers/norflash.rs SECTOR_SIZE
+        self.assertIn("pub const SECTOR_SIZE: u32 = 4096;", text(SRC, "drivers", "norflash.rs"))
+
+
 class Session(Radio):
     def test_a_frame_before_the_handshake_is_not_answered(self):
         p = self.port()

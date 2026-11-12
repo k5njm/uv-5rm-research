@@ -114,6 +114,16 @@ class DumpNor(Box):
         self.assertIn("cmd not in (READ_RAW, END)", body)         # and the guard rejects anything else
         self.assertNotIn("Cps.send", body)
 
+    def test_a_frame_garbled_on_the_cable_is_sent_again(self):
+        # frame.rs answers a bad CRC with ERR 0x01 and does not act on the frame, so the host may repeat it. The first
+        # version of cps_tool.py took every ERR as a refusal and quit (the older fake never answered a bad CRC at all, it
+        # stayed silent, which the tool retried: the real radio's answer was never tested).
+        self.fault(garble_next_frame=True)
+        out = os.path.join(self.box, "cal.bin")
+        p = self.run_tool("dump_nor.py", "fake", out, "--cal")
+        self.assertEqual(rb(out), self.nor0[CAL_LO:CAL_HI])
+        self.assertIn("garbled", "\n".join(self.log()))
+
     def test_silent_radio_fails_cleanly(self):
         self.fault(silent=True)
         p = self.run_tool("dump_nor.py", "fake", os.path.join(self.box, "x.bin"), ok=False)
