@@ -35,7 +35,8 @@
 //!   expect exit|noexit  whether the LAST key made the app exit
 //!   expect reset|noreset  whether the app has asked for a factory reset (the radio would reboot: nothing follows `reset`)
 //!   expect backlight on|off   the app's backlight-hold request
-//!   expect cues N       speaker-only cue sequences played so far (api.play_cue); never keys PTT, checked automatically
+//!   expect speaker on|off   the speaker switch after the core's key beep (Single/Long, beeps on, audio not open: OFF) has run
+//!   expect cues N      speaker-only cue sequences played so far (api.play_cue); never keys PTT, checked automatically
 //!   expect fmlive N     live stations in the FM table, as the app would read it; `expect fmtable none` for no valid table
 //!   expect rfrefused N  RF register writes the core's allow-list refused
 //!   expect captured N   records FSK PROBE left in its flash capture range
@@ -532,6 +533,12 @@ impl Run<'_> {
             ["expect", "cues", n] => {
                 let got = unsafe { CUES.len() };
                 self.check(n.parse::<usize>().ok() == Some(got), &format!("{n} speaker cue(s) played (got {got})"));
+            }
+            ["expect", "speaker", v @ ("on" | "off")] => {
+                // the speaker switch as the core would leave it: after the key beep (a Single or Long key event with beeps
+                // on and audio not open switches it OFF), the app's own set_speaker / set_af_out, and the squelch poll
+                let on = unsafe { SPEAKER_ON };
+                self.check(on == (*v == "on"), &format!("speaker {v} (it is {})", if on { "on" } else { "off" }));
             }
             ["expect", "captured", n] => {
                 // FSK PROBE's capture as probe_capture.py would read it: a header, then records until an erased one

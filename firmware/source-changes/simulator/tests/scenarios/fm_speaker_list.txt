@@ -1,0 +1,40 @@
+# The list (tune from it, save, delete, cancel a delete) must leave the speaker on after each key beep.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 933 WBAP News/Talk
+fmstation 1011 WRR Classical
+handoff fm 920
+app fm
+wait 0.2
+expect speaker on
+# tune from the list: 920 is not saved, so row 0 is SAVE THIS and the stations follow
+key menu
+expect speaker on
+key down
+expect speaker on
+key menu
+expect speaker on
+# type an unsaved frequency (92.0), open the list on SAVE THIS and save it
+key 9
+key 2
+key 0
+expect speaker on
+key menu
+key menu
+expect speaker on
+# arm a delete, then cancel it with EXIT (the list stays open), then EXIT leaves the list
+key star
+expect speaker on
+key exit
+expect speaker on
+key exit
+expect speaker on
+# delete it for real
+key menu
+key star
+key menu
+expect speaker on
+key exit
+expect speaker on

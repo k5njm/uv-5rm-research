@@ -6,7 +6,7 @@ the chip, timing).
 
 ## Why this exists
 
-Four faults reached the owner's machine or radio because a stand-in was kinder than the thing it stood in for:
+Five faults reached the owner's machine or radio because a stand-in was kinder than the thing it stood in for:
 
 | # | What happened | The stand-in that was kinder |
 |---|---|---|
@@ -14,6 +14,7 @@ Four faults reached the owner's machine or radio because a stand-in was kinder t
 | 2 | The core's statics grew, the app arena moved, every app hung the radio (AUDIT 31); the first diagnosis read a stale ELF from the wrong architecture's cache | nothing in the simulator runs the core; apps run as host code |
 | 3 | FSK PROBE held the RX-FIFO clear bit and matched 16 bits of sync; scenarios showed packets arriving (AUDIT 44) | the mock modem delivered a word per interrupt whatever was written to its registers |
 | 4 | `scripts/dev.sh unit` and `check` passed on one machine and failed to compile for everyone else: a test fixture, `fm-stations.bin`, was hidden by the `*.bin` rule in `.gitignore` | the working tree (a local file git did not carry) |
+| 5 | After tuning with any key, the FM app played only a chirp: the core's key beep ends with `set_speaker(audio_open)` and `audio_open` is false while the RF chip is parked for FM, so every beep switched the speaker off; the app turned it on only at start and after a seek (AUDIT 55, found by the owner on the radio) | the simulator's mock `Api`: key events reached the app without the beep the core plays first, and `play_cue`, `set_af_out`, `set_monitor` and `enter_rx` did not touch any speaker or audio state |
 
 The audit below was done by reading each double next to the code it replaces. The dangerous class is **fake is more
 forgiving**: it accepts, ignores or succeeds where the real code refuses, erases, truncates, clamps, wraps, blocks or
@@ -156,13 +157,14 @@ behaviours below; the tables copied from the core are checked against the core s
 | `handoff_write` / `read` | 64 bytes, false above (`:1150-1180`) | same | same |
 | Group functions | the same `group_table.rs` | same | same |
 | `utc_get`/`set`, `battery_raw12_avg`, `read_rf_gains`, `fm_power_off`, `tx_state` bit 1 | real clock, ADC, gains, FM park/unpark, TX-prohibited bit | 0 / 0 / false / nop / bit 0 only | diff, not fixed (apps check `read_rf_gains` for false, so the true path is untested) |
-| `play_cue` | subject to the user's beep setting (`:1553`) | always recorded and played | diff |
+| `play_cue` | returns at once when beeps are off or `audio_open` is true; otherwise the speaker is OFF afterwards (`radio.rs:668-705`) | always recorded and played; now the same rules | **forgiving, fixed** (AUDIT 55) |
 | FM tuner | 100 kHz steps from 76 MHz (65 MHz below), channel field of 10 bits (`drivers/rda5807.rs:151-165`); readback is the quantised value | stored the frequency as given; now quantised | **forgiving, fixed** (an app showing 94.55 MHz reads 94.5) |
 | FM seek | asynchronous, flags in a status word; duration unknown | 200 ms, five stations on the air | unknown |
 | `fm_channels_save` / `load` | wear-levelled region | panics on save (the FM app keeps its own table) | stricter |
 | RF register access | allow-list from the ABI crate on writes, unrestricted reads (`:1530-1545`) | the same allow-list, same crate | same |
 | The modem | the chip | a model written from the register document (AUDIT 44); every unverified item in HARDWARE.md section 6 is still unverified | unknown |
 | Key events | `Press`, `Single` (on release, if no Long fired), `Release`; `Long` only for Up, Down, VM, Band, `*`, `#`, `0`, Exit, Side1, Side2 after 1000 ms; `Repeat` for Up/Down from 1500 ms, every 100 ms (`device/keypad.rs:9-12`, `:40-58`, `:169-215`); a key must read the same on two polls | only `Single` and `Long`, `Long` for any key | **forgiving, fixed** (exposed defects 1, 2, 6). `hold` on a key without a long press is now a plain press, `repeat K N` added |
+| Key beep and the speaker | `keys.rs:43` plays `play_beep` before the app sees every Single and Long; nothing if beeps are off or `audio_open`; else the speaker ends OFF (`radio.rs:562-570`, `:685-704`). `audio_open` is set by `set_af_out` (`app_af_out`, `radio.rs:837-850`), cleared by `enter_rx`, and while an app holds the receiver followed from the squelch by `poll_squelch` | the speaker was only what the app set; now `core_key_beep` runs before each Single/Long, `AUDIO_OPEN` follows `set_af_out`/`enter_rx`/squelch (`core_poll_squelch`, no debounce, no tone check), and `expect speaker on\|off` reads it | **forgiving, fixed** (the fifth instance, below) |
 | Key timing | events are queued during a poll and dispatched together at the top of the loop (`main.rs:396`, `app/mod.rs:866`); at least two polls (about 4 ms) to register | delivered at once | diff |
 | Tick and draw | the overlay tick runs every fifth loop iteration (at least 10 ms) with `dt` in 100 us units; the draw every fifteenth (at least 30 ms, display time on top): about three ticks per draw (`main.rs:388-468`) | a tick every 5 ms and a draw after each tick (`run`, `main.rs:~985`) | **unknown**: the real loop period depends on how long a frame takes to draw; apps that count ticks instead of using `dt` would differ |
 | `uptime_100us` / `delay_ms` | free-running 100 us counter / busy wait | each call advances one tick; `delay_ms` advances the clock | diff (a wait loop terminates in both) |
@@ -263,6 +265,41 @@ directory and runs `unit` and `tools-test` there, which also catches a file that
 container volume for the cargo cache and doubles the time, so it is better placed in the CI replay
 (`scripts/ci-replay.sh`, a clean machine already) than in `check`.
 
+## 7a. The fifth instance: the key beep and the speaker (AUDIT 55)
+
+The owner's first hardware report on the redesigned FM app: after the first key press only a chirp of the broadcast was
+heard. Cause, per the source: `keys::dispatch` (`app/keys.rs:43`) calls `play_beep` for every Single and Long before the
+app sees the key; `play_tone_sequence` (`device/radio.rs:668-705`) switches the speaker on for the tone and ends with
+`set_speaker(self.audio_open)`; `audio_open` is false while the chip is parked for FM, so the speaker is left OFF. The app
+set the speaker on at Enter and when a seek ended and nowhere else. The mock never played the beep, so 24 FM scenarios passed.
+
+Fix in the app: `entry` re-asserts `set_speaker(seek_left == 0)` after every Enter, Key and Tick event (a GPIO write), so
+there is no key path that leaves the tuner silent. Fix in the double: `core_key_beep` before every Single/Long, an
+`AUDIO_OPEN` flag, and `expect speaker on|off`. New scenarios `fm_speaker_tune`, `fm_speaker_list`, `fm_speaker_seek`
+(UP/DOWN, typed frequency, `#`/`*`, tune from the list, save, delete and cancel, seek) fail 10, 2 and 6 checks against the
+unfixed app and pass now.
+
+Survey of the other apps (the beep only misleads an app whose speaker is on while `audio_open` is false; with `audio_open`
+true the beep does nothing at all):
+
+| App | How it opens audio | Verdict |
+|---|---|---|
+| FM | `set_speaker(true)`, chip parked, `audio_open` false (`apps/fm/src/logic.rs`) | affected, fixed |
+| SPECTRUM listen | `set_af_out(true)` (`spectrum/src/main.rs:546`) sets `audio_open` true: no beep, speaker stays on | not affected |
+| SPECTRUM sweep | `set_af_out(false)` (`:437`): no audio wanted | not affected |
+| BAND SWEEP sweep | silent (`bandsweep/src/logic.rs:384-386`) | not affected |
+| BAND SWEEP listen | `enter_rx()` with the core holding squelch (`:526`): audio follows the squelch; a beep while the squelch is closed leaves the speaker off, which is right, and `poll_squelch` switches it on when the signal opens | not affected |
+| FOX HUNT | `enter_rx` (`foxhunt/src/logic.rs:179`), audio followed by the core; `mute` (`:187`) sets `audio_open` false and wants silence | not affected |
+| SEARCH, SEARCH 2, QT SCAN, SCAN QT, RPT FIND | `enter_rx` and the core's squelch poll (`search/src/main.rs:225`, `search2:221`, `qtscan2:102`, `scanqt:106`); RPT FIND mutes (`rptfind:257-294`) | not affected |
+| FSK PROBE, APRS, RS41, HORUS | `enter_rx`, data only | not affected |
+| TEXT receive | muted on purpose (`textapp/src/logic.rs:450-453`); `chime` turns the speaker on itself for the tone and off again (`:758-763`) | not affected |
+| HAM TOOLS | `play_cue` only; the speaker is never on outside the cue | not affected |
+
+Core side: it would be more correct for `play_tone_sequence` to put the speaker back to what it found (`speaker_on`, a
+field the radio already keeps) instead of to `audio_open`; that costs about one local and a store, and would also fix any
+future app that plays its own audio with `audio_open` false. Not changed: the app-side fix is complete, and the beep also
+wakes the RF chip (`radio.rs:564-567`), which wants the owner's ears and a look before the core moves.
+
 ## 8. How the old fakes were shown to fail
 
 * Fake radio: `git show 3a31439:firmware/tests/fakeserial/serial.py > /tmp/old_serial.py`, then
@@ -271,6 +308,7 @@ container volume for the cargo cache and doubles the time, so it is better place
   The tool-level tests (`test_recovery_tools.py` channel rollback and garbled frame, `test_boot_logo_tune_tools.py`
   fixtures) fail against the old tools: `TOOLS_DIR` points them at a copy of `source-changes/` with the previous
   `cps_tool.py` (garbled frame: `RADIO REFUSED cmd 0x44 addr 0x3c0: error 01`).
+* Simulator mock, fifth instance: `git stash`-free check: restore the old `apps/fm/src/logic.rs` (`git show HEAD:firmware/firmware-source/apps/fm/src/logic.rs`) and run `scripts/dev.sh scenarios`; the three `fm_speaker_*` scenarios fail 18 checks.
 * Simulator mock: run with the new mock and the old apps, `scripts/dev.sh scenarios` failed six frames
   (`chanmgr_save_notice`, `fm_delete`, `fm_no_table`, `fm_save`, `fm_type`, `hamtools_idtimer`: the notice is missing) and the
   suite failed two checks (`a long press doesn't switch`, `42 switches land where expected`); with the apps fixed the six

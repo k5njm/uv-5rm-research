@@ -390,14 +390,31 @@ impl Nor for ApiNor<'_> {
 
 pub fn entry(api: &Api, ev: AppEvent) -> AppResult {
     let a = app();
-    match ev {
-        AppEvent::Enter => enter(api, a),
-        AppEvent::Key { id, kind } => return key(api, a, id, kind),
-        AppEvent::Tick { dt_100us } => tick(api, a, dt_100us),
-        AppEvent::Draw => draw(api, a),
-        AppEvent::Leave => {}
+    let result = match ev {
+        AppEvent::Enter => {
+            enter(api, a);
+            AppResult::Continue
+        }
+        AppEvent::Key { id, kind } => key(api, a, id, kind),
+        AppEvent::Tick { dt_100us } => {
+            tick(api, a, dt_100us);
+            AppResult::Continue
+        }
+        AppEvent::Draw => {
+            draw(api, a);
+            AppResult::Continue
+        }
+        AppEvent::Leave => AppResult::Continue,
+    };
+    // The one place that owns the speaker (AUDIT 55). The core plays a key beep before every Single and Long it hands us
+    // (app/keys.rs `dispatch`), and `play_tone_sequence` ends with `set_speaker(audio_open)`; `audio_open` is false while the RF
+    // chip is parked for FM, so each beep leaves the speaker OFF. Re-asserting it after every key and tick event, from here,
+    // means no key path and no later addition can leave the tuner playing silence; it is a single GPIO write. Only a seek
+    // mutes, and only until it ends.
+    if !matches!(result, AppResult::Exit) && matches!(ev, AppEvent::Enter | AppEvent::Key { .. } | AppEvent::Tick { .. }) {
+        (api.set_speaker)(a.seek_left == 0);
     }
-    AppResult::Continue
+    result
 }
 
 fn enter(api: &Api, a: &mut App) {
@@ -432,7 +449,6 @@ fn enter(api: &Api, a: &mut App) {
             }
         }
     }
-    (api.set_speaker)(true);
 }
 
 fn fail(api: &Api) -> ! {
@@ -482,7 +498,6 @@ fn key(api: &Api, a: &mut App, id: u8, kind: u8) -> AppResult {
         }
         (KIND_LONG, KEY_UP) | (KIND_LONG, KEY_DOWN) => {
             a.ilen = 0;
-            (api.set_speaker)(false);
             (api.fm_seek)(id == KEY_UP);
             a.seek_left = SEEK_TIMEOUT_100US;
         }
@@ -619,7 +634,6 @@ fn tick(api: &Api, a: &mut App, dt: u32) {
                 a.deci = ((((api.fm_tuned_freq_khz)() + 50) / 100) as u16).clamp(LO, HI);
             }
             a.seek_left = 0;
-            (api.set_speaker)(true);
         }
     }
 }

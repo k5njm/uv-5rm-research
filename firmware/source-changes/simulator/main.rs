@@ -134,6 +134,9 @@ fn sim() -> &'static mut Sim {
 
 fn reset(master: u32) {
     unsafe {
+        AUDIO_OPEN = false;
+        MONITOR = false;
+        SPEAKER_ON = false;
         SIM = Some(Sim {
             now: 1000,
             fb: vec![0; W * H],
@@ -239,6 +242,11 @@ extern "C" fn rf_reg_write(addr: u8, value: u16) -> bool {
 /// Speaker-only cue sequences the app asked for (never keys the transmitter: a cue must not move the PTT counters).
 static mut CUES: Vec<Vec<(u16, u16)>> = Vec::new();
 extern "C" fn play_cue(cues: *const bf5rh_abi::Cue, count: u16) {
+    // Radio::play_cue returns at once when beeps are off or audio is open; otherwise the speaker is OFF afterwards
+    if unsafe { SETTINGS[9] == 0 || AUDIO_OPEN } {
+        return;
+    }
+    unsafe { SPEAKER_ON = false };
     let n = (count as usize).min(8);
     let seq = unsafe { std::slice::from_raw_parts(cues, n) }.iter().map(|c| (c.hz_div10, c.ms)).collect();
     unsafe { CUES.push(seq) };
@@ -343,12 +351,41 @@ extern "C" fn nop() {}
 extern "C" fn nop_bool(_: bool) {}
 static mut SPEAKER_ON: bool = false;
 static mut SPEAKER_TURN_ONS: u32 = 0;
+/// The core's `Radio::audio_open` (device/radio.rs): the squelch-driven or app-driven "audio is flowing" flag. The key
+/// beep and `play_cue` do nothing while it is true and, when it is false, leave the speaker switched OFF afterwards
+/// (`play_tone_sequence` ends with `set_speaker(audio_open)`). Set by `set_af_out` (`app_af_out`), cleared by `enter_rx`,
+/// and, while an app holds the receiver, followed from the squelch by `core_poll_squelch` (main.rs `poll_squelch`).
+static mut AUDIO_OPEN: bool = false;
+static mut MONITOR: bool = false;
 extern "C" fn speaker(on: bool) {
     unsafe {
         if on && !SPEAKER_ON {
             SPEAKER_TURN_ONS += 1;
         }
         SPEAKER_ON = on;
+    }
+}
+/// What the core does for every Single or Long key event before it reaches an app (app/keys.rs `dispatch`: `play_beep`):
+/// nothing when beeps are off or audio is open, else the tone plays and the speaker ends up at `audio_open` = OFF.
+/// The mock used to leave the speaker alone, which hid AUDIT 55's FM bug (docs/TEST-DOUBLES.md, fifth instance).
+pub(crate) fn core_key_beep() {
+    unsafe {
+        if SETTINGS[9] != 0 && !AUDIO_OPEN {
+            SPEAKER_ON = false;
+        }
+    }
+}
+/// The core's squelch poll while an app holds the receiver (`enter_rx`, or `set_holds_rx(true)`): audio follows the
+/// squelch (or the monitor flag) and the speaker follows audio. Debounce and the tone check are not modelled.
+fn core_poll_squelch() {
+    if sim().holds_rx {
+        let open = unsafe { MONITOR } || squelch_open();
+        unsafe {
+            if open != AUDIO_OPEN {
+                AUDIO_OPEN = open;
+                SPEAKER_ON = open;
+            }
+        }
     }
 }
 extern "C" fn read_mic() -> u8 {
@@ -737,6 +774,10 @@ extern "C" fn enter_rx() {
     s.tuned = s.cfg_rx;
     s.filter_on = false;
     s.af = false;
+    unsafe {
+        AUDIO_OPEN = false; // Radio::enter_rx
+        SPEAKER_ON = false;
+    }
     s.now = s.now.wrapping_add(20);
 }
 extern "C" fn retune_rx(hz: u32, wide: bool) {
@@ -920,6 +961,13 @@ extern "C" fn holds(on: bool) {
 }
 extern "C" fn af(on: bool) {
     sim().af = on;
+    unsafe {
+        AUDIO_OPEN = on; // Radio::app_af_out
+        SPEAKER_ON = on;
+    }
+}
+extern "C" fn monitor(on: bool) {
+    unsafe { MONITOR = on };
 }
 extern "C" fn agc(_: i8) {}
 
@@ -968,7 +1016,7 @@ static API: Api = Api {
     handoff_read: handoff_r,
     set_bandwidth,
     set_sql_level: nop_u8,
-    set_monitor: nop_bool,
+    set_monitor: monitor,
     enter_rx,
     retune_rx,
     read_rf_gains: read_gains,
@@ -1021,6 +1069,7 @@ fn run(app: Entry, secs: u32) {
         sim().now = sim().now.wrapping_add(50); // main loop gap between ticks
         let dt = sim().now.wrapping_sub(last);
         last = sim().now;
+        core_poll_squelch();
         app(&API, AppEvent::Tick { dt_100us: dt });
         app(&API, AppEvent::Draw);
     }
@@ -1052,6 +1101,9 @@ fn key_events(app: Entry, id: u8, kinds: &[u8]) -> bool {
     for &kind in kinds {
         // overlay.rs dispatch_key does not hand Press or Release to apps; SIM_RAW_KEYS=1 sends them anyway, to exercise
         // the apps' own guards against them (run the scenarios both ways after touching an app's key handler).
+        if kind == K_SINGLE || kind == K_LONG {
+            core_key_beep(); // before the app sees the key, as app/keys.rs dispatch does
+        }
         if kind < K_SINGLE && std::env::var_os("SIM_RAW_KEYS").is_none() {
             continue;
         }
