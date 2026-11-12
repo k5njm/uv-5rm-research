@@ -16,6 +16,9 @@ pub const CMD_SAT_WRITE: u8 = 0x53; // 'S'
 /// Channel extras table (a location/description per channel): same framing as `CMD_SAT_WRITE`.
 pub const CMD_EXTRA_WRITE: u8 = 0x58; // 'X'
 
+/// FM station-name table (apps/fm): same framing as `CMD_SAT_WRITE`.
+pub const CMD_FM_WRITE: u8 = 0x46; // 'F'
+
 pub const CMD_READ_FLASH_RAW: u8 = 0x44; // 'D'
 
 pub const CMD_ERROR: u8 = 0xEE;

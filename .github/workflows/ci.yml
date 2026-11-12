@@ -1,33 +1,57 @@
 name: ci
 # Development is local-first (AGENTS.md): scripts/dev.sh check is the gate, and this workflow repeats it on a clean
-# machine. It runs once per change (pushes to main, and pull requests), and not at all for a change that only
-# touches documentation. The two-architecture rebuild lives in repro.yml.
+# machine. A push to main runs every job. A pull request runs only the jobs its changed files can affect: the
+# `changes` job asks scripts/ci_changed.py (path table, tested by firmware/tests/test_ci_filters.py) and each job
+# below is gated on its answer. A change to a workflow, scripts/dev.sh, the Dockerfile, the toolchain pin or the ABI
+# file runs everything, and so does a file the table has never heard of. `ci-ok` always runs and is the one check
+# to make required: it fails if any job that ran failed, and passes when nothing needed to run (a docs-only PR).
+# The two-architecture rebuild lives in repro.yml; releases in release.yml.
 on:
   push:
     branches: [main]
-    paths-ignore: ["**/*.md", "docs/**", ".env.sample", "LICENSE"]
   pull_request:
-    paths-ignore: ["**/*.md", "docs/**", ".env.sample", "LICENSE"]
 jobs:
-  verify:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      gate: ${{ steps.f.outputs.gate }}
+      sim: ${{ steps.f.outputs.sim }}
+      tools: ${{ steps.f.outputs.tools }}
+      hil: ${{ steps.f.outputs.hil }}
+      images: ${{ steps.f.outputs.images }}
+      web: ${{ steps.f.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # the merge base with the PR's target branch is needed for the three-dot diff
+      - id: f
+        name: Which jobs does this change need? (push to main - all)
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then arg="--base $BASE_SHA"; else arg="--all"; fi
+          python3 scripts/ci_changed.py $arg | tee -a "$GITHUB_OUTPUT"
+  gate:
+    needs: changes
+    if: needs.changes.outputs.gate == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Pinned Rust toolchains from firmware/toolchain.env (nightly for the shipped build, stable for the simulator)
-        # rustup picks a toolchain from the *current directory's* rust-toolchain.toml and several steps run from other
-        # directories, so install both pinned toolchains and make the stable one the job default.
-        run: |
-          . firmware/toolchain.env
-          rustup toolchain install "$LEGACY_TOOLCHAIN" --profile minimal -t thumbv7em-none-eabi
-          rustup toolchain install "$SMALL_TOOLCHAIN" --profile minimal -t thumbv7em-none-eabi -c rust-src
-          rustup default "$LEGACY_TOOLCHAIN"
-          rustc --version; rustc "+$SMALL_TOOLCHAIN" --version
       - name: Release gate (shipped .BF and .app files)
         run: python3 -I firmware/tools/verify_release.py
-      - name: Boot logo / tune tools against a fake radio
+  sim:
+    needs: changes
+    if: needs.changes.outputs.sim == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pinned stable Rust toolchain from firmware/toolchain.env (the simulator's)
+        # Pin it and make it the job default: the runner's own default moves.
         run: |
-          pip install pillow
-          python3 firmware/tests/test_boot_logo_tune_tools.py
+          . firmware/toolchain.env
+          rustup toolchain install "$LEGACY_TOOLCHAIN" --profile minimal
+          rustup default "$LEGACY_TOOLCHAIN"
+          rustc --version
       - name: Host simulator (existing apps)
         working-directory: firmware/source-changes/simulator
         run: |
@@ -48,14 +72,45 @@ jobs:
         with:
           name: scenario-frames
           path: /tmp/scenario-frames
-      - name: Host tool tests (fake radio, fake KDH bootloader, recovery tools)
+  tools:
+    needs: changes
+    if: needs.changes.outputs.tools == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot logo / tune tools against a fake radio
+        run: |
+          pip install pillow
+          python3 firmware/tests/test_boot_logo_tune_tools.py
+      - name: Host tool tests (fake radio, fake KDH bootloader, recovery tools, release bundle, CI filters)
         run: |
           pip install pillow numpy
           for t in firmware/tests/test_*.py; do python3 "$t"; done
+  hil:
+    needs: changes
+    if: needs.changes.outputs.hil == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: HIL pipeline (synthetic camera, fake injector)
         run: |
           pip install pillow numpy
           python3 hil/test_hil.py
+  images:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pinned Rust toolchains from firmware/toolchain.env (nightly for the shipped build, stable for the simulator)
+        # rustup picks a toolchain from the *current directory's* rust-toolchain.toml and several steps run from other
+        # directories, so install both pinned toolchains and make the stable one the job default.
+        run: |
+          . firmware/toolchain.env
+          rustup toolchain install "$LEGACY_TOOLCHAIN" --profile minimal -t thumbv7em-none-eabi
+          rustup toolchain install "$SMALL_TOOLCHAIN" --profile minimal -t thumbv7em-none-eabi -c rust-src
+          rustup default "$LEGACY_TOOLCHAIN"
+          rustc --version; rustc "+$SMALL_TOOLCHAIN" --version
       - name: HAM TOOLS and FSK PROBE overlays build for the target and fit the 8 KB arena
         working-directory: firmware/firmware-source
         run: |
@@ -71,7 +126,7 @@ jobs:
         working-directory: firmware
         run: |
           mkdir -p /tmp/out
-          export PATH=/tmp/shim:$PATH   # rust-nm, for build_core.sh's check of the app arena address
+          export PATH=/tmp/shim:$PATH   # rust-nm, for build_core.sh's check of the app arena address (AUDIT 39)
           CARGO_TARGET_DIR=/tmp/t/fw bash tools/build_core.sh small /tmp/out/fw-default.bin
           CARGO_TARGET_DIR=/tmp/t/fwbk bash tools/build_core.sh small /tmp/out/fw-bk4819.bin bk4819
           sha256sum /tmp/out/*.bin | tee -a "$GITHUB_STEP_SUMMARY"
@@ -88,8 +143,10 @@ jobs:
           mkdir -p /tmp/pinned && cp /tmp/out/*.bin /tmp/out/*.app /tmp/pinned/
           python3 firmware/tools/pin_hashes.py /tmp/pinned
   web:
-    # Headless-Chromium test of web/ (phase 1: planning + fake radio) against the CI-built images.
-    needs: verify
+    # Headless-Chromium test of web/ (phase 1: planning + fake radio) against the CI-built images. The change filter
+    # never selects it without `images` (scripts/ci_changed.py; test_ci_filters.py checks that).
+    needs: [changes, images]
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -105,3 +162,16 @@ jobs:
           /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
       - name: Browser test
         run: NODE_PATH=/tmp/pw/node_modules node web/test/run.cjs /tmp/served
+  ci-ok:
+    # The single check to require. Runs even when every other job was skipped (a docs-only change) and fails if any
+    # job failed or was cancelled. A skipped job is fine: the change filter said the change cannot affect it.
+    if: always()
+    needs: [changes, gate, sim, tools, hil, images, web]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All jobs that ran passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          case " $RESULTS " in *" failure "*|*" cancelled "*) echo "a job failed or was cancelled"; exit 1 ;; esac

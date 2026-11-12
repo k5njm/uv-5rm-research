@@ -91,4 +91,4 @@ can be checked on hardware day.
   rebuilt; built apps use the current hash. Re-pinned after each change.
 * **Reproducibility regressed:** the default core image now also differs between arm64 and amd64 (1,554 bytes; AUDIT 21). amd64 stays canonical.
 * The ID timer in HAM TOOLS now uses `play_cue` for an overdue alert (a speaker-only tone; a simulator test checks it never moves the PTT counters).
-* `fskprobe.app` uses 3,600 B of the 8,192 B arena (3,596 B image, measured 2026-11-11; an earlier figure here, 2,932 B, was stale) and reproduces identically on both architectures.
+* `fskprobe.app` uses 3,600 B of the 8,192 B arena (3,596 B image, measured 2026-11-11; an earlier figure here, 2,932 B, was stale) and reproduces identically on both architectures. After the register fixes and options (2026-11-12) it uses 7,352 B (7,348 B image, 4 B bss): 840 B of headroom.

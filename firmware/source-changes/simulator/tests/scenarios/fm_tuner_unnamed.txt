@@ -1,0 +1,21 @@
+# Tuning off a saved station: an unsaved frequency with no signal, then one with a strong one.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 917 KKXT Adult Album Alt
+fmstation 933 WBAP News/Talk
+fmstation 963 KSCS Country
+fmstation 1011 WRR Classical
+fmstation 1045 KKDA Hip-Hop
+handoff fm 1011
+app fm
+wait 1
+shot wrr
+key down
+wait 0.1
+shot not_saved_weak
+handoff fm 981
+app fm
+wait 1
+shot not_saved_strong
