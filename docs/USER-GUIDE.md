@@ -202,8 +202,8 @@ example `Higher mutes weak signals` under SQUELCH). A few lines follow the value
 chosen step costs, under TX INHIBIT whether the radio can transmit, under TX BANDS which frequencies the chosen choice
 allows, and under a key setting what the assigned function does. (The keys are the same on every list: `MENU` changes the
 selected setting, `EXIT` goes back.) While a value is being changed the strip shows the keys instead:
-`#default MENU ok EXIT undo`. For numbers you type it reads `0-9 type MENU ok EXIT del` (latitude and
-longitude: `0-9  * N/S  MENU ok` and `0-9  * E/W  MENU ok`), and for VERSION and RF CHIP ID `UP/DN page    EXIT back`.
+`#default MENU ok EXIT undo`. For numbers you type it reads `0-9 # default  MENU ok` (latitude and
+longitude: `0-9 * N/S # clear MENU ok` and `0-9 * E/W # clear MENU ok`); once you have pressed `#` it reads as for any other value.
 
 ![Changing AUTO KEYLOCK: the row is amber, the value has arrows, and the bottom strip reads UP/DN MENU save EXIT undo.](img/settings-editing.png)
 
@@ -239,12 +239,25 @@ Names and choices are from the source. What each one does on the air has not bee
 | KEYS | SIDE1 SHORT, SIDE1 LONG, SIDE2 SHORT, SIDE2 LONG, BAND LONG, VFO/MR LONG: see [below](#assigning-the-side-keys-band-and-vfomr-long-press) |
 | ANI / DTMF | ANI ON PTT; ANI CALL |
 | PRESETS | QUIET; BATTERY SAVER; SCANNING; REPEATER; DEFAULTS: see [Presets](#presets) |
-| SYSTEM | **TX BANDS** (the transmit-range lock); LATITUDE; LONGITUDE (used by HAM TOOLS' grid locator); BATTERY CAL; BOOT SCREEN (OFF, LOGO); BOOT SOUND; VERSION (`MENU`, then `UP`/`DOWN` flips between `UV-5RM OPEN FW` and `SEE BOOT SCREEN`); RF CHIP ID; RESET ALL |
+| SYSTEM | **TX BANDS** (the transmit-range lock); LATITUDE; LONGITUDE (used by HAM TOOLS' grid locator); BATTERY CAL; BOOT SCREEN (OFF, LOGO); BOOT SOUND; VERSION (`MENU` opens the [about view](#about-version)); RF CHIP ID (opens the same view); RESET ALL |
 
 Defaults of a new settings record, from the source: TX INHIBIT on, TX BANDS `FCC HAM`, SQUELCH 3, TX TIMEOUT 120 s
 (8 steps), CH DISPLAY NAME+FREQ, backlight 10 SEC, key beep on, boot screen LOGO.
 
 ![The SYSTEM group. The simulator starts from an empty settings record, so TX BANDS shows CE HAM here; a real radio's default is FCC HAM.](img/settings-system.png)
+
+### About (VERSION)
+
+`MENU` on SYSTEM > VERSION (or on RF CHIP ID) opens a read-only view titled ABOUT. `UP` and `DOWN` move its cursor and `EXIT`
+goes back.
+
+| Row | Shows |
+|---|---|
+| FIRMWARE | `UV-5RM OPEN FW` |
+| BUILD | `ON BOOT SCREEN`: the build's commit (for example `3a19e88b`, with `-dirty` when it was built from changed files) is drawn on the boot screen, which appears only when BOOT SCREEN is LOGO. SETTINGS cannot read it from the firmware, so it is not repeated here |
+| RADIO, BOARD, MCU | `UV-5RM`, `5RHNRFB-YP07`, `AT32F421`: what this firmware is built for (fixed text; the radio is not asked) |
+| RF CHIP | the chip's id as the firmware reads it (same as RF CHIP ID) |
+| APP ABI | the interface hash the firmware was built with, for example `0x0C109B81`. An app runs only if it was built with the same value (otherwise the APPS list shows `EMPTY`) |
 
 ### Presets
 

@@ -977,7 +977,6 @@ pub struct ItemsState {
     index: usize,
     editing: bool,
     snapshot: i32,
-    info_page: u8,
     settings: Settings,
     side_cfg: SideCfg,
     offset_input: DigitInput<7>,
@@ -1004,7 +1003,6 @@ impl ItemsState {
             index: 0,
             editing: false,
             snapshot: 0,
-            info_page: 0,
             settings: read_settings(api),
             side_cfg: read_side_cfg(api),
             offset_input: DigitInput::new(),
@@ -1154,6 +1152,26 @@ fn dispatch_items(api: &Api, kind: u8, id: u8, mut st: ItemsState) -> Phase {
     let item = st.item();
     st.note = 0;
 
+    // VERSION and RF CHIP ID open the about view (read only): UP and DOWN move its cursor, EXIT leaves
+    #[cfg(feature = "g_system")]
+    if st.view != 0 {
+        if kind == KIND_SINGLE || kind == KIND_REPEAT {
+            match id {
+                KEY_UP => st.pidx = (st.pidx + ABOUT_ROWS - 1) % ABOUT_ROWS,
+                KEY_DOWN => st.pidx = (st.pidx + 1) % ABOUT_ROWS,
+                KEY_EXIT | KEY_MENU if kind == KIND_SINGLE => st.view = 0,
+                _ => {}
+            }
+        }
+        return Phase::Items(st);
+    }
+    #[cfg(feature = "g_system")]
+    if !st.editing && kind == KIND_SINGLE && id == KEY_MENU && matches!(item, SettingItem::Info | SettingItem::ChipId) {
+        st.view = 1;
+        st.pidx = if item == SettingItem::ChipId { ABOUT_CHIP_ROW } else { 0 };
+        return Phase::Items(st);
+    }
+
     #[cfg(feature = "g_presets")]
     if st.group == SettingsGroup::Presets {
         return match dispatch_presets(api, kind, id, &mut st) {
@@ -1215,8 +1233,6 @@ fn dispatch_items_scalar(
                 } else {
                     (st.index + 1) % len
                 };
-            } else if item == SettingItem::Info {
-                st.info_page ^= 1;
             } else if item != SettingItem::Reset {
                 adjust(api, st, item, up);
             }
@@ -1673,6 +1689,78 @@ fn draw_preview(api: &Api, st: &ItemsState) {
     );
 }
 
+// about (SYSTEM > VERSION): what this firmware and radio are, read only
+
+#[cfg(feature = "g_system")]
+const ABOUT_NAME: &str = "UV-5RM OPEN FW";
+#[cfg(feature = "g_system")]
+const ABOUT_ROWS: usize = 7;
+#[cfg(feature = "g_system")]
+const ABOUT_CHIP_ROW: usize = 5;
+
+/// `0x` and `digits` hex digits of `v`.
+fn hex_into(out: &mut [u8], v: u32, digits: usize) -> usize {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    out[0] = b'0';
+    out[1] = b'x';
+    for i in 0..digits {
+        out[2 + i] = HEX[((v >> ((digits - 1 - i) * 4)) & 0xF) as usize];
+    }
+    2 + digits
+}
+
+/// Row `i` of the about view. BUILD cannot say which commit this is: the core stamps its git commit into the image
+/// and draws it on the boot screen, but gives apps no way to read it.
+#[cfg(feature = "g_system")]
+fn about_row(api: &Api, i: usize, label: &mut [u8; 16], value: &mut [u8; 18]) {
+    let (l, v): (&str, &str) = match i {
+        0 => ("FIRMWARE", ABOUT_NAME),
+        1 => ("BUILD", "ON BOOT SCREEN"),
+        2 => ("RADIO", "UV-5RM"),
+        3 => ("BOARD", "5RHNRFB-YP07"),
+        4 => ("MCU", "AT32F421"),
+        _ => ("", ""),
+    };
+    write_str(label, l);
+    if i < 5 {
+        write_str(value, v);
+    } else if i == ABOUT_CHIP_ROW {
+        write_str(label, "RF CHIP");
+        hex_into(value, (api.settings_get)(7), 4);
+    } else {
+        write_str(label, "APP ABI");
+        hex_into(value, bf5rh_abi::BUILD_HASH, 8);
+    }
+}
+
+#[cfg(feature = "g_system")]
+fn draw_about(api: &Api, st: &ItemsState) {
+    unsafe {
+        let rows = &mut *core::ptr::addr_of_mut!(ROWS);
+        for i in 0..VISIBLE_ROWS {
+            rows[i] = BLANK_ROW;
+            if i < ABOUT_ROWS {
+                about_row(api, i, &mut rows[i].label, &mut rows[i].value);
+                rows[i].has_value = true;
+            }
+        }
+    }
+    let hint = b"EXIT back";
+    (api.list_hint)(hint.as_ptr(), hint.len() as u16);
+    let mut title = [0u8; 26];
+    write_str(&mut title, "ABOUT");
+    (api.draw_list)(
+        title.as_ptr(),
+        26,
+        core::ptr::addr_of!(ROWS) as *const ListRow,
+        VISIBLE_ROWS as u16,
+        0,
+        st.pidx as u16,
+        ABOUT_ROWS as u16,
+        false,
+    );
+}
+
 // value logic
 
 fn current_value(api: &Api, st: &ItemsState, item: SettingItem) -> i32 {
@@ -1771,8 +1859,6 @@ fn current_value(api: &Api, st: &ItemsState, item: SettingItem) -> i32 {
         Lat => st.settings.obs_lat,
         #[cfg(feature = "g_system")]
         Lon => st.settings.obs_lon,
-        #[cfg(feature = "g_system")]
-        Info => st.info_page as i32,
 
         #[allow(unreachable_patterns)]
         _ => 0,
@@ -2096,25 +2182,9 @@ fn value_text_for(
 
     match item {
         #[cfg(feature = "g_system")]
-        Info => {
-            let s = if st.info_page == 0 {
-                "UV-5RM OPEN FW"
-            } else {
-                "SEE BOOT SCREEN"
-            };
-            write_str(out, s)
-        }
+        Info => write_str(out, ABOUT_NAME),
         #[cfg(feature = "g_system")]
-        ChipId => {
-            const HEX: &[u8; 16] = b"0123456789ABCDEF";
-            let v = (api.settings_get)(7);
-            out[0] = b'0';
-            out[1] = b'x';
-            for i in 0..4 {
-                out[2 + i] = HEX[((v >> ((3 - i) * 4)) & 0xF) as usize];
-            }
-            6
-        }
+        ChipId => hex_into(out, (api.settings_get)(7), 4),
         #[cfg(feature = "g_system")]
         Reset => {
             if editing_this {
@@ -2397,6 +2467,13 @@ static mut ROWS: [ListRow; VISIBLE_ROWS] = [BLANK_ROW; VISIBLE_ROWS];
 fn draw(api: &Api) -> AppResult {
     let state = unsafe { &*core::ptr::addr_of!(STATE) };
 
+    #[cfg(feature = "g_system")]
+    if let Phase::Items(st) = &state.phase {
+        if st.view != 0 {
+            draw_about(api, st);
+            return AppResult::Continue;
+        }
+    }
     #[cfg(feature = "g_presets")]
     if let Phase::Items(st) = &state.phase {
         if st.group == SettingsGroup::Presets && st.view != 0 {
@@ -2480,7 +2557,6 @@ fn draw(api: &Api) -> AppResult {
         Phase::Items(st) if st.editing => match st.item() {
             _ if st.note == 1 => b"Choose TX BANDS by hand",
             SettingItem::Reset => b"HOLD # reset  EXIT cancel",
-            SettingItem::Info | SettingItem::ChipId => b"UP/DN page    EXIT back",
             SettingItem::Lat if !st.defaulted => b"0-9 * N/S # clear MENU ok",
             SettingItem::Lon if !st.defaulted => b"0-9 * E/W # clear MENU ok",
             SettingItem::Offse | SettingItem::BattCal if !st.defaulted => b"0-9 # default  MENU ok",

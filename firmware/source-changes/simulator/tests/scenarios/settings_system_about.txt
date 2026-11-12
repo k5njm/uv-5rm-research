@@ -1,0 +1,32 @@
+# Settings, SYSTEM: MENU on VERSION opens a read-only about view (firmware, build, radio, board, chip, RF chip id and
+# the ABI hash apps must match). UP and DOWN move its cursor, EXIT goes back to the list; RF CHIP ID opens the same
+# view on its own row.
+# MODEL CAVEATS: the simulator's RF chip id is 0x0000; the APP ABI row shows the hash of firmware/firmware-source/abi:
+# it changes whenever the ABI does, and this frame then has to be updated (look at it first).
+handoff 5 1
+app settings
+key down
+key down
+key down
+key down
+key down
+key down                  # VERSION
+shot version_row
+key menu
+shot about
+key down
+key down
+key down
+key down
+shot about_mcu_row
+key down
+shot about_chip_row
+key down
+shot about_abi_row
+key exit
+shot back_on_version
+key down                  # RF CHIP ID
+key menu
+shot about_from_chip_id
+key exit
+shot back_on_chip_id
