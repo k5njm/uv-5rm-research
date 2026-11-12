@@ -129,7 +129,8 @@ def verify_apps(apps_dir, committed=False):
                 check(zlib.crc32(d[off:off + ilen]) & 0xFFFFFFFF == crc, f"{n}[{i}]: crc32")
             check(ilen + bss <= ARENA, f"{n}[{i}]: {ilen}+{bss} bss fits {ARENA}-byte arena "
                                        f"({ARENA - ilen - bss} spare)")
-            floor = SEG_MIN_SPARE.get(n, [MIN_ARENA_SPARE] * 4)[i]
+            # (the committed set is the old single-segment build, which these floors do not describe)
+            floor = MIN_ARENA_SPARE if committed else SEG_MIN_SPARE.get(n, [MIN_ARENA_SPARE] * 4)[i]
             check(ARENA - ilen - bss >= floor, f"{n}[{i}]: arena spare >= floor {floor}")
         print(f"  sha256 {sha(d)}  {n}")
 
