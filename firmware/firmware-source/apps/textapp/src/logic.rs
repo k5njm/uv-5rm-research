@@ -125,21 +125,26 @@ const BLACK: u16 = 0x0000;
 const WHITE: u16 = 0xFFFF;
 const GRAY: u16 = 0x8410;
 const GREEN: u16 = 0x07E0;
-const HEADER: u16 = 0x6000;
-const HILITE: u16 = 0xA000;
-const AMBER: u16 = 0xFD20;
+const AMBER: u16 = 0xFD40;
+// The house look of the list screens (src/ui/list.rs): light title bar, dark hint strip. Red only while keyed.
+const TITLE_BG: u16 = 0xDEDB;
+const TITLE_FG: u16 = 0x0000;
+const ON_AIR: u16 = 0xF800;
+const HINT_BG: u16 = 0x2124;
+const HINT_FG: u16 = 0xA514;
+const RULE: u16 = 0x39E7;
 
 const F5: u8 = 0; // 5x8
 const F6: u8 = 1; // 6x10
 const SCREEN_W: u16 = 160;
 const COLS: usize = 26;
 
-const TITLE_Y: i16 = 0;
-const KEYS_Y: i16 = 13;
+const TITLE_H: u16 = 14;
+const KEYS_Y: i16 = 14;
 const MSG_Y: i16 = 30;
 const MSG_ROWS: usize = 6;
-const COMP_Y: i16 = 97;
-const HINT_Y: i16 = 119;
+const COMP_Y: i16 = 90;
+const HINT_TOP: i16 = 112;
 
 // Chip registers.
 const R_INT: u8 = 0x02;
@@ -565,6 +570,7 @@ fn transmit(api: &Api, s: &mut State, packets: &[[u8; PACKET]]) -> Tx {
         modem_rx(s);
         return Tx::Blocked;
     }
+    draw_title(api, s, true);
     let dev = bus::read(R_DEV);
     let filter = bus::read(R_FILTER);
     bus::write(R_DEV, (dev & 0xF000) | if s.wide { 1300 } else { 1200 });
@@ -584,6 +590,7 @@ fn transmit(api: &Api, s: &mut State, packets: &[[u8; PACKET]]) -> Tx {
     (api.set_ptt)(false);
     (api.set_tx_enabled)(false);
     (api.set_af_out)(false);
+    draw_title(api, s, false);
     modem_rx(s);
     if result == Tx::Sent {
         tally!(s.n_tx);
@@ -1129,15 +1136,17 @@ fn text(api: &Api, x: i16, y: i16, s: &[u8], fg: u16, bg: u16, font: u8) {
     (api.draw_text)(x, y, s.as_ptr(), s.len() as u16, fg, bg, font);
 }
 
-fn draw_title(api: &Api, s: &State) {
-    (api.fill_rect)(0, TITLE_Y, SCREEN_W, 12, HEADER);
+/// Light title bar like the list screens; red with "TX" only while the transmitter is keyed (see `transmit`).
+fn draw_title(api: &Api, s: &State, on_air: bool) {
+    let (bg, fg) = if on_air { (ON_AIR, WHITE) } else { (TITLE_BG, TITLE_FG) };
+    (api.fill_rect)(0, 0, SCREEN_W, TITLE_H, bg);
     let mut l = Line::new();
-    l.push(b"TEXT ");
+    l.push(if on_air { b"TX " } else { b"TEXT " });
     let mut f = [0u8; 12];
     let n = (api.fmt_freq)(s.hz, f.as_mut_ptr()) as usize;
     l.push(&f[..n]);
     l.push(if s.high_power { b" HIGH" } else { b" LOW" });
-    text(api, 4, TITLE_Y + 1, l.as_slice(), WHITE, HEADER, F6);
+    text(api, (SCREEN_W as i16 - l.len as i16 * 6) / 2, 2, l.as_slice(), fg, bg, F6);
 }
 
 fn slot_back(s: &State, back: u16) -> u16 {
@@ -1199,7 +1208,7 @@ fn draw_msgs(api: &Api, s: &State) {
 
 fn draw_comp(api: &Api, s: &State) {
     (api.fill_rect)(0, COMP_Y, SCREEN_W, 21, BLACK);
-    (api.fill_rect)(0, COMP_Y, SCREEN_W, 1, HEADER);
+    (api.fill_rect)(0, COMP_Y, SCREEN_W, 1, RULE);
     let n = s.comp_len as usize;
     for (row, chunk) in s.comp[..n].chunks(COLS).enumerate() {
         text(api, 2, COMP_Y + 2 + row as i16 * 10, chunk, WHITE, BLACK, F6);
@@ -1207,7 +1216,7 @@ fn draw_comp(api: &Api, s: &State) {
     let at = |i: usize| (2 + (i % COLS) as i16 * 6, COMP_Y + 2 + (i / COLS) as i16 * 10);
     if s.tap_key != NO_KEY && n > 0 {
         let (x, y) = at(n - 1);
-        text(api, x, y, &s.comp[n - 1..n], WHITE, HILITE, F6);
+        text(api, x, y, &s.comp[n - 1..n], BLACK, AMBER, F6);
     }
     if n < MAX_LEN {
         let (x, y) = at(n);
@@ -1215,10 +1224,12 @@ fn draw_comp(api: &Api, s: &State) {
     }
 }
 
+/// What the keys do now, in the strip every list screen has at the bottom.
 fn draw_hint(api: &Api, s: &State) {
-    (api.fill_rect)(0, HINT_Y, SCREEN_W, 9, BLACK);
+    (api.fill_rect)(0, HINT_TOP, SCREEN_W, 16, HINT_BG);
+    let (x, y) = (4, HINT_TOP + 3);
     if let Some(n) = s.notice {
-        text(api, 2, HINT_Y, n, AMBER, BLACK, F5);
+        text(api, x, y, n, AMBER, HINT_BG, F6);
     } else if s.pending {
         let mut l = Line::new();
         l.push(b"TRY ");
@@ -1226,9 +1237,9 @@ fn draw_hint(api: &Api, s: &State) {
         l.push(b" OF ");
         l.num(MAX_TRIES as u32);
         l.push(b"  EXIT STOPS");
-        text(api, 2, HINT_Y, l.as_slice(), AMBER, BLACK, F5);
+        text(api, x, y, l.as_slice(), AMBER, HINT_BG, F6);
     } else {
-        text(api, 2, HINT_Y, b"MENU SEND  EXIT DEL  *PING", GRAY, BLACK, F5);
+        text(api, x, y, b"MENU send  EXIT del  *ping", HINT_FG, HINT_BG, F6);
     }
 }
 
@@ -1236,7 +1247,7 @@ fn draw(api: &Api) -> AppResult {
     let s = st();
     if s.redraw_all {
         (api.fill_rect)(0, 0, SCREEN_W, 128, BLACK);
-        draw_title(api, s);
+        draw_title(api, s, false);
         text(api, 2, KEYS_Y, b"1.,? 2ABC 3DEF 4GHI 5JKL", GRAY, BLACK, F5);
         text(api, 2, KEYS_Y + 8, b"6MNO 7PQRS 8TUV 9WXYZ 0SP", GRAY, BLACK, F5);
         s.redraw_msgs = true;

@@ -71,7 +71,10 @@ With the keypad locked, only `SIDE1`, `SIDE2` and a long press of `*` still work
 the keypad after 5, 10 or 15 seconds without a key press.
 
 While scanning, `UP` and `DOWN` change the scan direction, `BAND` stops the scan and opens CH GROUPS, and `EXIT` or a long
-press of `#` stops the scan. In memory mode the scan visits only the channels of the current group that have IN SCAN LIST set.
+press of `#` stops the scan. While it runs, the top left of the main screen reads `SCAN UP EXIT` or `SCAN DN EXIT` (just
+`SCAN UP` / `SCAN DN` when the PS, DWR or VOX flag leaves no room). There is no key that holds on a signal: what the scan does
+when it finds one is the SCAN RESUME setting (TIMED: stays 5 seconds then moves on; CARRIER: stays while the signal lasts, and
+5 seconds after; STOP: stops the scan on it). In memory mode the scan visits only the channels of the current group that have IN SCAN LIST set.
 
 ## The main screen
 
@@ -508,15 +511,28 @@ scripted.
 A panadapter: a trace of signal strength over a stretch of spectrum, with a waterfall under it. It opens centred on the
 frequency on the main screen. It only receives.
 
-![SPECTRUM: a strong signal at 146.520 MHz and a weaker one at 146.700 MHz, trace above and waterfall below.](img/spectrum.png)
+![SPECTRUM: a strong signal at 146.520 MHz marked by an amber triangle and a weaker one at 146.700 MHz, trace above and waterfall below.](img/spectrum.png)
 
-The top line shows the start and stop frequency of the window. At the bottom, line one shows a typed frequency (`F`), the
-frequency being listened to (`RX`), the peak (`P`) or the pan step; line two shows `ST` (frequency step), `B` (bins), `D`
-(dwell), `T+` (trigger margin, dB), `C` (top of the scale, dBm), `G` (gain: a number, or `A` for automatic) and `A` when
-auto-listen is on.
+The light title bar shows the start and stop frequency of the window. The strongest signal that stands above the red dashed
+line (the trigger line, set with `*` / `#`) is marked with an amber triangle at the top of the trace, and the line under the
+waterfall gives its frequency and level (`PEAK`). That is exactly the frequency `MENU` tunes to. The second line shows `ST`
+(frequency step), `B` (bins), `D` (dwell), `T+` (trigger margin, dB), `C` (top of the scale, dBm), `G` (gain: a number, or
+`A` for automatic) and `A` when auto-listen is on. The strip at the bottom says what the keys do in the current state.
+
+**Going to the strongest signal:** press `MENU`. The radio's VFO is set to the marked frequency and SPECTRUM closes, so you are
+listening to it on the main screen. It is the same hand-over BAND SWEEP uses on a held `MENU`: the active side (A or B)
+switches to VFO mode on that frequency, with no CTCSS/DCS tone, and the memory channel it was on is left unchanged. If
+nothing is above the trigger line the box `NO SIGNAL` appears and SPECTRUM stays open (it never tunes to noise). The
+frequency is the sweep's own grid point (the window is anchored on the frequency you opened it on, in steps of `ST`), so with
+a coarse step the true signal can be a few kHz away; use `7` for a finer step first. "Strongest" is the highest of the latest
+reading of every bin, so it follows the signal as it changes rather than a stale peak. While auto-listen is playing a signal,
+`MENU` tunes to that one.
+
+![NO SIGNAL: MENU with nothing above the trigger line.](img/spectrum-no-signal.png)
 
 | Key | Action |
 |---|---|
+| `MENU` | Tune the VFO to the marked peak and leave (or `NO SIGNAL`). |
 | `UP` / `DOWN` | Move the window up or down by the pan step. |
 | `1` / `7` | Larger / smaller scan step. |
 | `2` / `8` | Larger / smaller pan step. |
@@ -525,10 +541,10 @@ auto-listen is on.
 | `4` | Cycle the number of bins (128, 64, 32, 16). |
 | `5` | Type a centre frequency (six digits, MHz with three decimals), `MENU` to accept. |
 | `0` / `6` | Longer / shorter dwell per bin. |
-| `MENU` | Turn auto-listen on or off. With it on, the app stops sweeping and plays the audio of the strongest signal above the trigger. |
-| `SIDE1` | Blacklist the current peak (ignore that bin). |
+| `A/B` | Turn auto-listen on or off (this was `MENU` before). With it on, the app stops sweeping and plays the audio of the strongest signal above the trigger. |
+| `SIDE1` | Ignore the marked bin (a signal spills into the bins next to it: press again for each). |
 | `SIDE2` | Step the fixed gain through its choices, then back to automatic. |
-| `EXIT` | Leave. Any other key stops a listen first. |
+| `EXIT` | Leave without tuning. Any other key stops a listen first. |
 
 ### BAND SWEEP
 
@@ -538,14 +554,17 @@ custom range.
 
 ![BAND SWEEP over VHF: a graph on top and a list of hits with their strength and number of sightings.](img/bandsweep.png)
 
-The status line shows the band, step (`ST25K` or `ST12.5K`), `T+` (detection margin), `D` (dwell) and `P` (pass count and
-time). The bottom line reminds you of the keys.
+The light title bar shows the start and stop frequency of the band and its name. Under the list, the status line shows the
+step (`ST25K` or `ST12.5K`), `T+` (detection margin), `D` (dwell) and `P` (pass count and time). The strip at the bottom says
+what the keys do in the current state (listening to a hit, typing a range, or sweeping). The selected hit is blue, as in the
+other lists, and the trace is green: red is only used while the radio transmits.
 
 | Key | Action |
 |---|---|
 | `UP` / `DOWN` | Select a hit in the list. |
-| `MENU` | Listen to the selected hit (`RX` line). `MENU` or `EXIT` goes back to the sweep. |
-| Hold `MENU` | Does nothing extra: the keypad sends no long press for `MENU`, so this is the same as pressing it (listen). Putting a hit on the VFO from here is not possible yet. |
+| `MENU` | Listen to the selected hit (`RX` line). |
+| `MENU` while listening | Put that frequency on the main screen's VFO (no tone) and leave the app. |
+| `EXIT` while listening | Go back to the sweep. |
 | `A/B` | Next band (VHF, UHF, AIR, 220, 350). |
 | `1` | Switch the step between 25 and 12.5 kHz. |
 | `5` | Type a custom range: start, `MENU`, stop, `MENU` (six digits each, MHz with three decimals). |
@@ -635,13 +654,17 @@ carries.
 ### TEXT
 
 Short text messages between two radios using the radio chip's FSK modem. **It transmits.** Both radios must run TEXT on the same
-frequency. The frequency is the one on the main screen when you open the app; the title shows it and `LOW` or `HIGH` power.
+frequency. The frequency is the one on the main screen when you open the app; the light title bar shows it and `LOW` or `HIGH` power. The
+title turns red and reads `TX` for as long as the transmitter is actually keyed (each try, and each automatic confirmation),
+and only then. The strip at the bottom shows the keys, or a notice, or `TRY n OF 8` while a message is being repeated.
 
 > **A radio with TEXT open answers messages by transmitting on its own.** A message is repeated up to eight times until the
 > other radio confirms it. Use it only on a frequency where you are licensed and permitted to send digital data, on simplex.
 > TEXT has never been tested on the air; the simulator transmits into a model.
 
 ![TEXT with "HI" typed. The key letters are listed at the top.](img/text.png)
+
+![TEXT at the moment the transmitter is keyed: the title bar is red and reads TX.](img/text-on-air.png)
 
 | Key | Action |
 |---|---|

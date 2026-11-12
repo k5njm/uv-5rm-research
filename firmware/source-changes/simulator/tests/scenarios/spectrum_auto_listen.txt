@@ -1,0 +1,11 @@
+# A/B turns auto-listen on: the sweep stops on the strong signal and plays it. MENU then tunes to what is being heard.
+master 146520000
+signal 146520000 110 -1 always
+app spectrum
+wait 2
+key ab
+wait 4
+shot auto_listening
+key menu
+expect exit
+expect vfo 146520000 0

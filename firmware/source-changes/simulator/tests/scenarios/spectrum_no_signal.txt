@@ -1,0 +1,11 @@
+# Nothing on the air: MENU must not tune to noise. It says NO SIGNAL and stays.
+master 146520000
+app spectrum
+wait 4
+shot quiet
+key menu
+shot no_signal_toast
+expect noexit
+expect vfo none
+wait 2
+shot toast_gone

@@ -206,7 +206,14 @@ extern "C" fn uptime() -> u32 {
     sim().now = sim().now.wrapping_add(1);
     sim().now
 }
+/// `txshot` step: `Some(None)` while armed, `Some(Some(frame))` once the screen has been captured with the transmitter keyed.
+pub static mut TX_CAPTURE: Option<Option<Vec<u8>>> = None;
 extern "C" fn delay_ms(ms: u32) {
+    unsafe {
+        if sim().transmitting && matches!(*std::ptr::addr_of!(TX_CAPTURE), Some(None)) {
+            *std::ptr::addr_of_mut!(TX_CAPTURE) = Some(Some(scenario::frame_rgb()));
+        }
+    }
     sim().now = sim().now.wrapping_add(ms * 10);
 }
 
@@ -1314,8 +1321,8 @@ fn test_sweep() {
     check(sim().cfg_rx == listening_to && sim().holds_rx && sim().modulation == 0, "Menu tunes the selected signal in FM");
     run(app, 3);
     check(sim().retunes == tuned_before, "sweep pauses while listening");
-    press(app, 12);
-    check(!sim().holds_rx, "Menu returns to sweeping");
+    press(app, 13);
+    check(!sim().holds_rx, "Exit returns to sweeping");
     run(app, 3);
     check(sim().retunes > tuned_before, "sweep resumed");
 
@@ -1330,18 +1337,10 @@ fn test_sweep() {
 
     println!("Band Sweep: send to VFO for Spectrum");
     let selected = bandsweep::debug_selected_hz();
-    // KNOWN BUG (found by making the simulator send only the key events the keypad can send, TEST-DOUBLES.md): the
-    // keypad never emits a long press for MENU (device/keypad.rs `supports_long` has no Menu), so "hold MENU: open in
-    // Spectrum" cannot happen on the radio. The check below ran green for as long as the simulator invented the event.
-    // It is skipped, not deleted, and `known_gaps_are_still_gaps` (cargo test) fails once the keypad can send it.
-    if keypad_long(12) {
-        check(hold(app, 12), "holding Menu leaves");
-        check(sim().vfo_saved == Some((selected, 0)), "saved the selected frequency to VFO with no tone");
-    } else {
-        println!("  SKIP hold MENU sends the frequency to the VFO: the keypad has no long MENU (known bug, not a pass)");
-        unsafe { SKIPPED += 1 };
-        (API.save_master_vfo)(selected, 0); // what the key would have done, so the rest of the scenario still runs
-    }
+    press(app, 12); // listen to it
+    check(sim().vfo_saved.is_none(), "listening alone hands nothing to the VFO");
+    check(press(app, 12), "Menu while listening leaves");
+    check(sim().vfo_saved == Some((selected, 0)), "saved the selected frequency to VFO with no tone");
     app(&API, AppEvent::Leave);
 
     println!("Band Sweep: airband");
@@ -1352,7 +1351,7 @@ fn test_sweep() {
     check(bandsweep::debug_band() == 2, "opens on the band the radio is tuned to");
     press(app, 12);
     check(sim().modulation == 1 && sim().cfg_rx == 121_500_000, "listens in AM");
-    press(app, 12);
+    press(app, 13);
     check(sim().modulation == 0, "back to FM for sweeping");
 
     println!("Band Sweep: band, step and custom range");
@@ -3135,10 +3134,10 @@ mod fidelity_tests {
         assert_eq!((0..=20).filter(|&i| keypad_repeat(i)).collect::<Vec<u8>>(), rep, "keypad_repeat drifted from keypad.rs supports_repeat");
     }
 
-    /// When this fails the keypad can send a long MENU: remove the skip in `test_sweep` and the mode menu's note.
+    /// When this fails the keypad can send a long MENU: BAND SWEEP no longer needs the MENU-twice workaround and the mode menu's note can go.
     #[test]
     fn known_gaps_are_still_gaps() {
-        assert!(!keypad_long(12), "the keypad now sends a long MENU: un-skip `hold MENU` in test_sweep (main.rs)");
+        assert!(!keypad_long(12), "the keypad now sends a long MENU: revisit BAND SWEEP's MENU-while-listening tune and the mode menu's note");
     }
 
     #[test]

@@ -1,0 +1,12 @@
+# 5 types a new centre frequency; MENU accepts it.
+master 146520000
+app spectrum
+wait 1
+key 5
+key 4
+key 4
+key 5
+shot typing
+key menu
+wait 3
+shot new_window

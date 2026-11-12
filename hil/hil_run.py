@@ -38,6 +38,8 @@ def run(steps, golden_dir, name, injector, get_frame, corners, threshold, out_di
     skipped = sc.sim_only(steps)
     results = []
     for s in steps:
+        if s in skipped:
+            continue
         if s.op in ("key", "hold"):
             injector.press(s.args[0], KEY_MS if s.op == "key" else HOLD_MS)
         elif s.op == "repeat":        # Long at 1.0 s, then a Repeat every 100 ms from 1.5 s

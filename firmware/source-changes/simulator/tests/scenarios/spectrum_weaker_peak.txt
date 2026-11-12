@@ -1,0 +1,17 @@
+# SIDE1 ignores the strongest bin, again for each of the two neighbours the signal spills into; the marker moves to the weaker
+# signal and MENU tunes there.
+master 146520000
+signal 146520000 110 -1 always
+signal 146700000 90 -1 always
+app spectrum
+wait 4
+key side1
+wait 3
+key side1
+wait 3
+key side1
+wait 3
+shot weaker_marked
+key menu
+expect exit
+expect vfo 146700000 0

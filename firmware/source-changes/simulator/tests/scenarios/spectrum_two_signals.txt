@@ -1,4 +1,4 @@
-# Spectrum panadapter with a strong and a weaker signal, then the range moved.
+# Spectrum panadapter with a strong and a weaker signal. The marker sits on the strongest; MENU tunes the VFO there and leaves.
 master 146520000
 signal 146520000 110 -1 always
 signal 146700000 90 -1 always
@@ -7,7 +7,11 @@ wait 2
 shot first_sweep
 wait 4
 shot waterfall_filled
-key menu
-shot rx_mode
 key up
-shot range_shifted_up
+shot range_shifted_up        # window moved off both signals: nothing above the trigger line
+key down
+wait 5
+shot back_on_signals
+key menu                     # tune to the strongest (146.520, 110) and leave
+expect exit
+expect vfo 146520000 0
