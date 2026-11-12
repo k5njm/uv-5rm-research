@@ -1011,6 +1011,12 @@ fn enter(api: &Api) -> AppResult {
 }
 
 fn key(api: &Api, kind: u8, id: u8) -> AppResult {
+    // The core also hands apps Press (0) and Release (1) around every Single (device/keypad.rs, app/mod.rs poll_keys: all
+    // events are dispatched back to back). Acting on them here would clear the notice the Single just raised before it is
+    // ever drawn: found by making the simulator send them (docs/TEST-DOUBLES.md).
+    if kind < KIND_SINGLE {
+        return AppResult::Continue;
+    }
     unsafe {
         let state = &mut *core::ptr::addr_of_mut!(STATE);
         let phase = core::mem::replace(
