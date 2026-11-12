@@ -53,7 +53,7 @@ has a CH340 chip). Before any software runs:
 9. After the radio restarts: `dump_nor.py PORT my-backup/cal-after-first-flash.bin --cal`; record the sha256 in your notes.
    After every later flash, dump again; the hashes must match. A change means something wrote calibration: stop.
 10. Apps: `install_apps.py PORT build-out/release` (the release folder from `scripts/dev.sh release`; every slot is read back); then channels, details, FM names and the
-    boot screen with their own tools (see the table in the [user guide](USER-GUIDE.md#loading-from-a-computer)); then re-run `dump_nor.py --cal` once more.
+    boot screen with their own tools (see the table under "Loading from a computer" in docs/USER-GUIDE.md in the repository); then re-run `dump_nor.py --cal` once more.
     `install.py` does steps B to D and 10 in one guarded run.
 11. Settings: TX INHIBIT stays ON until you have a dummy load on the antenna port.
 

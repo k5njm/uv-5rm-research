@@ -898,7 +898,7 @@ python3 install.py --port PORT                 # menus, then the real thing afte
 ```
 
 **It has only been run against simulated radios, never a real one.** The tools it drives have each been used on the one radio, except
-the channel loader after the sector fix, the details and FM writers and the boot-logo tool in their latest form (AUDIT 48).
+the FM station writer (AUDIT 45, 48).
 
 The manual path is the individual tools, in the order of [FIRST-FLASH-RUNBOOK.md](FIRST-FLASH-RUNBOOK.md). What each load replaces:
 
