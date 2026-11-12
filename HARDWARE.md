@@ -60,7 +60,7 @@ Based on hardware reverse engineering by `amoxu` (`Baofeng-UV-5RM-5RH-RE`) and `
 * **Custom Silkprint:** `SYN2A-000`
 * **Core:** ARM 32-bit Cortex-M4 running up to 120 MHz
 * **On-Chip Flash:** 64 KB (divided into 4 KB bootloader at `0x08000000` + 60 KB main application at `0x08001000`)
-* **SRAM:** 16 KB (top of stack: `0x20004000`)
+* **SRAM:** 16 KB (top of stack: `0x20004000`). Core firmware layout (`firmware-source/memory.x`): `.data`+`.bss` at `0x20000000` (460 bytes), 256-byte pad for the core's statics to grow into (the build fails when under 64 bytes of it is left), the 8 KB overlay-app arena at `0x200002D0-0x200022D0` (`abi::ARENA_ADDR`, pinned), and the stack from `0x200022D0` up to `0x20004000` (7,472 bytes).
 * **Note on ISP:** The chip's native Artery system ISP bootloader mode (`0x1FFFE400`) is repurposed by Baofeng for configuration storage; external updates run through Baofeng's KDH bootloader over the K-plug UART.
 
 ### RF Transceiver
