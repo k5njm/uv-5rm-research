@@ -1,0 +1,25 @@
+# Settings, KEYS group: the VFO/MR long-press item and the "open app in slot N" choices.
+app settings
+key down
+key down
+key down                  # KEYS
+shot keys_selected
+key menu
+key up                    # wraps to the last item, VFO/MR LONG
+shot vm_long_none
+key menu                  # edit
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up                    # twelve steps: 1-4, 6-8, 10-14 (retired values 5 and 9 are skipped) = APP 4
+shot vm_long_app4
+key exit
+shot accepted

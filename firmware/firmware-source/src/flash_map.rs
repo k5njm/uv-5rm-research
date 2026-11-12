@@ -72,6 +72,18 @@ pub mod addr {
     /// app. Firmware does not interpret this region.
     pub const OVERLAY_DATA_ADDR: u32 =
         OVERLAY_APP_ADDR + OVERLAY_SLOT_SIZE * OVERLAY_SLOT_COUNT as u32;
+
+    /// Channel extras: one 20-byte record per channel slot, in the data region (clear of the satellite table at its
+    /// start and the TEXT log at 0x1F0000). Record: 16 bytes of ASCII detail (a location or description, padded
+    /// with 0xFF), 2 bytes reserved for group tags, 1 reserved, and `CHAN_EXTRA_MARK` in the last byte. A record
+    /// without the mark is ignored, so whatever was in this flash before the table was written shows nothing.
+    /// Written through the programming port (`CMD_EXTRA_WRITE`) by `channel_extras.py`; the 12-byte channel name
+    /// stays in the channel record, where CHIRP and the stock firmware expect it.
+    pub const CHAN_EXTRA_ADDR: u32 = 0x1E_0000;
+    pub const CHAN_EXTRA_REC: u32 = 20;
+    pub const CHAN_EXTRA_TABLE: u32 = 20480; // 1000 records, padded to whole 512-byte chunks (5 sectors)
+    pub const CHAN_DETAIL_LEN: usize = 16;
+    pub const CHAN_EXTRA_MARK: u8 = 0xA5;
 }
 
 pub const FIRST_BOOT_MAGIC: [u8; 4] = *b"AURA";
@@ -570,12 +582,12 @@ impl Settings {
             rptrl: buf[19].min(10),
             vox_delay: buf[20].min(15),
             battery_cal_raw: u16::from_le_bytes([buf[21], buf[22]]),
-            side1_short: buf[23].min(10),
-            side1_long: buf[24].min(10),
-            side2_short: buf[25].min(10),
-            side2_long: buf[26].min(10),
-            band_short: buf[27].min(10),
-            band_long: buf[28].min(10),
+            side1_short: buf[23].min(crate::app::KEYFN_MAX),
+            side1_long: buf[24].min(crate::app::KEYFN_MAX),
+            side2_short: buf[25].min(crate::app::KEYFN_MAX),
+            side2_long: buf[26].min(crate::app::KEYFN_MAX),
+            band_short: buf[27].min(crate::app::KEYFN_MAX),
+            band_long: buf[28].min(crate::app::KEYFN_MAX),
             band_lock: buf[29].min(9),
             boot_display_mode: buf[30].min(2),
             boot_sound_enabled: buf[31] != 0,

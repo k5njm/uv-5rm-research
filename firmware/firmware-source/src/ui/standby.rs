@@ -1,7 +1,7 @@
+use crate::fmtlite::Sink;
 use super::{icons, TextBuf, SCREEN_H, SCREEN_W};
 use crate::app::{self, ChannelDisplayMode};
 use crate::device::radio::{Modulation, Power, SubAudio};
-use core::fmt::Write as _;
 use embedded_graphics::mono_font::{
     ascii::{FONT_5X8, FONT_6X10, FONT_9X18},
     MonoFont, MonoTextStyle,
@@ -13,7 +13,28 @@ use embedded_graphics::text::Text;
 
 const BG: Rgb565 = Rgb565::BLACK;
 const FG: Rgb565 = Rgb565::WHITE;
-const ACCENT: Rgb565 = Rgb565::new(24, 8, 4);
+// The accent says what you are tuned with: blue = VFO, green = a memory channel, red = transmitting.
+// Red is kept for transmit and warnings only.
+const VFO_ACCENT: Rgb565 = Rgb565::new(8, 36, 31);
+const MEM_ACCENT: Rgb565 = Rgb565::new(6, 50, 10);
+
+fn accent_for(transmitting_here: bool, channel_mode: bool) -> Rgb565 {
+    if transmitting_here {
+        ALERT
+    } else if channel_mode {
+        MEM_ACCENT
+    } else {
+        VFO_ACCENT
+    }
+}
+
+/// Accent of side `i` (0 = A, 1 = B).
+fn accent(app: &app::App, i: usize) -> Rgb565 {
+    accent_for(
+        app.is_transmitting() && i == app.master_index(),
+        app.side_is_channel_mode(i),
+    )
+}
 const STATUS_BG: Rgb565 = Rgb565::BLACK;
 const AMBER: Rgb565 = Rgb565::new(31, 50, 0);
 const ALERT: Rgb565 = Rgb565::new(31, 8, 4);
@@ -51,6 +72,8 @@ pub(super) struct Snapshot {
     dual_standby: bool,
     vox: bool,
     key_locked: bool,
+    scan: u8,
+    tag: &'static str,
     master_index: usize,
     dtmf_dial_active: bool,
     dtmf_dial_len: usize,
@@ -125,13 +148,15 @@ impl Snapshot {
         self.tx_prohibited || self.no_channels_notice
     }
 
-    fn flags(&self) -> (bool, bool, bool, bool, bool) {
+    fn flags(&self) -> (bool, bool, bool, bool, bool, u8, &'static str) {
         (
             self.is_transmitting,
             self.power_save,
             self.dual_standby,
             self.vox,
             self.key_locked,
+            self.scan,
+            self.tag,
         )
     }
 
@@ -165,6 +190,8 @@ impl Snapshot {
             dual_standby: app.dual_standby_enabled(),
             vox: app.vox_enabled(),
             key_locked: app.is_key_locked(),
+            scan: app.scan_indicator(),
+            tag: app.status_tag(),
             master_index,
             dtmf_dial_active: app.dtmf_dial_active(),
             dtmf_dial_len: app.dtmf_dial_len(),
@@ -232,7 +259,7 @@ where
 {
     fill(lcd, 0, 0, SCREEN_W, SCREEN_H, BG);
     fill(lcd, 0, 0, SCREEN_W, STATUS_HEIGHT, STATUS_BG);
-    fill(lcd, 0, STATUS_HEIGHT, SCREEN_W, 1, ACCENT);
+    fill(lcd, 0, STATUS_HEIGHT, SCREEN_W, 1, accent(app, snap.master_index));
     fill(lcd, 0, BAND_TOP1 - 1, SCREEN_W, 1, HAIR);
     fill(lcd, MARGIN, METER_RULE_Y, SCREEN_W - 2 * MARGIN, 1, HAIR);
 
@@ -245,9 +272,29 @@ where
     }
 
     if app.tx_prohibited() {
-        draw_overlay(lcd, "TX PROHIBITED", ALERT);
+        // say why, in the words the settings use
+        let why = match app.tx_block() {
+            app::TX_BLOCK_INHIBIT => "TX INHIBIT IS ON",
+            app::TX_BLOCK_RX_ONLY => "RX-ONLY CHANNEL",
+            app::TX_BLOCK_BAND => "OUTSIDE TX BANDS",
+            app::TX_BLOCK_BUSY => "CHANNEL BUSY",
+            _ => "TX PROHIBITED",
+        };
+        draw_overlay(lcd, why, ALERT);
     } else if app.no_channels_notice() {
-        draw_overlay(lcd, "NO CHANNELS", AMBER);
+        // Name the group: with a group other than ALL selected, channels outside its number range are skipped.
+        if app.notice_kind() == app::NOTICE_OUT_OF_RANGE {
+            draw_overlay(lcd, "OUT OF RX RANGE", AMBER);
+        } else if app.notice_kind() == app::NOTICE_FM_BROADCAST {
+            draw_overlay(lcd, "BROADCAST: USE FM APP", AMBER);
+        } else if app.chan_mode_index() == 0 {
+            draw_overlay(lcd, "NO CHANNELS", AMBER);
+        } else {
+            let mut label: TextBuf<16> = TextBuf::new();
+            label.put_str("NO CH IN ");
+            label.put_str(app.chan_mode_short());
+            draw_overlay(lcd, label.as_str(), AMBER);
+        }
     }
 }
 
@@ -268,15 +315,22 @@ where
             || p.no_channels_notice != snap.no_channels_notice
     });
     let first_frame = cache.structural.is_none();
+    let accent_changed = cache.structural.as_ref().map_or(false, |p| {
+        p.is_transmitting != snap.is_transmitting
+            || p.master_index != snap.master_index
+            || p.sides[0].is_channel_mode != snap.sides[0].is_channel_mode
+            || p.sides[1].is_channel_mode != snap.sides[1].is_channel_mode
+    });
 
     let did_full_redraw = if overlay_active {
         first_frame || !prev_overlay_active || overlay_content_changed
     } else {
-        first_frame || prev_overlay_active
+        first_frame || prev_overlay_active || accent_changed
     };
 
     if did_full_redraw {
         full_redraw(lcd, app, &snap);
+        cache.tx_elapsed = None; // the timer was just painted from scratch
     } else if !overlay_active {
         let prev = cache.structural.as_ref().unwrap(); // Some, since !first_frame here
 
@@ -423,13 +477,23 @@ where
     } else {
         for (on, label, color) in [
             (app.power_save_active(), "PS", DIM),
-            (app.dual_standby_enabled(), "DWR", ACCENT),
+            (app.dual_standby_enabled(), "DWR", accent(app, app.master_index())),
         ] {
             if on {
                 text(lcd, label, &FONT_5X8, x, baseline, color);
                 x += (label.len() as i32 + 1) * TINY_W;
             }
         }
+    }
+    // scanning happens on this screen: the frequency or channel below changes as it steps
+    let scan = match app.scan_indicator() {
+        1 => "SCAN UP",
+        2 => "SCAN DN",
+        _ => "",
+    };
+    if !scan.is_empty() {
+        text(lcd, scan, &FONT_5X8, x, baseline, AMBER);
+        x += (scan.len() as i32 + 1) * TINY_W;
     }
     if app.vox_enabled() {
         text(lcd, "VOX", &FONT_5X8, x, baseline, AMBER);
@@ -438,14 +502,14 @@ where
     if app.is_key_locked() {
         icons::draw_padlock(lcd, x, 2, AMBER);
     }
-    let short = app.chan_mode_short();
+    let short = app.status_tag();
     text(
         lcd,
         short,
         &FONT_5X8,
         FLAGS_W - short.len() as i32 * TINY_W - 2,
         baseline,
-        ACCENT,
+        accent(app, app.master_index()),
     );
 }
 
@@ -455,7 +519,9 @@ where
 {
     let secs = app.tx_elapsed_seconds();
     let mut buf: TextBuf<8> = TextBuf::new();
-    write!(buf, "{:02}:{:02}", secs / 60, secs % 60).ok();
+    buf.put_u32_w((secs / 60) as u32, 2, b'0');
+    buf.put_char(':');
+    buf.put_u32_w((secs % 60) as u32, 2, b'0');
     text(
         lcd,
         buf.as_str(),
@@ -508,7 +574,10 @@ fn draw_battery<D>(
     );
 
     let mut volts: TextBuf<8> = TextBuf::new();
-    write!(volts, "{}.{:02}V", cv / 100, cv % 100).ok();
+    volts.put_u32((cv / 100) as u32);
+    volts.put_char('.');
+    volts.put_u32_w((cv % 100) as u32, 2, b'0');
+    volts.put_char('V');
     let volts = volts.as_str();
     text(
         lcd,
@@ -533,10 +602,8 @@ where
     D: DrawTarget<Color = Rgb565>,
 {
     let master = i == snap.master_index;
-    let color = if snap.is_transmitting && master {
-        ALERT
-    } else if master {
-        ACCENT
+    let color = if master {
+        accent_for(snap.is_transmitting, snap.sides[i].is_channel_mode)
     } else {
         HAIR
     };
@@ -612,9 +679,10 @@ where
 
     let mut label: TextBuf<8> = TextBuf::new();
     if app.side_is_channel_mode(i) {
-        write!(label, "M{:03}", app.side_channel_num(i) + 1).ok();
+        // the channel's number within the current group (the group is named in the status bar)
+        app.put_channel_number(i, app.side_channel_num(i), &mut label);
     } else {
-        write!(label, "VFO").ok();
+        label.put_str("VFO");
     }
     text(
         lcd,
@@ -622,7 +690,7 @@ where
         &FONT_6X10,
         LABEL_X,
         baseline,
-        if is_master { ACCENT } else { DIM },
+        if is_master { accent(app, i) } else { DIM },
     );
 
     if app.channel_display_mode() == ChannelDisplayMode::Frequency {
@@ -636,6 +704,12 @@ where
                 top + FONT_5X8.baseline as i32 + 3,
                 DIM,
             );
+        }
+    } else {
+        // the channel's location or description ("Richardson"), beside its number and above the name
+        let detail = app.side_detail_str(i);
+        if !detail.is_empty() {
+            text_right(lcd, detail, &FONT_6X10, baseline, if is_master { FG } else { DIM });
         }
     }
 }
@@ -670,13 +744,9 @@ where
                 let shown = &name[..name.len().min(10)];
                 text(lcd, shown, &FONT_9X18, CONTENT_X + 3, baseline, fg);
                 let mut freq_line: TextBuf<12> = TextBuf::new();
-                write!(
-                    freq_line,
-                    "{}.{:04}",
-                    freq_hz / 1_000_000,
-                    freq_hz / 100 % 10_000
-                )
-                .ok();
+                freq_line.put_u32(freq_hz / 1_000_000);
+                freq_line.put_char('.');
+                freq_line.put_u32_w(freq_hz / 100 % 10_000, 4, b'0');
                 text_right(lcd, freq_line.as_str(), &FONT_6X10, baseline, fg);
             }
             ChannelDisplayMode::Name if has_name => {
@@ -711,9 +781,11 @@ pub(crate) fn draw_frequency<D>(
     let frac = (freq_hz % 1_000_000) / 10; // 5 fractional digits (kHz + 2 extra)
 
     let mut head: TextBuf<8> = TextBuf::new();
-    write!(head, "{:3}.{:03}", mhz, frac / 100).ok();
+    head.put_u32_w(mhz, 3, b' ');
+    head.put_char('.');
+    head.put_u32_w(frac / 100, 3, b'0');
     let mut tail: TextBuf<4> = TextBuf::new();
-    write!(tail, "{:02}", frac % 100).ok();
+    tail.put_u32_w(frac % 100, 2, b'0');
 
     let head_w = head.as_str().len() as i32 * BIG_W;
     let tail_w = tail.as_str().len() as i32 * SMALL_W;
@@ -739,12 +811,12 @@ where
     let mut buf: TextBuf<8> = TextBuf::new();
     for pos in 0..6usize {
         if pos == 3 {
-            write!(buf, ".").ok();
+            buf.put_char('.');
         }
         if pos < len {
-            write!(buf, "{}", app.freq_input_digit(pos) as u32).ok();
+            buf.put_u32(app.freq_input_digit(pos) as u32);
         } else {
-            write!(buf, "-").ok();
+            buf.put_char('-');
         }
     }
     let w = buf.as_str().len() as i32 * BIG_W;
@@ -764,12 +836,11 @@ where
 {
     let len = app.channel_input_len();
     let mut buf: TextBuf<8> = TextBuf::new();
-    write!(buf, "M").ok();
     for pos in 0..3usize {
         if pos + len < 3 {
-            write!(buf, "-").ok();
+            buf.put_char('-');
         } else {
-            write!(buf, "{}", app.freq_input_digit(pos + len - 3) as u32).ok();
+            buf.put_u32(app.freq_input_digit(pos + len - 3) as u32);
         }
     }
     text(lcd, buf.as_str(), &FONT_6X10, LABEL_X, baseline_y, AMBER);
@@ -782,12 +853,12 @@ where
     let len = app.dtmf_dial_len();
     let cap = app.dtmf_dial_capacity();
     let mut buf: TextBuf<17> = TextBuf::new();
-    write!(buf, ">").ok();
+    buf.put_char('>');
     for pos in 0..cap {
         if pos < len {
-            write!(buf, "{}", dtmf_char(app.dtmf_dial_digit(pos))).ok();
+            buf.put_char(dtmf_char(app.dtmf_dial_digit(pos)));
         } else {
-            write!(buf, "-").ok();
+            buf.put_char('-');
         }
     }
     text(lcd, buf.as_str(), &FONT_6X10, MARGIN, baseline_y, AMBER);
@@ -847,7 +918,7 @@ where
         (power, FG),
         (
             tone_mode_label(app.side_subaudio_tx(i), app.side_subaudio_rx(i)),
-            ACCENT,
+            accent(app, i),
         ),
         (dir, DIM),
         (if app.side_wide_band(i) { "WIDE" } else { "NAR" }, DIM),
@@ -1044,22 +1115,25 @@ fn draw_meter<D>(
         fill(lcd, 0, METER_TOP, S_METER_BAR_X - 3, METER_H, BG);
         let mut line: TextBuf<20> = TextBuf::new();
         if !state.live {
-            line.write_str("LAST ").ok();
+            line.put_str("LAST ");
         }
         if let Some(side) = state.side {
-            line.write_str(if side == 0 { "A " } else { "B " }).ok();
+            line.put_str(if side == 0 { "A " } else { "B " });
         }
         match state.dbm {
             None => {
-                line.write_str("--").ok();
+                line.put_str("--");
             }
             Some(dbm) => {
-                write!(line, "{dbm}dBm").ok();
+                line.put_i32(dbm as i32);
+                line.put_str("dBm");
                 if state.live {
                     if state.over_s9 > 0 {
-                        write!(line, " +{}", state.over_s9).ok();
+                        line.put_str(" +");
+                        line.put_u32(state.over_s9 as u32);
                     } else {
-                        write!(line, " S{}", state.s_number).ok();
+                        line.put_str(" S");
+                        line.put_u32(state.s_number as u32);
                     }
                 }
             }

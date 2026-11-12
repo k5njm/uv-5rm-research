@@ -1491,6 +1491,15 @@ impl<'a> Fd6818<'a> {
         board::set_fd6818_sck(self.gpioa, false);
     }
 
+    /// Raw register access for the overlay API (`rf_reg_read` / `rf_reg_write`); the allow-list is in the ABI crate.
+    pub fn reg_read(&mut self, syst: &mut SYST, addr: u8) -> u16 {
+        self.read_reg(syst, addr)
+    }
+
+    pub fn reg_write(&mut self, syst: &mut SYST, addr: u8, value: u16) {
+        self.write_reg(syst, addr, value)
+    }
+
     /// read 16bit reg
     fn read_reg(&mut self, syst: &mut SYST, addr: u8) -> u16 {
         board::set_fd6818_scn(self.gpioc, false);

@@ -1,0 +1,13 @@
+# SAVE gives feedback: the list title names the saved channel until the next key. Numbers match the main screen (M001 = CH001).
+chan 0 147120000 147720000 K5RWK
+chan 1 146940000 146340000 RPT-A
+app chanmgr
+shot list_numbers_from_1
+key menu                  # open CH001
+key up                    # DEL
+key up                    # SAVE
+shot save_row
+key menu                  # save
+shot saved_notice
+key down
+shot notice_cleared

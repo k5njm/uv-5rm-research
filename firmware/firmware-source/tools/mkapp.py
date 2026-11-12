@@ -21,6 +21,19 @@ assert SEG_SIZE == 20 and HEADER_SIZE == 108
 SEG_ALIGN = 4
 
 APP_RUSTFLAGS = "-C link-arg=-Tapp.x -C link-arg=--nmagic"
+# Default "small" build (nightly, panic=immediate-abort, core rebuilt for size). MKAPP_MODE=legacy builds with the stable
+# toolchain exactly as the shipped binaries were (used by tools/provenance.py). Toolchains come from firmware/toolchain.env.
+SMALL_RUSTFLAGS = APP_RUSTFLAGS + " -Zunstable-options -Cpanic=immediate-abort"
+
+
+def toolchains() -> dict:
+    env = Path(__file__).resolve().parents[2] / "toolchain.env"
+    out = {}
+    for line in env.read_text().splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
 
 
 def run(cmd, **kw):
@@ -63,6 +76,15 @@ def slot_size(fw_root: Path) -> int:
     return int(m.group(1)) * 1024
 
 
+def abi_arena_addr(app_dir: Path) -> int:
+    """`ARENA_ADDR` from the ABI crate next to this tool: the address the firmware pins its arena to."""
+    lib_rs = (Path(__file__).resolve().parents[1] / "abi" / "src" / "lib.rs").read_text()
+    m = re.search(r"pub const ARENA_ADDR:\s*usize\s*=\s*(0x[0-9A-Fa-f_]+)", lib_rs)
+    if not m:
+        sys.exit("[ERR] missing ARENA_ADDR in abi/src/lib.rs")
+    return int(m.group(1).replace("_", ""), 16)
+
+
 def arena_origin(app_dir: Path) -> int:
     app_x = (app_dir / "app.x").read_text()
     m = re.search(r"ORIGIN\s*=\s*(0x[0-9A-Fa-f]+)", app_x)
@@ -101,8 +123,12 @@ def check_is_crate(app_dir: Path) -> None:
 def cargo_build(app_dir: Path, bin_name: str) -> Path:
     print(f"[..] {app_dir.name}: cargo build --release")
     touch_if_stale_linker_script(app_dir, elf_path(app_dir))
-    full_env = {**os.environ, "RUSTFLAGS": APP_RUSTFLAGS}
-    cmd = ["cargo", "build", "--release"]
+    tc = toolchains()
+    legacy = os.environ.get("MKAPP_MODE", "small") == "legacy"
+    full_env = {**os.environ, "RUSTFLAGS": APP_RUSTFLAGS if legacy else SMALL_RUSTFLAGS}
+    cmd = ["cargo", "+" + (tc["LEGACY_TOOLCHAIN"] if legacy else tc["SMALL_TOOLCHAIN"]), "build", "--release"]
+    if not legacy:
+        cmd += ["-Z", "build-std=core,compiler_builtins", "-Z", "build-std-features=compiler-builtins-mem"]
     features = os.environ.get("MKAPP_FEATURES")  # e.g. MKAPP_FEATURES=style-d74
     if features:
         cmd += ["--features", features]
@@ -150,6 +176,10 @@ def build_segment(app_dir: Path, out_dir: Path) -> dict:
 
     entry = entry_address(elf)
     origin = arena_origin(app_dir)
+    want = abi_arena_addr(app_dir)
+    if origin != want:
+        sys.exit(f"[ERR] {app_dir.name}: app.x ORIGIN is 0x{origin:X} but the firmware's arena is at 0x{want:X} "
+                 "(abi ARENA_ADDR). An app linked for the wrong address hangs the radio when opened.")
     entry_off = entry - origin
     if entry_off < 0:
         sys.exit(f"[ERR] entry 0x{entry:X} smaller than ORIGIN 0x{origin:X}")

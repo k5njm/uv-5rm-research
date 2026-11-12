@@ -6,6 +6,13 @@ pub const MAGIC: [u8; 4] = *b"OVL1";
 
 pub const ARENA_SIZE: usize = 8192;
 
+/// Where the firmware keeps the arena in RAM. Every app is linked to run at exactly this address (`ORIGIN` in its
+/// `app.x`); the firmware's linker script pins the arena here (`memory.x`), its build checks it (`build_core.sh`), the
+/// packer checks each app (`mkapp.py`) and the loader refuses to start an app if the arena is anywhere else.
+/// Found the hard way on a radio: a core whose `.bss` was 8 bytes smaller put the arena at 0x200001C8, and every app
+/// hung the radio the moment it was opened.
+pub const ARENA_ADDR: usize = 0x2000_01D0;
+
 /// Hard ceiling for an *oversized* segment.
 pub const ARENA_MAX: usize = 12288;
 
@@ -183,6 +190,56 @@ pub struct Api {
     pub set_holds_rx: extern "C" fn(on: bool),
     pub set_af_out: extern "C" fn(on: bool),
     pub set_agc_fix: extern "C" fn(rank: i8),
+    // modem access and alerts
+    /// Raw 16-bit RF chip register read; any address. Reading the FIFO register (0x5F) pops one word.
+    pub rf_reg_read: extern "C" fn(addr: u8) -> u16,
+    /// Raw register write. Returns `false` and writes nothing unless [`rf_reg_writable`]: the power-amplifier,
+    /// bias, power, band-switch, scramble and AFC registers are never writable by apps. This guards against mistakes;
+    /// it is not a security boundary (an app can still drive the pins directly).
+    pub rf_reg_write: extern "C" fn(addr: u8, value: u16) -> bool,
+    /// Busy-wait `us` microseconds (SysTick based).
+    pub delay_us: extern "C" fn(us: u32),
+    /// Local-speaker-only tone sequence; never keys the transmitter; honours the user's beep setting.
+    /// `cues` points to `count` entries, at most 8.
+    pub play_cue: extern "C" fn(cues: *const Cue, count: u16),
+    /// Channel groups. Writes the name of group `index` (ASCII, no terminator, at most `cap` bytes) and returns its
+    /// length; 0 means there is no such group, so the number of groups is the first index that returns 0.
+    pub group_name: extern "C" fn(index: u8, out: *mut u8, cap: u16) -> u16,
+    /// Whether channel slot `num` (from 0) belongs to group `index`. Apps must ask instead of assuming how membership
+    /// is stored (today: the group's channel-number ranges).
+    pub chan_in_group: extern "C" fn(index: u8, num: u16) -> bool,
+    /// The group the radio is using now.
+    pub current_group: extern "C" fn() -> u8,
+    /// The number to show for channel slot `num` in group `index`: its position in the group from 1 (in ALL, the
+    /// printed channel number). 0 if the slot is not in the group. The main screen, scan and CHAN MGR all show this.
+    pub chan_group_pos: extern "C" fn(index: u8, num: u16) -> u16,
+    /// A notice box in the middle of the screen (like TX PROHIBITED), drawn over whatever is there. Call it after
+    /// `draw_list` on every Draw while it should show. `len` 0 removes it: the next `draw_list` repaints in full.
+    pub toast: extern "C" fn(text: *const u8, len: u16),
+    /// What the keys do on this screen, for the strip at the bottom of `draw_list` ("MENU open  EXIT back", at most
+    /// 26 characters). It stays until changed; `len` 0 clears it. Lists show 7 rows above the strip.
+    pub list_hint: extern "C" fn(text: *const u8, len: u16),
+}
+
+/// One tone of a [`Api::play_cue`] sequence: `hz_div10` = frequency / 10 (88 = 880 Hz), `ms` = duration.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Cue {
+    pub hz_div10: u16,
+    pub ms: u16,
+}
+
+/// RF chip registers an app may write through [`Api::rf_reg_write`]: interrupt/status (0x02, 0x0C), receive filter (0x2B),
+/// state (0x30, written by TEXT), interrupt enable (0x3F), deviation (0x40), audio (0x47, 0x48), the FSK modem block
+/// (0x58-0x5F: mode, control, sync, CRC, size, threshold, FIFO) and gain/tone/baud (0x70-0x72). This is the union of the
+/// registers the existing modem apps write. Everything else, notably 0x19 (PA bias), 0x31 (scramble), 0x33 (band/TX/RX
+/// path switch), 0x36 (PA), 0x37 (power) and 0x73 (AFC), stays core-only. Reads are unrestricted.
+pub const RF_WRITABLE: [u8; 19] = [
+    0x02, 0x0C, 0x2B, 0x30, 0x3F, 0x40, 0x47, 0x48, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F, 0x70, 0x71, 0x72,
+];
+
+pub fn rf_reg_writable(addr: u8) -> bool {
+    RF_WRITABLE.contains(&addr)
 }
 
 /// `settings_get(5)` / `settings_get(6)` when no position has been entered.

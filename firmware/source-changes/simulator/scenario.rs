@@ -8,8 +8,11 @@
 //!   master HZ           the radio's tuned frequency when the app starts (default 146520000)
 //!   signal HZ LEVEL TONE always | duty ON PERIOD   a transmitter on the air: raw RSSI LEVEL, CTCSS index TONE
 //!                       (-1 none), either always on or on for ON s of every PERIOD s of radio time
-//!   chan N RXHZ [TXHZ] [NAME]   a stored channel (blank TX = receive-only)
+//!   group N                 the channel group the radio is using (0 = ALL), for apps that follow it; before `app`
+//!   chan N RXHZ [TXHZ] [NAME]   a stored channel (blank TX = receive-only). NAME `@ff` is the stock/CHIRP blank
+//!                       name (twelve 0xFF bytes); no NAME leaves twelve zero bytes
 //!                       master/signal/chan may appear before or after `app`; they are applied after the reset
+//!   air HEX [HEX...]   the simulated FSK modem hears a sync, then these 16-bit words (hex), one per poll
 //!   handoff GROUP ACTION   preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
 //!   key K               single press. K = 0-9 star pound menu exit up down ab
@@ -19,6 +22,8 @@
 //!   shot NAME           save NAME.png and compare with the golden of the same name
 //!   expect exit|noexit  whether the LAST key made the app exit
 //!   expect backlight on|off   the app's backlight-hold request
+//!   expect cues N       speaker-only cue sequences played so far (api.play_cue); never keys PTT, checked automatically
+//!   expect rfrefused N  RF register writes the core's allow-list refused
 //!   expect rxonly       (default on) fails the scenario if the app keyed PTT or the tone function
 //!   allow tx            disables the rx-only safety check for this scenario
 //! The same file is meant to drive the real radio through hil/ (keys via the injector,
@@ -30,6 +35,7 @@ fn lookup(name: &str) -> Option<Entry> {
     Some(match name {
         "hamtools" => hamtools::entry,
         "foxhunt" => foxhunt::entry,
+        "fskprobe" => fskprobe::entry,
         "bandsweep" => bandsweep::entry,
         "rptfind" => rptfind::entry,
         "qtscan2" => qtscan2::entry,
@@ -199,6 +205,10 @@ fn channel_record(rx: u32, tx: Option<u32>, name: &str) -> [u8; 32] {
     let mut r = [0u8; 32];
     r[0..4].copy_from_slice(&bcd(rx / 10));
     r[4..8].copy_from_slice(&tx.map_or([0xFF; 4], |t| bcd(t / 10)));
+    if name == "@ff" {
+        r[20..32].fill(0xFF); // what stock firmware and CHIRP store for an unnamed channel
+        return r;
+    }
     for (i, c) in name.bytes().take(12).enumerate() {
         r[20 + i] = c;
     }
@@ -281,7 +291,7 @@ impl Run<'_> {
                 reset(self.master);
                 chip_reset();   // the simulated FSK modem (TEXT)
                 nor_clear();    // a blank SPI flash for apps that save data
-                unsafe { TONE_ON_CALLS = 0; }
+                unsafe { TONE_ON_CALLS = 0; CUES.clear(); RF_WRITES_REFUSED = 0; }
                 for f in &self.setup {
                     f();
                 }
@@ -289,6 +299,10 @@ impl Run<'_> {
                 e(&API, AppEvent::Enter);
                 e(&API, AppEvent::Draw);
             }
+            ["group", n] => match n.parse::<u8>() {
+                Ok(g) => unsafe { crate::GROUP = g },
+                Err(_) => self.check(false, "group needs a group index"),
+            },
             ["master", hz] => match hz.parse::<u32>() {
                 Ok(h) => self.master = h,
                 Err(_) => self.check(false, "master needs a frequency in Hz"),
@@ -311,6 +325,14 @@ impl Run<'_> {
                 });
                 if self.app.is_some() { f(); }
                 self.setup.push(f);
+            }
+            ["air", words @ ..] => {
+                let Ok(w) = words.iter().map(|h| u16::from_str_radix(h, 16)).collect::<Result<Vec<_>, _>>() else {
+                    return self.check(false, "air needs hex words");
+                };
+                let c = chip();
+                c.script.push_back(AirEvent::Sync);
+                c.script.extend(w.into_iter().map(AirEvent::Word));
             }
             ["chan", n, rx, rest @ ..] => {
                 let (Ok(n), Ok(rx)) = (n.parse::<u16>(), rx.parse::<u32>()) else {
@@ -357,6 +379,14 @@ impl Run<'_> {
                 let want = *v == "on";
                 let got = unsafe { BACKLIGHT_HOLD };
                 self.check(got == want, &format!("backlight hold is {v}"));
+            }
+            ["expect", "cues", n] => {
+                let got = unsafe { CUES.len() };
+                self.check(n.parse::<usize>().ok() == Some(got), &format!("{n} speaker cue(s) played (got {got})"));
+            }
+            ["expect", "rfrefused", n] => {
+                let got = unsafe { RF_WRITES_REFUSED };
+                self.check(n.parse::<u32>().ok() == Some(got), &format!("{n} refused RF register write(s) (got {got})"));
             }
             ["allow", "tx"] => self.rx_only = false,
             _ => self.check(false, &format!("unrecognised step `{}`", t.join(" "))),

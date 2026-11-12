@@ -6,7 +6,10 @@ pub fn total_item_count() -> usize {
     overlay::SLOT_COUNT as usize
 }
 
-pub fn label_at(app: &mut App, index: usize, w: &mut dyn core::fmt::Write) {
+pub fn label_at(app: &mut App, index: usize, w: &mut dyn crate::fmtlite::Sink) {
+    // The slot number is what SETTINGS > KEYS "OPEN APP n" refers to.
+    w.put_u32(index as u32 + 1);
+    w.put_char(' ');
     overlay::slot_name(app, index as u8, w);
 }
 

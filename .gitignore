@@ -48,3 +48,6 @@ backup.bin
 
 # Containerised build output
 build-out/
+
+# Personal settings (callsign, name, port); .env.sample is the committed template
+.env

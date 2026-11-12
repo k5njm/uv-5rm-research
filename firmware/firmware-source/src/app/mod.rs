@@ -1,6 +1,19 @@
+/// Amber notices on the main screen (`App::notice_kind`).
+pub(crate) const NOTICE_NO_CHANNELS: u8 = 0;
+pub(crate) const NOTICE_OUT_OF_RANGE: u8 = 1;
+pub(crate) const NOTICE_FM_BROADCAST: u8 = 2;
+
+/// Reasons a PTT press is refused (`App::tx_block`).
+pub(crate) const TX_BLOCK_INHIBIT: u8 = 1;
+pub(crate) const TX_BLOCK_RX_ONLY: u8 = 2;
+pub(crate) const TX_BLOCK_BAND: u8 = 3;
+pub(crate) const TX_BLOCK_BUSY: u8 = 4;
+
 mod convert;
+mod group_table;
 mod input;
 mod keyfn;
+pub(crate) use keyfn::KEYFN_MAX;
 mod keys;
 mod launcher;
 mod modes;
@@ -121,7 +134,10 @@ pub struct App<'a> {
     sides: [side::Side; 2],
     settings: flash_map::Settings,
     launcher_index: usize,
+    /// The channel group of the side that has the keys (the master). Each side keeps its own in `side_groups`;
+    /// this mirrors the master's so the rest of the code can ask one question.
     chan_mode: u8,
+    side_groups: [u8; 2],
     mode_menu_index: usize,
     range_lo_hz: u32,
     range_hi_hz: u32,
@@ -139,6 +155,18 @@ pub struct App<'a> {
     key_lock: bool,
     transmitting: bool,
     tx_prohibited: bool,
+    /// Why the last PTT press was refused, for the notice (`TX_BLOCK_*`).
+    tx_block: u8,
+    /// The detail text (location/description) of the channel each side is on, and which channel it was read for
+    /// (`u16::MAX` = none). Read from the channel extras table when the channel changes. `App` lives on the
+    /// main stack, not in `.bss`, so this does not move the app arena.
+    details: [[u8; flash_map::addr::CHAN_DETAIL_LEN]; 2],
+    detail_of: [u16; 2],
+    /// The running app was opened from the APPS list (EXIT goes back to it) and not by a key (EXIT goes to the
+    /// main screen).
+    app_from_menu: bool,
+    /// What the amber notice on the main screen says while `no_channels_ticks` runs (`NOTICE_*`).
+    notice_kind: u8,
     dual_standby: bool,
     dual_hold_ticks: u16,
     tot_ticks: u16,
@@ -326,6 +354,7 @@ impl<'a> App<'a> {
             settings,
             launcher_index: 0,
             chan_mode,
+            side_groups: [chan_mode, modes::restore_side_b(&settings)],
             mode_menu_index: chan_mode as usize,
             range_lo_hz,
             range_hi_hz,
@@ -340,6 +369,11 @@ impl<'a> App<'a> {
             key_lock: false,
             transmitting: false,
             tx_prohibited: false,
+            tx_block: 0,
+            details: [[0; flash_map::addr::CHAN_DETAIL_LEN]; 2],
+            detail_of: [u16::MAX; 2],
+            app_from_menu: false,
+            notice_kind: 0,
             flashlight,
             dual_standby: settings.dual_standby,
             dual_hold_ticks: DUAL_STANDBY_HOLD_TICKS,
@@ -817,6 +851,9 @@ impl<'a> App<'a> {
     pub fn no_channels_notice(&self) -> bool {
         self.no_channels_ticks > 0
     }
+    pub fn notice_kind(&self) -> u8 {
+        self.notice_kind
+    }
 
     pub fn poll_blink(&mut self) {
         self.blink_phase = self.blink_phase.wrapping_add(1);
@@ -845,7 +882,7 @@ impl<'a> App<'a> {
     pub fn launcher_label_at(
         &mut self,
         index: usize,
-        w: &mut dyn core::fmt::Write,
+        w: &mut dyn crate::fmtlite::Sink,
     ) {
         launcher::label_at(self, index, w);
     }
@@ -877,6 +914,79 @@ impl<'a> App<'a> {
     }
     pub fn tx_prohibited(&self) -> bool {
         self.tx_prohibited
+    }
+    pub fn tx_block(&self) -> u8 {
+        self.tx_block
+    }
+
+    /// Bring `details` in line with the channel each side is on. Called before the main screen is drawn.
+    pub fn sync_channel_details(&mut self) {
+        use flash_map::addr;
+        for i in 0..2 {
+            let num = if self.sides[i].vfo_chan == ChVfoMode::Channel {
+                self.sides[i].channel_num
+            } else {
+                u16::MAX
+            };
+            if self.detail_of[i] == num {
+                continue;
+            }
+            self.detail_of[i] = num;
+            self.details[i] = [0; addr::CHAN_DETAIL_LEN];
+            if num == u16::MAX {
+                continue;
+            }
+            let mut rec = [0u8; addr::CHAN_EXTRA_REC as usize];
+            self.storage.read_raw(
+                addr::CHAN_EXTRA_ADDR + num as u32 * addr::CHAN_EXTRA_REC,
+                &mut rec,
+            );
+            if rec[addr::CHAN_EXTRA_REC as usize - 1] != addr::CHAN_EXTRA_MARK {
+                continue; // nothing written for this channel
+            }
+            for (k, &b) in rec[..addr::CHAN_DETAIL_LEN].iter().enumerate() {
+                if !(0x20..0x7F).contains(&b) {
+                    break; // padding, or not text
+                }
+                self.details[i][k] = b;
+            }
+        }
+    }
+
+    /// The number shown for channel slot `num`: its position in the current group, at least two digits ("01"; in
+    /// ALL the printed channel number). The main screen, the scan screen and CHAN MGR use the same number.
+    pub fn put_channel_number(&self, side: usize, num: u16, w: &mut dyn crate::fmtlite::Sink) {
+        let pos = group_table::group_pos(self.side_groups[side], num).unwrap_or(num + 1);
+        w.put_u32_w(pos as u32, 2, b'0');
+    }
+
+    /// The short tag in the status bar: the channel group on a memory channel, the band ("2M") in VFO mode.
+    pub fn status_tag(&self) -> &'static str {
+        let s = &self.sides[self.master];
+        if s.vfo_chan == ChVfoMode::Channel {
+            self.chan_mode_short()
+        } else {
+            group_table::band_name(s.rx_freq_hz)
+        }
+    }
+
+    /// 0 = not scanning, 1 = scanning up, 2 = scanning down. Scanning is shown on the main screen.
+    pub fn scan_indicator(&self) -> u8 {
+        if self.mode != Mode::Scan {
+            0
+        } else if scan::direction_up(self) {
+            1
+        } else {
+            2
+        }
+    }
+
+    /// Detail text of the channel side `index` is on; empty in VFO mode or when none was loaded.
+    pub fn side_detail_str(&self, index: usize) -> &str {
+        let d = &self.details[index];
+        let end = d.iter().position(|&b| b == 0).unwrap_or(d.len());
+        // only printable ASCII is ever stored (see `sync_channel_details`)
+        core::str::from_utf8(&d[..end]).unwrap_or("")
     }
 
     pub fn is_key_locked(&self) -> bool {

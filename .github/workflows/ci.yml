@@ -5,14 +5,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Pinned Rust toolchain (the version in firmware-source/rust-toolchain.toml, as in dev/Dockerfile)
-        # rustup picks a toolchain from the *current directory's* rust-toolchain.toml, and several steps run
-        # from other directories, so install the pinned one and make it the default for the whole job.
+      - name: Pinned Rust toolchains from firmware/toolchain.env (nightly for the shipped build, stable for the simulator)
+        # rustup picks a toolchain from the *current directory's* rust-toolchain.toml and several steps run from other
+        # directories, so install both pinned toolchains and make the stable one the job default.
         run: |
-          V=$(sed -n 's/^channel = "\(.*\)"/\1/p' firmware/firmware-source/rust-toolchain.toml)
-          rustup toolchain install "$V" --profile minimal -t thumbv7em-none-eabi
-          rustup default "$V"
-          rustc --version
+          . firmware/toolchain.env
+          rustup toolchain install "$LEGACY_TOOLCHAIN" --profile minimal -t thumbv7em-none-eabi
+          rustup toolchain install "$SMALL_TOOLCHAIN" --profile minimal -t thumbv7em-none-eabi -c rust-src
+          rustup default "$LEGACY_TOOLCHAIN"
+          rustc --version; rustc "+$SMALL_TOOLCHAIN" --version
       - name: Release gate (shipped .BF and .app files)
         run: python3 -I firmware/tools/verify_release.py
       - name: Boot logo / tune tools against a fake radio
@@ -47,7 +48,7 @@ jobs:
         run: |
           pip install pillow numpy
           python3 hil/test_hil.py
-      - name: HAM TOOLS overlay builds for the target and fits the 8 KB arena
+      - name: HAM TOOLS and FSK PROBE overlays build for the target and fit the 8 KB arena
         working-directory: firmware/firmware-source
         run: |
           sudo apt-get install -y llvm >/dev/null
@@ -57,14 +58,14 @@ jobs:
             f=""; [ $st != classic ] && f="style-$st"
             MKAPP_FEATURES=$f PATH=/tmp/shim:$PATH python3 tools/mkapp.py apps/hamtools --name "HAM TOOLS" -o /tmp/out/hamtools-$st.app
           done
+          PATH=/tmp/shim:$PATH python3 tools/mkapp.py apps/fskprobe --name "FSK PROBE" -o /tmp/out/fskprobe.app
       - name: Core firmware builds (default YP07/FD6818B and bk4819 variants) and fits 60 KB
         working-directory: firmware
         run: |
           mkdir -p /tmp/out
-          cargo build --release --manifest-path firmware-source/Cargo.toml --config firmware-source/.cargo/config.toml --target-dir /tmp/t/fw
-          python3 -I source-changes/elf2bin.py /tmp/t/fw/thumbv7em-none-eabi/release/bf5rh-fw /tmp/out/fw-default.bin
-          cargo build --release --features bk4819 --manifest-path firmware-source/Cargo.toml --config firmware-source/.cargo/config.toml --target-dir /tmp/t/fwbk
-          python3 -I source-changes/elf2bin.py /tmp/t/fwbk/thumbv7em-none-eabi/release/bf5rh-fw /tmp/out/fw-bk4819.bin
+          export PATH=/tmp/shim:$PATH   # rust-nm, for build_core.sh's check of the app arena address
+          CARGO_TARGET_DIR=/tmp/t/fw bash tools/build_core.sh small /tmp/out/fw-default.bin
+          CARGO_TARGET_DIR=/tmp/t/fwbk bash tools/build_core.sh small /tmp/out/fw-bk4819.bin bk4819
           sha256sum /tmp/out/*.bin | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
@@ -86,6 +87,8 @@ jobs:
       matrix: { app: [aprs, horus, rs41] }
     steps:
       - uses: actions/checkout@v4
+      - name: Pinned nightly (the apps' rust-toolchain.toml)
+        run: rustup toolchain install "$(sed -n 's/^SMALL_TOOLCHAIN=//p' firmware/toolchain.env)" --profile minimal -c rust-src -t thumbv7em-none-eabi
       - name: Build ${{ matrix.app }} (known-broken, non-blocking)
         working-directory: firmware/firmware-source/apps/${{ matrix.app }}
         continue-on-error: true

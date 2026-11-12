@@ -1,0 +1,11 @@
+# FSK probe hears a sync and a few words: counters and the last four FIFO words update.
+master 144390000
+signal 144390000 90 -1 always
+app fskprobe
+key menu
+air 7E7E 1234 ABCD 0F0F 55AA 00FF
+wait 2
+shot heard
+expect rfrefused 0
+key exit
+expect exit

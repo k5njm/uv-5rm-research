@@ -133,6 +133,10 @@ fn dispatch_standby(app: &mut App, syst: &mut SYST, ev: KeyEvent) {
         KeyEventKind::Long => match ev.key {
             KeyId::Asterisk => app.key_lock = !app.key_lock,
             KeyId::Pound => scan::enter(app, syst),
+            KeyId::Vm => {
+                let func = keyfn::from_u8(modes::vm_long(&app.settings));
+                keyfn::invoke(app, syst, func);
+            }
             KeyId::Side1 | KeyId::Side2 | KeyId::Band => {
                 let func = keyfn::from_u8(long_function(app, ev.key));
                 keyfn::invoke(app, syst, func);
@@ -207,12 +211,26 @@ fn dispatch_app_menu(app: &mut App, syst: &mut SYST, ev: KeyEvent) {
             KeyId::Menu if ev.kind == KeyEventKind::Single => {
                 let index = app.launcher_index;
                 if launcher::is_available_at(app, index) {
+                    app.app_from_menu = true;
                     super::overlay::enter(app, syst, index as u8);
                 }
             }
             KeyId::Exit if ev.kind == KeyEventKind::Single => {
                 app.mode = Mode::Standby;
                 app.reset_key_idle();
+            }
+            // 1-9 open the app in that slot, as the numbers in the list suggest
+            key if ev.kind == KeyEventKind::Single => {
+                if let Some(d @ 1..=9) = digit_value(key) {
+                    let index = d as usize - 1;
+                    if index < launcher::total_item_count()
+                        && launcher::is_available_at(app, index)
+                    {
+                        app.launcher_index = index;
+                        app.app_from_menu = true;
+                        super::overlay::enter(app, syst, index as u8);
+                    }
+                }
             }
             _ => {}
         },

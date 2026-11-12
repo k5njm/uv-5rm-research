@@ -1,0 +1,12 @@
+# CHAN MGR: the DELETE row is armed first, says what MENU will do, and EXIT keeps the channel. Never presses Menu twice on DELETE.
+chan 0 147120000 147720000 K5RWK
+app chanmgr
+key menu                  # open CH001
+key up                    # DELETE
+shot delete_row
+key menu                  # arm
+shot delete_armed
+key exit                  # keep it
+shot kept
+key up                    # SAVE
+shot save_row_hint

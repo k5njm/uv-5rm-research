@@ -151,7 +151,7 @@ pub enum BandLock {
     Ca,
     /// TX disabled on every frequency.
     All,
-    /// No restriction beyond the hardware's own synthesizer range
+    /// Every band the transmitter was built for, except the weather channels (see `tx_ranges`).
     None,
 }
 
@@ -181,8 +181,8 @@ impl BandLock {
             BandLock::Pmr => "PMR446",
             BandLock::GmrsFrsMurs => "GMRS/FRS",
             BandLock::Ca => "CA HAM",
-            BandLock::All => "ALL LOCK",
-            BandLock::None => "UNLOCK",
+            BandLock::All => "NONE",
+            BandLock::None => "ALL",
         }
     }
 
@@ -235,7 +235,17 @@ impl BandLock {
                 r(430_000_000, 450_000_000),
             ]),
             BandLock::All => FreqRanges::empty(),
-            BandLock::None => FreqRanges::hardware(),
+            // The bands this radio's transmitter was built for: its stock firmware reports 136-174, 220-260 and
+            // 400-520 MHz. Never below 136 MHz (FM broadcast, the AM air band) and never on the seven NOAA weather
+            // channels (162.400-162.550 MHz, with half a channel either side). The same rule applies to VFO and
+            // memory channels. This used to be the synthesizer's whole range (16-560 and 740-1120 MHz), which let
+            // the radio key up where its transmitter has no filtering.
+            BandLock::None => FreqRanges::from_slice(&[
+                r(136_000_000, 162_387_499),
+                r(162_562_501, 174_000_000),
+                r(220_000_000, 260_000_000),
+                r(400_000_000, 520_000_000),
+            ]),
         }
     }
 }
@@ -557,6 +567,15 @@ impl<'a> Radio<'a> {
             self.rf_parked = false;
         }
         self.play_tone_sequence(syst, &BEEP_TONES, false, true);
+    }
+
+    /// Raw RF register access for apps; the caller (overlay API) enforces the write allow-list.
+    pub fn rf_reg_read(&mut self, syst: &mut SYST, addr: u8) -> u16 {
+        self.fd6818.reg_read(syst, addr)
+    }
+
+    pub fn rf_reg_write(&mut self, syst: &mut SYST, addr: u8, value: u16) {
+        self.fd6818.reg_write(syst, addr, value)
     }
 
     /// Local-speaker-only tone sequence; never keys the transmitter.

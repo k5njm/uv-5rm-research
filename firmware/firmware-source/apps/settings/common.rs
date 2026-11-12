@@ -15,7 +15,8 @@ pub const KEY_DOWN: u8 = 15;
 
 pub const SETTINGS_BYTES: usize = 168;
 pub const SIDE_CFG_BYTES: usize = 14;
-pub const VISIBLE_ROWS: usize = 8;
+/// Rows the shared list shows above its key-hint strip.
+pub const VISIBLE_ROWS: usize = 7;
 
 pub const COORD_NOT_SET: i32 = i32::MAX;
 pub const RIT_STEP_HZ: i32 = 10;
@@ -408,6 +409,7 @@ pub enum SettingItem {
     Side2Long,
     BandShort,
     BandLong,
+    VmLong,
     BootMode,
     BootSnd,
     BattCal,
@@ -443,9 +445,9 @@ impl SettingsGroup {
         match self {
             SettingsGroup::Radio => "RADIO",
             SettingsGroup::Sig => "AUDIO",
-            SettingsGroup::Display => "DISP",
+            SettingsGroup::Display => "DISPLAY",
             SettingsGroup::Keys => "KEYS",
-            SettingsGroup::Ani => "ANI",
+            SettingsGroup::Ani => "ANI / DTMF",
             SettingsGroup::System => "SYSTEM",
         }
     }
@@ -466,8 +468,8 @@ impl SettingsGroup {
             SettingsGroup::Display => &[Abr, AutoLk],
             #[cfg(feature = "g_keys")]
             SettingsGroup::Keys => &[
-                Side1Short, Side1Long, Side2Short, Side2Long, BandShort,
-                BandLong,
+                // BAND's short press always opens the channel groups (core `keys.rs`), so it is not offered
+                Side1Short, Side1Long, Side2Short, Side2Long, BandLong, VmLong,
             ],
             #[cfg(feature = "g_ani")]
             SettingsGroup::Ani => &[AniTx, AniCall],
@@ -487,98 +489,100 @@ impl SettingItem {
         use SettingItem::*;
         match self {
             #[cfg(feature = "g_radio")]
-            Sql => "SQL",
+            Sql => "SQUELCH",
             #[cfg(feature = "g_radio")]
-            Step => "STEP",
+            Step => "FREQ STEP",
             #[cfg(feature = "g_radio")]
-            Tot => "TOT",
+            Tot => "TX TIMEOUT",
             #[cfg(feature = "g_radio")]
-            Tdr => "TDR",
+            Tdr => "DUAL WATCH",
             #[cfg(feature = "g_radio")]
-            Save => "SAVE",
+            Save => "BATTERY SAVE",
             #[cfg(feature = "g_radio")]
-            BusyLock => "BCL",
+            BusyLock => "BUSY LOCKOUT",
             #[cfg(feature = "g_radio")]
-            TxForbid => "TXINH",
+            TxForbid => "TX INHIBIT",
             #[cfg(feature = "g_radio")]
-            Wn => "W/N",
+            Wn => "BANDWIDTH",
             #[cfg(feature = "g_radio")]
-            TxPr => "PWR",
+            TxPr => "TX POWER",
             #[cfg(feature = "g_radio")]
-            RxCts => "R-CTC",
+            RxCts => "RX TONE",
             #[cfg(feature = "g_radio")]
-            TxCts => "T-CTC",
+            TxCts => "TX TONE",
             #[cfg(feature = "g_radio")]
-            Sftd => "SHIFT",
+            Sftd => "RPT SHIFT",
             #[cfg(feature = "g_radio")]
-            Offse => "OFFSET",
+            Offse => "RPT OFFSET",
             #[cfg(feature = "g_radio")]
-            Scrm => "SCRM",
+            Scrm => "SCRAMBLER",
             #[cfg(feature = "g_radio")]
-            ScanMd => "SCANMD",
+            ScanMd => "SCAN RESUME",
             #[cfg(feature = "g_radio")]
             Rit => "RIT",
             #[cfg(feature = "g_radio")]
-            ChDisp => "CHDISP",
+            ChDisp => "CH DISPLAY",
 
             #[cfg(feature = "g_audio")]
-            Beep => "BEEP",
+            Beep => "KEY BEEP",
             #[cfg(feature = "g_audio")]
             Vox => "VOX",
             #[cfg(feature = "g_audio")]
-            VoxLv => "VOXLV",
+            VoxLv => "VOX LEVEL",
             #[cfg(feature = "g_audio")]
-            VoxDly => "VOXDLY",
+            VoxDly => "VOX DELAY",
             #[cfg(feature = "g_audio")]
-            Rtone => "RTONE",
+            Rtone => "TONE BURST",
             #[cfg(feature = "g_audio")]
-            Tail => "STE",
+            Tail => "SQ TAIL ELIM",
             #[cfg(feature = "g_audio")]
-            Rptrl => "RPTRL",
+            Rptrl => "RPT TAIL DLY",
             #[cfg(feature = "g_audio")]
-            Roge => "ROGER",
+            Roge => "ROGER BEEP",
 
             #[cfg(feature = "g_disp")]
-            Abr => "ABR",
+            Abr => "BACKLIGHT",
             #[cfg(feature = "g_disp")]
-            AutoLk => "AUTOLK",
+            AutoLk => "AUTO KEYLOCK",
 
             #[cfg(feature = "g_keys")]
-            Side1Short => "S1-SH",
+            Side1Short => "SIDE1 SHORT",
             #[cfg(feature = "g_keys")]
-            Side1Long => "S1-LG",
+            Side1Long => "SIDE1 LONG",
             #[cfg(feature = "g_keys")]
-            Side2Short => "S2-SH",
+            Side2Short => "SIDE2 SHORT",
             #[cfg(feature = "g_keys")]
-            Side2Long => "S2-LG",
+            Side2Long => "SIDE2 LONG",
             #[cfg(feature = "g_keys")]
-            BandShort => "BND-SH",
+            BandShort => "BAND SHORT",
             #[cfg(feature = "g_keys")]
-            BandLong => "BND-LG",
+            BandLong => "BAND LONG",
+            #[cfg(feature = "g_keys")]
+            VmLong => "VFO/MR LONG",
 
             #[cfg(feature = "g_ani")]
-            AniTx => "ANI-TX",
+            AniTx => "ANI ON PTT",
             #[cfg(feature = "g_ani")]
-            AniCall => "CALL",
+            AniCall => "ANI CALL",
 
             #[cfg(feature = "g_system")]
-            FLock => "FLOCK",
+            FLock => "TX BANDS",
             #[cfg(feature = "g_system")]
-            Lat => "LAT",
+            Lat => "LATITUDE",
             #[cfg(feature = "g_system")]
-            Lon => "LON",
+            Lon => "LONGITUDE",
             #[cfg(feature = "g_system")]
-            BattCal => "BATCAL",
+            BattCal => "BATTERY CAL",
             #[cfg(feature = "g_system")]
-            BootMode => "BOOTSCR",
+            BootMode => "BOOT SCREEN",
             #[cfg(feature = "g_system")]
-            BootSnd => "BOOTSND",
+            BootSnd => "BOOT SOUND",
             #[cfg(feature = "g_system")]
-            Info => "VER",
+            Info => "VERSION",
             #[cfg(feature = "g_system")]
-            ChipId => "CHIPID",
+            ChipId => "RF CHIP ID",
             #[cfg(feature = "g_system")]
-            Reset => "RESET",
+            Reset => "RESET ALL",
 
             #[allow(unreachable_patterns)]
             _ => "",
@@ -623,17 +627,38 @@ fn power_label(raw: u8) -> &'static str {
     }
 }
 
+/// Largest key-function value the core accepts (`keyfn::KEYFN_MAX`).
+#[cfg(feature = "g_keys")]
+const KEYFN_MAX: i32 = 19;
+/// The VFO/MR long-press function: record byte 66 (inside the second boot text line, which the core also uses for
+/// the channel group), valid only when the next byte is the marker. See the core's `modes::vm_long`.
+#[cfg(feature = "g_keys")]
+const VM_LONG_AT: usize = 66 - 40;
+#[cfg(feature = "g_keys")]
+const VM_LONG_MAGIC: u8 = b'K';
+
 #[cfg(feature = "g_keys")]
 fn key_function_label(v: u8) -> &'static str {
     match v {
-        1 => "WIDE/NAR",
+        1 => "BANDWIDTH",
         2 => "MONITOR",
-        3 => "MODE",
+        3 => "AM/FM",
         4 => "TX TONE",
         6 => "SCAN",
-        7 => "POWER",
+        7 => "TX POWER",
         8 => "LIGHT",
         10 => "REVERSE",
+        // 11..=19 open the app in launcher slot 1..=9 (the core's `keyfn::KeyFunction::App`); the APPS list shows the
+        // numbers. Values here stay within 9 characters: the longest label plus "^ VALUE v" must fit a 26-character row.
+        11 => "APP 1",
+        12 => "APP 2",
+        13 => "APP 3",
+        14 => "APP 4",
+        15 => "APP 5",
+        16 => "APP 6",
+        17 => "APP 7",
+        18 => "APP 8",
+        19 => "APP 9",
         _ => "NONE",
     }
 }
@@ -648,8 +673,8 @@ fn band_lock_label(v: u8) -> &'static str {
         5 => "PMR446",
         6 => "GMRS/FRS",
         7 => "CA HAM",
-        8 => "ALL LOCK",
-        9 => "UNLOCK",
+        8 => "NONE",
+        9 => "ALL",
         _ => "CE HAM",
     }
 }
@@ -1151,6 +1176,11 @@ fn current_value(api: &Api, st: &ItemsState, item: SettingItem) -> i32 {
         BandShort => st.settings.band_short as i32,
         #[cfg(feature = "g_keys")]
         BandLong => st.settings.band_long as i32,
+        #[cfg(feature = "g_keys")]
+        VmLong => {
+            let t = &st.settings.boot_text_and_tune;
+            if t[VM_LONG_AT + 1] == VM_LONG_MAGIC { t[VM_LONG_AT] as i32 } else { 0 }
+        }
 
         #[cfg(feature = "g_ani")]
         AniTx => st.settings.ani_tx as i32,
@@ -1227,7 +1257,14 @@ fn adjust(api: &Api, st: &mut ItemsState, item: SettingItem, up: bool) {
 
         #[cfg(feature = "g_keys")]
         Side1Short | Side1Long | Side2Short | Side2Long | BandShort
-        | BandLong => clamp_step(cur, up, 0, 10),
+        | BandLong | VmLong => {
+            // 5 and 9 are retired functions (FM and search became apps): never land on them
+            let mut v = clamp_step(cur, up, 0, KEYFN_MAX);
+            while v == 5 || v == 9 {
+                v = clamp_step(v, up, 0, KEYFN_MAX);
+            }
+            v
+        }
 
         #[cfg(feature = "g_ani")]
         AniTx => 1 - cur,
@@ -1235,7 +1272,7 @@ fn adjust(api: &Api, st: &mut ItemsState, item: SettingItem, up: bool) {
         AniCall => clamp_step(cur, up, -1, CONTACT_COUNT - 1),
 
         #[cfg(feature = "g_system")]
-        BootMode => clamp_step(cur, up, 0, 2),
+        BootMode => if up { 2 } else { 0 }, // 1 (message) draws the same logo: not offered
         #[cfg(feature = "g_system")]
         BootSnd => {
             if st.settings.boot_display_mode == 0 {
@@ -1334,6 +1371,11 @@ fn apply(api: &Api, st: &mut ItemsState, item: SettingItem, v: i32) {
         BandShort => st.settings.band_short = v as u8,
         #[cfg(feature = "g_keys")]
         BandLong => st.settings.band_long = v as u8,
+        #[cfg(feature = "g_keys")]
+        VmLong => {
+            st.settings.boot_text_and_tune[VM_LONG_AT] = v as u8;
+            st.settings.boot_text_and_tune[VM_LONG_AT + 1] = VM_LONG_MAGIC;
+        }
 
         #[cfg(feature = "g_ani")]
         AniTx => st.settings.ani_tx = v != 0,
@@ -1484,9 +1526,9 @@ fn value_text_for(
         #[cfg(feature = "g_system")]
         Info => {
             let s = if st.info_page == 0 {
-                "UV-5RH"
+                "UV-5RM OPEN FW"
             } else {
-                "BF5RH-FW"
+                "SEE BOOT SCREEN"
             };
             write_str(out, s)
         }
@@ -1504,7 +1546,7 @@ fn value_text_for(
         #[cfg(feature = "g_system")]
         Reset => {
             if editing_this {
-                write_str(out, "Sure? MENU")
+                write_str(out, "MENU = WIPE")
             } else {
                 0
             }
@@ -1515,9 +1557,8 @@ fn value_text_for(
         BootMode => write_str(
             out,
             match current_value(api, st, item) {
-                1 => "MSG",
-                2 => "LOGO",
-                _ => "NONE",
+                0 => "OFF",
+                _ => "LOGO",
             },
         ),
         #[cfg(feature = "g_system")]
@@ -1600,9 +1641,9 @@ fn value_text_for(
         ScanMd => write_str(
             out,
             match current_value(api, st, item) {
-                0 => "TIME",
+                0 => "TIMED",
                 2 => "STOP",
-                _ => "CARR",
+                _ => "CARRIER",
             },
         ),
         #[cfg(feature = "g_radio")]
@@ -1633,8 +1674,8 @@ fn value_text_for(
             out,
             match current_value(api, st, item) {
                 1 => "NAME",
-                2 => "NAME+F",
-                _ => "FREQ",
+                2 => "NAME+FREQ",
+                _ => "FREQUENCY",
             },
         ),
 
@@ -1684,9 +1725,9 @@ fn value_text_for(
         AutoLk => write_str(
             out,
             match current_value(api, st, item) {
-                1 => "5S",
-                2 => "10S",
-                3 => "15S",
+                1 => "5 SEC",
+                2 => "10 SEC",
+                3 => "15 SEC",
                 _ => "OFF",
             },
         ),
@@ -1694,23 +1735,60 @@ fn value_text_for(
         Abr => write_str(
             out,
             match current_value(api, st, item) {
-                1 => "5S",
-                2 => "10S",
-                3 => "15S",
-                4 => "20S",
-                _ => "OFF",
+                1 => "5 SEC",
+                2 => "10 SEC",
+                3 => "15 SEC",
+                4 => "20 SEC",
+                _ => "ALWAYS ON",
             },
         ),
 
         #[cfg(feature = "g_keys")]
         Side1Short | Side1Long | Side2Short | Side2Long | BandShort
-        | BandLong => {
-            let idx = current_value(api, st, item).clamp(0, 10) as u8;
+        | BandLong | VmLong => {
+            let idx = current_value(api, st, item).clamp(0, KEYFN_MAX) as u8;
             write_str(out, key_function_label(idx))
         }
 
         #[cfg(feature = "g_ani")]
         AniTx => on_off(out, current_value(api, st, item)),
+
+        // 0 = no limit, otherwise steps of 15 seconds (the core's `tot_seconds`)
+        #[cfg(feature = "g_radio")]
+        Tot => {
+            let v = current_value(api, st, item);
+            if v == 0 {
+                write_str(out, "OFF")
+            } else {
+                let mut w = Out::new(out);
+                w.u32(v as u32 * 15, 1);
+                w.str(" SEC");
+                w.len
+            }
+        }
+        // the same words CHAN MGR uses for this field
+        #[cfg(feature = "g_radio")]
+        Sftd => write_str(
+            out,
+            match current_value(api, st, item) {
+                1 => "+",
+                2 => "-",
+                _ => "OFF",
+            },
+        ),
+        // contact index from 0; shown as CHAN MGR shows it
+        #[cfg(feature = "g_ani")]
+        AniCall => {
+            let v = current_value(api, st, item);
+            if v < 0 {
+                write_str(out, "NONE")
+            } else {
+                let mut w = Out::new(out);
+                w.byte(b'#');
+                w.u32(v as u32 + 1, 1);
+                w.len
+            }
+        }
 
         #[allow(unreachable_patterns)]
         _ => {
@@ -1751,7 +1829,12 @@ fn draw(api: &Api) -> AppResult {
             st.editing
                 && !matches!(
                     st.item(),
-                    SettingItem::Offse | SettingItem::BattCal
+                    // typed fields, and the reset confirmation (UP/DN do nothing there)
+                    SettingItem::Offse
+                        | SettingItem::BattCal
+                        | SettingItem::Lat
+                        | SettingItem::Lon
+                        | SettingItem::Reset
                 ),
         ),
         _ => return AppResult::Continue,
@@ -1780,6 +1863,15 @@ fn draw(api: &Api) -> AppResult {
                     write_str(&mut rows[i].label, item.label());
                     let n = value_text_for(api, st, gi, &mut rows[i].value);
                     rows[i].has_value = n > 0;
+                    // a typed field shows a text cursor after what has been typed (and so the "changing" colour)
+                    if st.is_editing(gi)
+                        && matches!(
+                            item,
+                            SettingItem::Offse | SettingItem::BattCal | SettingItem::Lat | SettingItem::Lon
+                        )
+                    {
+                        rows[i].cursor = n.min(17) as i16;
+                    }
                 }
                 _ => {}
             }
@@ -1796,6 +1888,20 @@ fn draw(api: &Api) -> AppResult {
         }
         _ => {}
     }
+
+    // The strip at the bottom says what the keys do in this state (EXIT while changing a value undoes it).
+    let hint: &[u8] = match &state.phase {
+        Phase::Items(st) if st.editing => match st.item() {
+            SettingItem::Reset => b"MENU wipe all  EXIT cancel",
+            SettingItem::Info | SettingItem::ChipId => b"UP/DN page    EXIT back",
+            SettingItem::Lat | SettingItem::Lon => b"0-9  * N/S E/W  MENU ok",
+            SettingItem::Offse | SettingItem::BattCal => b"0-9 type MENU ok EXIT del",
+            _ => b"UP/DN MENU save EXIT undo",
+        },
+        Phase::Items(_) => b"MENU change  EXIT back",
+        _ => b"MENU open    EXIT back",
+    };
+    (api.list_hint)(hint.as_ptr(), hint.len() as u16);
 
     let rows_ptr = core::ptr::addr_of!(ROWS) as *const ListRow;
     (api.draw_list)(

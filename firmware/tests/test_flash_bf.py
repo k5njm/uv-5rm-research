@@ -190,5 +190,25 @@ class Transfer(Box):
         self.assertEqual(self.state()["got"], 0)
 
 
+class WrapTool(unittest.TestCase):
+    """wrap_bf.py (what `scripts/dev.sh bf` runs) must agree with the independent wrap above."""
+
+    def test_wrap_bf_matches_independent_wrap_and_passes_check_only(self):
+        box = tempfile.mkdtemp(prefix="wrapbox-")
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        img, src, out = image(), os.path.join(box, "fw.bin"), os.path.join(box, "fw.BF")
+        wb(src, img)
+        r = subprocess.run([sys.executable, os.path.join(FW, "source-changes", "wrap_bf.py"), src, out],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("round trip only", r.stdout)
+        self.assertEqual(rb(out), wrap(img))
+        r = subprocess.run([sys.executable, os.path.join(FW, "source-changes", "flash_bf.py"), out, "/dev/null",
+                            hashlib.sha256(rb(out)).hexdigest()[:16], "--board", "5RHNRFB-YP07", "--variant", "default",
+                            "--check-only"], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("serial port not opened", r.stdout)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -8,31 +8,7 @@ use crate::device::radio::{FreqRanges, SubAudio};
 use crate::flash_map::Settings;
 use cortex_m::peripheral::SYST;
 
-pub(crate) struct ChanMode {
-    pub name: &'static str,
-    pub short: &'static str,
-    /// Inclusive channel numbers as printed on the reference sheet (from 1).
-    ranges: &'static [(u16, u16)],
-}
-
-const ALL: &[(u16, u16)] = &[(1, MAX_CHANNEL_NUM + 1)];
-
-pub(crate) const MODES: [ChanMode; 13] = [
-    ChanMode { name: "ALL", short: "ALL", ranges: ALL },
-    ChanMode { name: "WEATHER", short: "WX", ranges: &[(1, 7)] },
-    ChanMode { name: "POLICE FIRE EMS", short: "PD/FD", ranges: &[(14, 105)] },
-    ChanMode { name: "FED & GOV", short: "FED", ranges: &[(106, 146)] },
-    ChanMode { name: "UTILITIES", short: "UTIL", ranges: &[(147, 157)] },
-    ChanMode { name: "RAILROAD", short: "RAIL", ranges: &[(158, 167)] },
-    ChanMode { name: "AIR TRAFFIC", short: "AIR", ranges: &[(168, 233)] },
-    ChanMode { name: "REPEATERS", short: "RPT", ranges: &[(234, 304), (327, 344)] },
-    ChanMode { name: "FRS", short: "FRS", ranges: &[(305, 326)] },
-    ChanMode { name: "GMRS", short: "GMRS", ranges: &[(305, 344)] },
-    ChanMode { name: "MURS", short: "MURS", ranges: &[(345, 349)] },
-    ChanMode { name: "FRS GMRS MURS", short: "F/G/M", ranges: &[(305, 349)] },
-    // Channel list stays open here; the scan itself sweeps the typed range.
-    ChanMode { name: "CUSTOM RANGE", short: "RANGE", ranges: ALL },
-];
+pub(crate) use super::group_table::{contains, ChanMode, MODES};
 
 const CUSTOM: u8 = MODES.len() as u8 - 1;
 
@@ -42,6 +18,29 @@ const DEFAULT_RANGE_HZ: (u32, u32) = (144_000_000, 148_000_000);
 /// and range across power cycles without changing the settings record size
 /// that the settings app and CPS tools depend on.
 const STORE_MAGIC: u8 = b'M';
+
+/// The VFO/MR key's long-press function shares `boot_text_line2` (the settings record has no free byte): byte 10 is a
+/// `keyfn` value, valid only when byte 11 is `VM_LONG_MAGIC`. The settings app writes both.
+const VM_LONG_MAGIC: u8 = b'K';
+
+pub(super) fn vm_long(settings: &Settings) -> u8 {
+    let b = &settings.boot_text_line2;
+    if b[11] == VM_LONG_MAGIC {
+        b[10].min(super::keyfn::KEYFN_MAX)
+    } else {
+        0
+    }
+}
+
+/// Side B's group (side A's is `restore`'s): byte 12 of the same record, 0 (ALL) when never stored.
+pub(super) fn restore_side_b(settings: &Settings) -> u8 {
+    let b = &settings.boot_text_line2;
+    if b[0] == STORE_MAGIC && b[12] <= CUSTOM {
+        b[12]
+    } else {
+        0
+    }
+}
 
 pub(super) fn restore(settings: &Settings) -> (u8, u32, u32) {
     let b = &settings.boot_text_line2;
@@ -60,7 +59,8 @@ pub(super) fn restore(settings: &Settings) -> (u8, u32, u32) {
 fn persist(app: &mut App) {
     let b = &mut app.settings.boot_text_line2;
     b[0] = STORE_MAGIC;
-    b[1] = app.chan_mode;
+    b[1] = app.side_groups[0];
+    b[12] = app.side_groups[1];
     b[2..6].copy_from_slice(&app.range_lo_hz.to_le_bytes());
     b[6..10].copy_from_slice(&app.range_hi_hz.to_le_bytes());
     app.save_settings();
@@ -71,14 +71,6 @@ fn range_valid(lo: u32, hi: u32) -> bool {
     lo < hi && hw.allows(lo) && hw.allows(hi)
 }
 
-/// `num` is a flash slot, counting from 0.
-pub(super) fn contains(mode: u8, num: u16) -> bool {
-    let printed = num + 1;
-    MODES[mode as usize]
-        .ranges
-        .iter()
-        .any(|&(a, b)| (a..=b).contains(&printed))
-}
 
 pub(super) fn is_custom(mode: u8) -> bool {
     mode == CUSTOM
@@ -116,6 +108,7 @@ fn play_mode_cue(app: &mut App, syst: &mut SYST) {
 
 fn select(app: &mut App, syst: &mut SYST, index: usize, then_scan: bool) {
     app.chan_mode = index as u8;
+    app.side_groups[app.master] = app.chan_mode; // the group belongs to the side it was chosen on
     persist(app);
     app.mode = Mode::Standby;
     app.reset_key_idle();
@@ -139,7 +132,10 @@ fn select(app: &mut App, syst: &mut SYST, index: usize, then_scan: bool) {
             side_ops::load_channel_num(app, num);
             app.save_channel_state();
         }
-        None => app.no_channels_ticks = NO_CHANNELS_HOLD_TICKS,
+        None => {
+            app.notice_kind = super::NOTICE_NO_CHANNELS;
+            app.no_channels_ticks = NO_CHANNELS_HOLD_TICKS;
+        }
     }
     app.sync_watching_to_master(syst);
     play_mode_cue(app, syst);
@@ -167,6 +163,12 @@ pub(super) fn dispatch_menu(app: &mut App, syst: &mut SYST, ev: KeyEvent) {
         (KeyEventKind::Single, KeyId::Exit | KeyId::Band) => {
             app.mode = Mode::Standby;
             app.reset_key_idle();
+        }
+        // BAND then a digit: the group with that number (1 = REPEATERS, 0 = ALL)
+        (KeyEventKind::Single, key) => {
+            if let Some(d) = digit_value(key) {
+                select(app, syst, d as usize, false);
+            }
         }
         _ => {}
     }
@@ -283,7 +285,7 @@ impl<'a> App<'a> {
     pub fn range_input_len(&self) -> usize {
         self.input.len
     }
-    pub fn range_input_write(&self, w: &mut dyn core::fmt::Write) {
+    pub fn range_input_write(&self, w: &mut dyn crate::fmtlite::Sink) {
         self.input.write_display(3, w);
     }
 }

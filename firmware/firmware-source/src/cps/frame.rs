@@ -13,6 +13,8 @@ pub const CMD_APP_ERASE: u8 = 0x41; // 'A'
 pub const CMD_APP_WRITE: u8 = 0x61; // 'a'
 
 pub const CMD_SAT_WRITE: u8 = 0x53; // 'S'
+/// Channel extras table (a location/description per channel): same framing as `CMD_SAT_WRITE`.
+pub const CMD_EXTRA_WRITE: u8 = 0x58; // 'X'
 
 pub const CMD_READ_FLASH_RAW: u8 = 0x44; // 'D'
 

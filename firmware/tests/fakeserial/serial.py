@@ -67,6 +67,7 @@ def _clear_fault(key):
 
 class Serial:
     def __init__(self, name=None, baudrate=115200, timeout=None, **kw):
+        self.erased_sectors = set()   # channel sectors erased in this session
         self.timeout = timeout
         self.is_open = True
         self.dtr = self.rts = True
@@ -177,8 +178,23 @@ class Serial:
                 blk[5] ^= 0xFF
                 _clear_fault("corrupt_channel_write")
                 self._note("fault: corrupted channel write")
+            # As the firmware (storage.rs write_channel): the first write into a 4 KB sector in a session erases
+            # the whole sector, so 127 neighbouring channels vanish unless the host sends them again.
+            sector = addr // 4096
+            if sector not in self.erased_sectors:
+                self.erased_sectors.add(sector)
+                self.nor[sector * 4096:(sector + 1) * 4096] = b"\xff" * 4096
             self.nor[addr:addr + CHAN_SIZE] = blk
             self.chan_writes += 1
+            self._persist()
+            return self._reply(cmd, addr)
+        if cmd == 0x58:  # channel extras table: 512-byte chunks, the chunk at offset 0 erases the table
+            base, size = 0x1E0000, 20480
+            if addr % 512 or len(data) != 512 or addr + 512 > size:
+                return self._reply(ERR, addr, b"\x02")
+            if addr == 0:
+                self.nor[base:base + size] = b"\xff" * size
+            self.nor[base + addr:base + addr + 512] = data
             self._persist()
             return self._reply(cmd, addr)
         if cmd == READ_LOGO:

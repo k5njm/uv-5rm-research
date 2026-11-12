@@ -36,6 +36,13 @@ Even though the radio model is correct, Baofeng frequently updates internal PCB 
 
 5. Turn off the radio without pressing any other keys.
 
+### Result on the purchased radio (2026-11-11)
+* Hold-8 screen: **`5RHNRFB-YP07`**, `Ver: V0.13`. This is the string the `default` build is gated to.
+* Programming port (K-plug, CH340 cable, 115200 baud): ident reply `5RH     +L00000`; band limits 136-174, 400-520, 220-260 MHz.
+* Factory memory holds 22 test channels (452.125 MHz ... 258.925 MHz); backups are in the git-ignored `my-backup/`.
+* The KDH bootloader answers the flasher's handshake (two small side buttons held at power-on).
+* Not confirmable on stock firmware: the RF chip ID (FD6818B, 0x4829). Details: AUDIT 25.
+
 ### Physical Label Check
 - Remove the battery pack.
 - Inspect the specification sticker on the aluminum chassis:
@@ -57,7 +64,7 @@ Based on hardware reverse engineering by `amoxu` (`Baofeng-UV-5RM-5RH-RE`) and `
 * **Note on ISP:** The chip's native Artery system ISP bootloader mode (`0x1FFFE400`) is repurposed by Baofeng for configuration storage; external updates run through Baofeng's KDH bootloader over the K-plug UART.
 
 ### RF Transceiver
-* **Chip:** **Beken BK4819** or **Fudan Micro FD6818B** (fully register- and pin-compatible clone)
+* **Chip:** **Beken BK4819**, or **Fudan Micro FD6818B** (the YP07 board's chip, ID `0x4829`). The FD6818B is *not* a drop-in register clone: upstream ported a separate driver for it (see section 4), and the register map below has to be read from Fudan's document, not Beken's.
 * **Bus Interface:** 3-wire bit-banged serial bus connected to AT32F421:
   - `PC13`: Latch Enable (LE)
   - `PA2`: Serial Clock (SCK)
@@ -117,3 +124,16 @@ Supplied by the owner (page itself not fetchable). **Consistent with the right f
 Upstream PR [#3](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod/pull/3) adds a build for boards whose `8`-key screen reads **`5RHBK`** (BK4819), versus **`5RHNRFB-YP07`** (FD6818B) for the default build. That gives the screen string a documented meaning: it selects the firmware variant. Build it with `--features bk4819`; the default build is unchanged.
 
 Validation done here (static, no hardware): 15 of its 17 new register constants appear in Baofeng's stock `5RH_BK_V0.14` image (the other two, `0x06D8` and the already-existing `0x13A0`, could not be located by a simple scan). The YP07 values it replaces appear in **neither** stock image, which fits upstream's note that the YP07 driver is a BK4829 port. Surprisingly the stock **NRF** V0.14 image contains the same BK4819 values, so a plain-NRF (FD6818) board may also work with this build; that is a hypothesis, not tested. The PR author reports one `5RHBK` radio tested, with output power not measured.
+
+## 5. Reference documents (linked, not stored; not redistributed here)
+
+| Document | Use | Notes |
+|---|---|---|
+| [AT32F421 datasheet v2.02](https://www.arterychip.com/download/DS/DS_AT32F421_V2.02_EN.pdf) (Artery) | The core's MCU: flash/RAM layout, clocks, peripherals | Vendor download |
+| FD6818B Registers Definition, 2025/1/11 (Fudan; 12 pages; sha256 `3a2d14e1debbd12a...` of the copy used here), found via [cnt7/BAOFENG-UV-K6-Firmware issue 1](https://github.com/cnt7/BAOFENG-UV-K6-Firmware/issues/1) | **The register map for the chip on this board.** Used for the FSK probe (REG_58 to REG_5F, REG_70 to REG_72, REG_67 RSSI) | Not linked directly: the issue's `file://` path is the reporter's local copy. Provenance is a third party's download, so treat it as unofficial |
+| [BK4819 datasheet](https://www.qsl.net/g0ftd/other/Quansheng%2520UV5R%2520Plus%2520and%2520variants/Quansheng%2520UV5R%2520and%2520variants%2520stuff/Parts%2520and%2520Misc%2520stuff/BK4819.PDF) (hobbyist mirror) | Analogy only, for the `bk4819` build variant | **Wrong chip for the default YP07 build**; do not treat its values as this board's spec |
+
+**`cnt7/BAOFENG-UV-K6-Firmware`** is Baofeng's published source for a different radio (the UV-K6 family, a different MCU, the `KD32F328`). It has its own FD6818 driver (`src/Driver/DevFD6818.c`, `DevFD6818Data.c`), the KD32F328 and SC5260 datasheets and a K6 schematic, so it may show how the vendor initialises the same RF chip. **Not used so far:** its licence is Baofeng's own BFPL-1.0, which I have only skimmed, so check its terms before copying anything; reading it for reference needs no copy. Its register-poking is for a different board and chip revision, so anything taken from it is a hypothesis until measured on the YP07.
+
+**Better K6 source, from upstream issue #18:** the YP07 author points to [`sophiel-meow/bf-k61-firmware-aura`](https://github.com/sophiel-meow/bf-k61-firmware-aura), open-source Rust firmware for the K6 family. It has a working [FD6818 driver](https://github.com/sophiel-meow/bf-k61-firmware-aura/blob/master/src/driver/fd6818.rs) and an [FD6818B driver on its `fd6818b` branch](https://github.com/sophiel-meow/bf-k61-firmware-aura/blob/fd6818b/src/drivers/fd6818b.rs), which the issue says was being ported into the 5RH firmware. **Compared (2026-11-08, Aura `fd6818b` branch, last driver commit `de011b9` of 2026-09-03, GPL-3.0 like this repo):** our `src/drivers/fd6818b.rs` is a port of it. All 143 shared constants and the FSK, modulation, squelch, sub-audio, AGC and TX paths are identical apart from rustfmt reflow and the bus plumbing (AT32F421 GPIO instead of KD32F328). Aura's FD6818B values (`REG_37` `0x9D1F`/`0x9F1F`, `REG_14`/`REG_49` `0x0210`/`0x2AB2`) are our default-build values; the `0x1D0F`/`0x0019` set exists only in our `bk4819` feature. Ours adds: separate RX (GPIO5/6) and TX (GPIO3/4) band switches (Aura drives GPIO2/3 for the PA path and GPIO5 as the K6's TX LED), `set_agc_fix`, `pa_target`/`set_band_quiet`, `reg_read`/`reg_write` (the new ABI), and long provenance comments on the PA gain word. Nothing in Aura's driver is missing from ours, so there is nothing to merge, and Aura has not touched the file since. The core's FSK reference init (`enter_fsk_mode`, unused: `REG_72 = 0x3065` = 1200 baud, `REG_5D = 0x0F00`) independently confirms the `baud * 10.32444` formula and the 13/26 MHz crystal assumption. **Caveat:** since the driver is a K6 port, "matches Aura" says the code was ported faithfully, not that the YP07 behaves like a K6 (upstream reports TX/RX working on a YP07; this repo has verified nothing on hardware).
+

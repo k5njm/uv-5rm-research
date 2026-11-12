@@ -1,12 +1,11 @@
 pub(crate) mod boot;
 pub(crate) mod cps;
-mod backdrop;
 mod icons;
 mod launcher;
 mod list;
 mod modes;
-mod scan;
 mod standby;
+pub(crate) mod toast;
 
 pub(crate) use list::{draw_list, Cache, ListSource};
 
@@ -30,41 +29,12 @@ where
         .ok();
 }
 
-#[derive(Clone, Copy, PartialEq)]
-pub struct TextBuf<const N: usize> {
-    buf: [u8; N],
-    len: usize,
-}
-
-impl<const N: usize> TextBuf<N> {
-    pub fn new() -> Self {
-        TextBuf {
-            buf: [0; N],
-            len: 0,
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        core::str::from_utf8(&self.buf[..self.len]).unwrap_or("")
-    }
-}
-
-impl<const N: usize> core::fmt::Write for TextBuf<N> {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        let bytes = s.as_bytes();
-        let space = N - self.len;
-        let n = bytes.len().min(space);
-        self.buf[self.len..self.len + n].copy_from_slice(&bytes[..n]);
-        self.len += n;
-        Ok(())
-    }
-}
+pub use crate::fmtlite::{Sink, TextBuf};
 
 pub struct UiState {
     last_mode: Option<app::Mode>,
     standby: standby::Cache,
     list: list::Cache,
-    scan: scan::Cache,
     range: modes::RangeCache,
 }
 
@@ -74,7 +44,6 @@ impl UiState {
             last_mode: None,
             standby: standby::Cache::new(),
             list: list::Cache::new(),
-            scan: scan::Cache::new(),
             range: modes::RangeCache::new(),
         }
     }
@@ -85,13 +54,15 @@ fn draw_stack_probe<D>(lcd: &mut D)
 where
     D: DrawTarget<Color = Rgb565>,
 {
-    use core::fmt::Write;
     use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyle};
     use embedded_graphics::text::Text;
 
     let (used, free) = crate::hal::stackprobe::high_water();
     let mut t: TextBuf<16> = TextBuf::new();
-    let _ = write!(t, "U{used} F{free}");
+    t.put_char('U');
+    t.put_u32(used as u32);
+    t.put_str(" F");
+    t.put_u32(free as u32);
 
     let y = SCREEN_H - 10;
     clear_strip(lcd, y, 10);
@@ -116,7 +87,6 @@ pub fn draw(
     if state.last_mode != Some(mode) {
         state.standby = standby::Cache::new();
         state.list = list::Cache::new();
-        state.scan = scan::Cache::new();
         state.range = modes::RangeCache::new();
     }
     state.last_mode = Some(mode);
@@ -124,7 +94,6 @@ pub fn draw(
         app::Mode::AppMenu => {
             launcher::draw_app_menu(lcd, app, &mut state.list)
         }
-        app::Mode::Scan => scan::draw_scan(lcd, app, &mut state.scan),
         app::Mode::ModeMenu => {
             modes::draw_menu(lcd, app, &mut state.list)
         }
@@ -132,6 +101,9 @@ pub fn draw(
             modes::draw_range(lcd, app, &mut state.range)
         }
         app::Mode::External(_) => app::overlay::draw(lcd, app, syst),
-        _ => standby::draw_standby(lcd, app, &mut state.standby),
+        _ => {
+            app.sync_channel_details();
+            standby::draw_standby(lcd, app, &mut state.standby)
+        }
     };
 }

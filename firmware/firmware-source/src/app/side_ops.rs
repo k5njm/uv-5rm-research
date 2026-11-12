@@ -83,24 +83,38 @@ pub(super) fn commit_input(app: &mut App, syst: &mut SYST) {
     let value = app.input.entered_value();
     match app.sides[app.master].vfo_chan {
         ChVfoMode::Channel => {
-            // Typed numbers count from 1 like the printed sheet; flash slots from 0.
-            if (1..=MAX_CHANNEL_NUM as u32 + 1).contains(&value) {
-                let num = value as u16 - 1;
-                if !app.storage.is_channel_empty(num)
-                    && modes::contains(app.chan_mode, num)
-                {
+            // A typed number is the one the screen shows: the position in the current group, from 1
+            // (in ALL, the printed channel number).
+            let slot = u16::try_from(value)
+                .ok()
+                .and_then(|pos| super::group_table::group_slot(app.chan_mode, pos));
+            if let Some(num) = slot {
+                if num <= MAX_CHANNEL_NUM && !app.storage.is_channel_empty(num) {
                     load_channel_num(app, num);
                     sync_watching_to_master(app, syst);
                 }
             }
         }
         ChVfoMode::Vfo => {
-            let s = &mut app.sides[app.master];
-            s.rx_freq_hz = value * 1000;
-            s.auto_modulation();
-            s.refresh_cfg_freqs();
-            app.save_vfo();
-            sync_watching_to_master(app, syst);
+            // Only what the receiver covers. The synthesizer would tune almost anything, which looked as if the
+            // radio could receive there; FM broadcast is a different tuner, reached through the FM app.
+            let hz = value.saturating_mul(1000);
+            if super::group_table::rx_allowed(hz) {
+                let s = &mut app.sides[app.master];
+                s.rx_freq_hz = hz;
+                s.auto_modulation();
+                s.refresh_cfg_freqs();
+                app.save_vfo();
+                sync_watching_to_master(app, syst);
+            } else {
+                let fm = super::group_table::FM_BROADCAST;
+                app.notice_kind = if (fm.0..fm.1).contains(&hz) {
+                    super::NOTICE_FM_BROADCAST
+                } else {
+                    super::NOTICE_OUT_OF_RANGE
+                };
+                app.no_channels_ticks = NO_CHANNELS_HOLD_TICKS;
+            }
         }
     }
     app.input.clear();
@@ -131,6 +145,7 @@ pub(super) fn toggle_vfo_channel(app: &mut App, syst: &mut SYST) {
             if let Some(num) = num {
                 load_channel_num(app, num);
             } else {
+                app.notice_kind = super::NOTICE_NO_CHANNELS;
                 app.no_channels_ticks = NO_CHANNELS_HOLD_TICKS;
             }
         }
@@ -146,6 +161,8 @@ pub(super) fn toggle_vfo_channel(app: &mut App, syst: &mut SYST) {
 
 pub(super) fn switch_side(app: &mut App, syst: &mut SYST) {
     app.master = 1 - app.master;
+    // each side has its own channel group: scanning and stepping follow the side that now has the keys
+    app.chan_mode = app.side_groups[app.master];
     app.input.clear();
     app.ani_target_override = None;
     sync_watching_to_master(app, syst);
@@ -212,6 +229,7 @@ pub(super) fn refresh_channel_display(app: &mut App, num: u16) {
                 app.sides[i].load_channel(next, &ch);
             } else {
                 app.sides[i].restore_vfo_from_backup();
+                app.notice_kind = super::NOTICE_NO_CHANNELS;
                 app.no_channels_ticks = NO_CHANNELS_HOLD_TICKS;
             }
         } else {

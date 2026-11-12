@@ -1,0 +1,6 @@
+Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,Mode,TStep,Skip,Power,Detail,Comment
+1,MURS 1,151.820000,,0.000000,,88.5,88.5,023,NN,NFM,5.00,,2.0W,MURS,"MURS channel 1, 2 W max"
+2,MURS 2,151.880000,,0.000000,,88.5,88.5,023,NN,NFM,5.00,,2.0W,MURS,"MURS channel 2, 2 W max"
+3,MURS 3,151.940000,,0.000000,,88.5,88.5,023,NN,NFM,5.00,,2.0W,MURS,"MURS channel 3, 2 W max"
+4,MURS 4,154.570000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,2.0W,MURS Blue Dot,"MURS channel 4 (Blue Dot), 2 W max"
+5,MURS 5,154.600000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,2.0W,MURS Green Dot,"MURS channel 5 (Green Dot), 2 W max"

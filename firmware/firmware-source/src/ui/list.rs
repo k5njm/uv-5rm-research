@@ -4,39 +4,53 @@ use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::text::Text;
 
-use super::backdrop::draw_backdrop;
 use super::{TextBuf, SCREEN_H, SCREEN_W};
 
 const BG: Rgb565 = Rgb565::BLACK;
 const FG: Rgb565 = Rgb565::WHITE;
-const TITLE_BG: Rgb565 = Rgb565::new(11, 0, 0);
-const SELECT_BG: Rgb565 = Rgb565::new(16, 0, 0);
+// Colours carry meaning: a light title bar, blue for "you are here", amber for "you are changing this",
+// grey for values that are only being shown.
+const TITLE_BG: Rgb565 = Rgb565::new(27, 54, 27);
+const TITLE_FG: Rgb565 = Rgb565::BLACK;
+const SELECT_BG: Rgb565 = Rgb565::new(4, 24, 26);
+const EDIT_BG: Rgb565 = Rgb565::new(31, 42, 0);
+const EDIT_FG: Rgb565 = Rgb565::BLACK;
+const VALUE_DIM: Rgb565 = Rgb565::new(18, 36, 18);
+const HINT_BG: Rgb565 = Rgb565::new(4, 9, 4);
+const HINT_FG: Rgb565 = Rgb565::new(20, 40, 20);
 
 const ROW_HEIGHT: i32 = FONT_6X10.character_size.height as i32 + 4;
 const TITLE_HEIGHT: i32 = ROW_HEIGHT;
 const LIST_TOP: i32 = TITLE_HEIGHT;
-const VISIBLE_ROWS: usize = ((SCREEN_H - LIST_TOP) / ROW_HEIGHT) as usize;
+/// The bottom strip says what the keys do on this screen ("MENU open  EXIT back"); every list keeps it, so lists
+/// always show the same number of rows. Apps size their row buffers to `VISIBLE_ROWS` (7).
+const HINT_HEIGHT: i32 = ROW_HEIGHT + 2;
+const VISIBLE_ROWS: usize = ((SCREEN_H - LIST_TOP - HINT_HEIGHT) / ROW_HEIGHT) as usize;
+const HINT_TOP: i32 = SCREEN_H - HINT_HEIGHT;
 const RIGHT_MARGIN: i32 = 4;
 
 const ARROW_GAP: i32 = 6;
 
-const TITLE_MAX: usize = 16;
+const TITLE_MAX: usize = 26; // a full row of the 6-pixel font
 const VALUE_MAX: usize = 18;
 
 pub(crate) trait ListSource {
     fn row_count(&mut self) -> usize;
     /// Raw flash read, for the menu backdrop.
     fn read_flash(&mut self, addr: u32, buf: &mut [u8]);
-    fn label(&mut self, index: usize, w: &mut dyn core::fmt::Write);
-    fn value(&mut self, _index: usize, _w: &mut dyn core::fmt::Write) -> bool {
+    fn label(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink);
+    fn value(&mut self, _index: usize, _w: &mut dyn crate::fmtlite::Sink) -> bool {
         false
     }
     fn cursor(&mut self, _index: usize) -> Option<usize> {
         None
     }
+    /// What the keys do here, for the strip at the bottom of the screen (at most a row of text).
+    fn hint(&mut self, _w: &mut dyn crate::fmtlite::Sink) {}
 }
 
 pub(crate) struct Cache {
+    /// title and hint strip together
     title: Option<TitleKey>,
     selected: Option<usize>,
     total: Option<usize>,
@@ -44,26 +58,34 @@ pub(crate) struct Cache {
     sel: Option<SelRender>,
 }
 
+/// What a piece of text was the last time it was drawn: its length and a hash, not the text. The cache lives in the
+/// firmware's RAM for good, and that RAM sits below the app arena, whose address is fixed (`abi::ARENA_ADDR`):
+/// keeping three strings here pushed the arena up and hung the radio on every app (AUDIT 31).
 #[derive(Clone, Copy, PartialEq)]
 struct TitleKey {
     len: u8,
-    buf: [u8; TITLE_MAX],
+    hash: u32,
 }
 
 impl TitleKey {
-    fn of(title: &str) -> Self {
-        let b = title.as_bytes();
-        let n = b.len().min(TITLE_MAX);
-        let mut buf = [0u8; TITLE_MAX];
-        buf[..n].copy_from_slice(&b[..n]);
-        TitleKey { len: n as u8, buf }
+    fn of(text: &str) -> Self {
+        Self::of2(text, "")
+    }
+
+    /// One key for two pieces of text (the title and the hint strip share one, to save RAM).
+    fn of2(a: &str, b: &str) -> Self {
+        let mut hash: u32 = 0x811C_9DC5; // FNV-1a
+        for &byte in a.as_bytes().iter().chain(b.as_bytes()) {
+            hash = (hash ^ byte as u32).wrapping_mul(0x0100_0193);
+        }
+        TitleKey { len: (a.len() + b.len()) as u8, hash }
     }
 }
 
 #[derive(Clone, Copy, PartialEq)]
 struct SelRender {
     show_arrows: bool,
-    value: TextBuf<VALUE_MAX>,
+    value: TitleKey,
     cursor: Option<usize>,
 }
 
@@ -81,7 +103,7 @@ fn render_sel(
     };
     SelRender {
         show_arrows,
-        value,
+        value: TitleKey::of(value.as_str()),
         cursor,
     }
 }
@@ -97,14 +119,8 @@ impl Cache {
         }
     }
 
-    fn matches_title(&self, title: &str) -> bool {
-        match self.title {
-            Some(k) => {
-                let n = k.len as usize;
-                title.len() == n && k.buf[..n] == title.as_bytes()[..n]
-            }
-            None => false,
-        }
+    fn matches_title(&self, title: &str, hint: &str) -> bool {
+        self.title == Some(TitleKey::of2(title, hint))
     }
 }
 
@@ -121,8 +137,14 @@ pub(crate) fn draw_list<D>(
     let total = source.row_count();
     let top = scroll_top(total, selected);
 
-    let title_changed = !cache.matches_title(title);
+    let mut hint: TextBuf<TITLE_MAX> = TextBuf::new();
+    source.hint(&mut hint);
+    // a new title or a new hint repaints the whole list
+    let title_changed = !cache.matches_title(title, hint.as_str());
     let first = cache.selected.is_none() || title_changed;
+    if first {
+        draw_hint(lcd, hint.as_str());
+    }
 
     if first {
         draw_full(lcd, title, source, selected, show_arrows, total, top);
@@ -177,7 +199,7 @@ pub(crate) fn draw_list<D>(
         }
     }
 
-    cache.title = Some(TitleKey::of(title));
+    cache.title = Some(TitleKey::of2(title, hint.as_str()));
     cache.selected = Some(selected);
     cache.total = Some(total);
     cache.scroll_top = Some(top);
@@ -205,12 +227,41 @@ fn draw_full<D>(
         draw_row(lcd, source, top + slot, selected, show_arrows, total, slot);
     }
     let bottom = LIST_TOP + VISIBLE_ROWS as i32 * ROW_HEIGHT;
-    draw_backdrop(
-        lcd,
-        &mut |addr, buf| source.read_flash(addr, buf),
-        bottom,
-        SCREEN_H - bottom,
-    );
+    if HINT_TOP > bottom {
+        clear_rows(lcd, bottom, HINT_TOP - bottom);
+    }
+}
+
+fn draw_hint<D>(lcd: &mut D, hint: &str)
+where
+    D: DrawTarget<Color = Rgb565>,
+{
+    Rectangle::new(
+        Point::new(0, HINT_TOP),
+        Size::new(SCREEN_W as u32, HINT_HEIGHT as u32),
+    )
+    .into_styled(PrimitiveStyle::with_fill(HINT_BG))
+    .draw(lcd)
+    .ok();
+    Text::new(
+        hint,
+        Point::new(4, HINT_TOP + FONT_6X10.baseline as i32 + 3),
+        MonoTextStyle::new(&FONT_6X10, HINT_FG),
+    )
+    .draw(lcd)
+    .ok();
+}
+
+/// Plain background behind rows. (Lists used to paint a dimmed copy of the boot logo here; under text it only
+/// made the rows harder to read.)
+fn clear_rows<D>(lcd: &mut D, top: i32, height: i32)
+where
+    D: DrawTarget<Color = Rgb565>,
+{
+    Rectangle::new(Point::new(0, top), Size::new(SCREEN_W as u32, height as u32))
+        .into_styled(PrimitiveStyle::with_fill(BG))
+        .draw(lcd)
+        .ok();
 }
 
 fn draw_title<D>(lcd: &mut D, title: &str)
@@ -241,28 +292,26 @@ fn draw_row<D>(
     let row_top = LIST_TOP + slot as i32 * ROW_HEIGHT;
     let is_selected = index < total && index == selected;
     if !is_selected {
-        draw_backdrop(
-            lcd,
-            &mut |addr, buf| source.read_flash(addr, buf),
-            row_top,
-            ROW_HEIGHT,
-        );
+        clear_rows(lcd, row_top, ROW_HEIGHT);
     }
 
     if index >= total {
         return; // blank row below the end of a shorter list
     }
 
+    // "You are changing this": a value with arrows, or a typed field (it has a text cursor).
+    let editing = is_selected && (show_arrows || source.cursor(index).is_some());
     if is_selected {
         Rectangle::new(
             Point::new(0, row_top),
             Size::new(SCREEN_W as u32, ROW_HEIGHT as u32),
         )
-        .into_styled(PrimitiveStyle::with_fill(SELECT_BG))
+        .into_styled(PrimitiveStyle::with_fill(if editing { EDIT_BG } else { SELECT_BG }))
         .draw(lcd)
         .ok();
     }
-    let fg = FG;
+    let fg = if editing { EDIT_FG } else { FG };
+    let value_fg = if is_selected { fg } else { VALUE_DIM };
     let baseline = row_top + FONT_6X10.baseline as i32 + 2;
 
     let mut label: TextBuf<20> = TextBuf::new();
@@ -306,7 +355,7 @@ fn draw_row<D>(
         } else if label_is_empty {
             draw_value_left(lcd, value.as_str(), baseline, fg);
         } else {
-            draw_value(lcd, value.as_str(), baseline, fg);
+            draw_value(lcd, value.as_str(), baseline, value_fg);
         }
     }
 }
@@ -329,7 +378,7 @@ where
     Text::new(
         text,
         Point::new(x, baseline_y),
-        MonoTextStyle::new(&FONT_6X10, FG),
+        MonoTextStyle::new(&FONT_6X10, TITLE_FG),
     )
     .draw(lcd)
     .ok();

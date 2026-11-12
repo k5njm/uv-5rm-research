@@ -7,6 +7,8 @@ const KIND_SINGLE: u8 = 2;
 const KIND_LONG: u8 = 3;
 const KIND_REPEAT: u8 = 4;
 const KEY_DIGIT0: u8 = 0;
+const KEY_STAR: u8 = 10;
+const KEY_POUND: u8 = 11;
 const KEY_MENU: u8 = 12;
 const KEY_EXIT: u8 = 13;
 const KEY_UP: u8 = 14;
@@ -19,7 +21,10 @@ const CONTACT_COUNT: usize = 20;
 const SUBAUDIO_MAX_INDEX: i32 = 259;
 const OCCUPIED_BYTES: usize = 125; // 1000 bits
 
-const VISIBLE_ROWS: usize = 8;
+/// Rows the shared list shows above its key-hint strip.
+const VISIBLE_ROWS: usize = 7;
+/// Title bytes handed to `draw_list`: a full row of the list font.
+const TITLE_LEN: usize = 26;
 
 static mut API_PTR: *const Api = core::ptr::null();
 
@@ -189,8 +194,10 @@ impl<const N: usize> NameEdit<N> {
     }
 
     fn start(&mut self, initial: [u8; N]) {
-        self.buf = initial;
-        self.cursor = initial.iter().position(|&b| b == 0).unwrap_or(N);
+        // Stock firmware and CHIRP pad names with 0xFF. Left as they are, no zero is found, the cursor starts
+        // past the end and every key is refused (seen on a radio that came from stock firmware).
+        self.buf = initial.map(|b| if b == 0xFF { 0 } else { b });
+        self.cursor = self.buf.iter().position(|&b| b == 0).unwrap_or(N);
         self.pending = None;
         self.idle_100us = 0;
     }
@@ -428,19 +435,19 @@ fn field_at(index: usize) -> Field {
 impl Field {
     fn label(self) -> &'static str {
         match self {
-            Field::Freq => "FREQ",
-            Field::Sftd => "SHIFT",
-            Field::Offset => "OFFSET",
-            Field::RxCts => "R-CTC",
-            Field::TxCts => "T-CTC",
-            Field::Power => "PWR",
-            Field::Wn => "W/N",
-            Field::ScanAdd => "SCAN",
-            Field::BusyLock => "BCL",
-            Field::AniCall => "CALL",
+            Field::Freq => "FREQUENCY",
+            Field::Sftd => "RPT SHIFT",
+            Field::Offset => "RPT OFFSET",
+            Field::RxCts => "RX TONE",
+            Field::TxCts => "TX TONE",
+            Field::Power => "TX POWER",
+            Field::Wn => "BANDWIDTH",
+            Field::ScanAdd => "IN SCAN LIST",
+            Field::BusyLock => "BUSY LOCKOUT",
+            Field::AniCall => "ANI CALL",
             Field::Name => "NAME",
             Field::Save => "SAVE",
-            Field::Delete => "DEL",
+            Field::Delete => "DELETE",
         }
     }
 
@@ -460,28 +467,33 @@ impl Field {
 }
 
 struct ChanList {
-    occupied: [u8; OCCUPIED_BYTES],
+    /// Stored channels that belong to the group being shown: what the list displays. (One map only: the app has
+    /// little memory to spare, so a free slot is found by asking the radio when a channel is created.)
+    member: [u8; OCCUPIED_BYTES],
     selected: Option<u16>,
 }
 
 impl ChanList {
     const fn blank() -> Self {
         ChanList {
-            occupied: [0; OCCUPIED_BYTES],
+            member: [0; OCCUPIED_BYTES],
             selected: None,
         }
     }
 
     fn scan(api: &Api) -> Self {
-        let mut occupied = [0u8; OCCUPIED_BYTES];
+        let group = shown_group();
+        let mut member = [0u8; OCCUPIED_BYTES];
         let mut buf = [0u8; CHAN_SIZE];
         for n in 0..=MAX_CHANNEL_NUM {
-            if (api.chan_read)(n, buf.as_mut_ptr(), CHAN_SIZE as u16) {
-                occupied[n as usize / 8] |= 1 << (n % 8);
+            if (api.chan_in_group)(group, n)
+                && (api.chan_read)(n, buf.as_mut_ptr(), CHAN_SIZE as u16)
+            {
+                member[n as usize / 8] |= 1 << (n % 8);
             }
         }
-        let selected = (0..=MAX_CHANNEL_NUM).find(|&n| Self::bit(&occupied, n));
-        ChanList { occupied, selected }
+        let selected = (0..=MAX_CHANNEL_NUM).find(|&n| Self::bit(&member, n));
+        ChanList { member, selected }
     }
 
     fn bit(occupied: &[u8; OCCUPIED_BYTES], n: u16) -> bool {
@@ -489,27 +501,27 @@ impl ChanList {
     }
 
     fn count(&self) -> u16 {
-        self.occupied.iter().map(|b| b.count_ones() as u16).sum()
+        self.member.iter().map(|b| b.count_ones() as u16).sum()
     }
 
     fn step(&self, down: bool) -> Option<u16> {
         match self.selected {
             Some(num) if down => ((num + 1)..=MAX_CHANNEL_NUM)
-                .find(|&n| Self::bit(&self.occupied, n)),
-            Some(num) => (0..num).rev().find(|&n| Self::bit(&self.occupied, n)),
+                .find(|&n| Self::bit(&self.member, n)),
+            Some(num) => (0..num).rev().find(|&n| Self::bit(&self.member, n)),
             None if down => {
-                (0..=MAX_CHANNEL_NUM).find(|&n| Self::bit(&self.occupied, n))
+                (0..=MAX_CHANNEL_NUM).find(|&n| Self::bit(&self.member, n))
             }
             None => (0..=MAX_CHANNEL_NUM)
                 .rev()
-                .find(|&n| Self::bit(&self.occupied, n)),
+                .find(|&n| Self::bit(&self.member, n)),
         }
     }
 
     fn selected_index(&self) -> usize {
         match self.selected {
             Some(num) => {
-                (0..num).filter(|&n| Self::bit(&self.occupied, n)).count()
+                (0..num).filter(|&n| Self::bit(&self.member, n)).count()
             }
             None => self.count() as usize,
         }
@@ -520,7 +532,7 @@ impl ChanList {
             return None;
         }
         (0..=MAX_CHANNEL_NUM)
-            .filter(|&n| Self::bit(&self.occupied, n))
+            .filter(|&n| Self::bit(&self.member, n))
             .nth(index)
     }
 }
@@ -528,7 +540,7 @@ impl ChanList {
 fn rescan_list(api: &Api, prefer: Option<u16>) -> ChanList {
     let mut list = ChanList::scan(api);
     if let Some(num) = prefer {
-        if ChanList::bit(&list.occupied, num) {
+        if ChanList::bit(&list.member, num) {
             list.selected = Some(num);
         }
     }
@@ -576,6 +588,8 @@ fn default_channel(freq_hz: u32) -> Channel {
     let deci_hz = freq_hz / 10;
     ch.set_rx_freq_deci_hz(deci_hz);
     ch.set_tx_freq_deci_hz(deci_hz);
+    ch.flags |= 0x04; // in the scan list: group scans skip channels without it
+    ch.tx_power = 1; // LOW: raise it on purpose, not by default
     ch
 }
 
@@ -772,9 +786,12 @@ fn dispatch_list(
                 let working = read_channel(api, num);
                 Phase::Detail(ChannelEdit::open(num, working, false))
             }
-            None => match (0..=MAX_CHANNEL_NUM)
-                .find(|&n| !ChanList::bit(&list.occupied, n))
-            {
+            // a new channel goes into the first free slot that belongs to the group being shown
+            None => match (0..=MAX_CHANNEL_NUM).find(|&n| {
+                let mut buf = [0u8; CHAN_SIZE];
+                (api.chan_in_group)(shown_group(), n)
+                    && !(api.chan_read)(n, buf.as_mut_ptr(), CHAN_SIZE as u16)
+            }) {
                 Some(num) => {
                     let working = default_channel((api.get_master_freq)());
                     Phase::Detail(ChannelEdit::open(num, working, true))
@@ -783,6 +800,10 @@ fn dispatch_list(
             },
         },
         KEY_EXIT if ev_kind == KIND_SINGLE => Phase::Exit,
+        KEY_STAR | KEY_POUND if ev_kind == KIND_SINGLE => {
+            step_group(ev_key == KEY_POUND);
+            Phase::List(ChanList::scan(api))
+        }
         _ => Phase::List(list),
     }
 }
@@ -910,11 +931,54 @@ fn write_channel(api: &Api, num: u16, ch: &Channel) {
 
 struct State {
     phase: Phase,
+    /// Slot just written by SAVE: a toast says so until a key is pressed or `TOAST_100US` passes.
+    saved: Option<u16>,
+    saved_age_100us: u32,
+    /// The channel group the list shows (starts as the radio's current group; `*` and `#` step through them).
+    group: u8,
+    group_count: u8,
 }
 
 static mut STATE: State = State {
     phase: Phase::List(ChanList::blank()),
+    saved: None,
+    saved_age_100us: 0,
+    group: 0,
+    group_count: 1,
 };
+
+const TOAST_100US: u32 = 15_000;
+const GROUP_NAME_MAX: usize = 16;
+
+fn shown_group() -> u8 {
+    unsafe { (*core::ptr::addr_of!(STATE)).group }
+}
+
+fn step_group(next: bool) {
+    unsafe {
+        let st = &mut *core::ptr::addr_of_mut!(STATE);
+        let n = st.group_count.max(1);
+        st.group = if next { (st.group + 1) % n } else { (st.group + n - 1) % n };
+    }
+}
+
+fn dismiss_toast(api: &Api, state: &mut State) {
+    if state.saved.take().is_some() {
+        (api.toast)(core::ptr::null(), 0);
+    }
+}
+
+/// "GROUP 1: REPEATERS": the number is the digit that selects the group from the BAND menu.
+fn group_title(api: &Api, out: &mut [u8; TITLE_LEN]) {
+    let group = shown_group();
+    *out = [0; TITLE_LEN];
+    out[..6].copy_from_slice(b"GROUP ");
+    let mut i = 6 + (api.fmt_u32)(group as u32, out[6..].as_mut_ptr()) as usize;
+    out[i] = b':';
+    out[i + 1] = b' ';
+    i += 2;
+    (api.group_name)(group, out[i..].as_mut_ptr(), (TITLE_LEN - i) as u16);
+}
 
 #[cfg_attr(target_os = "none", no_mangle)]
 pub extern "C" fn app_entry(api: &Api, ev: AppEvent) -> AppResult {
@@ -932,7 +996,16 @@ pub extern "C" fn app_entry(api: &Api, ev: AppEvent) -> AppResult {
 
 fn enter(api: &Api) -> AppResult {
     unsafe {
-        STATE.phase = Phase::List(ChanList::scan(api));
+        let st = &mut *core::ptr::addr_of_mut!(STATE);
+        let mut scratch = [0u8; GROUP_NAME_MAX];
+        let mut count = 0u8;
+        while count < 64 && (api.group_name)(count, scratch.as_mut_ptr(), GROUP_NAME_MAX as u16) != 0 {
+            count += 1;
+        }
+        st.group_count = count.max(1);
+        st.group = (api.current_group)().min(st.group_count - 1);
+        st.saved = None;
+        st.phase = Phase::List(ChanList::scan(api));
     }
     AppResult::Continue
 }
@@ -944,9 +1017,22 @@ fn key(api: &Api, kind: u8, id: u8) -> AppResult {
             &mut state.phase,
             Phase::List(ChanList::blank()),
         );
+        dismiss_toast(api, state);
         state.phase = match phase {
             Phase::List(list) => dispatch_list(api, kind, id, list),
-            Phase::Detail(edit) => dispatch_detail(api, kind, id, edit),
+            Phase::Detail(edit) => {
+                let saving = kind == KIND_SINGLE
+                    && id == KEY_MENU
+                    && !edit.editing
+                    && field_at(edit.field_index) == Field::Save;
+                let num = edit.num;
+                let next = dispatch_detail(api, kind, id, edit);
+                if saving && matches!(next, Phase::List(_)) {
+                    state.saved = Some(num);
+                    state.saved_age_100us = 0;
+                }
+                next
+            }
             Phase::Exit => Phase::Exit,
         };
         if matches!(state.phase, Phase::Exit) {
@@ -957,9 +1043,14 @@ fn key(api: &Api, kind: u8, id: u8) -> AppResult {
 }
 
 fn tick(api: &Api, dt_100us: u32) -> AppResult {
-    let _ = api;
     unsafe {
         let state = &mut *core::ptr::addr_of_mut!(STATE);
+        if state.saved.is_some() {
+            state.saved_age_100us = state.saved_age_100us.saturating_add(dt_100us);
+            if state.saved_age_100us >= TOAST_100US {
+                dismiss_toast(api, state);
+            }
+        }
         if let Phase::Detail(edit) = &mut state.phase {
             if edit.editing && field_at(edit.field_index) == Field::Name {
                 edit.name_edit.tick(dt_100us);
@@ -1117,7 +1208,7 @@ fn format_field_value(
         Field::Save => false,
         Field::Delete => {
             if edit.is_editing(index) {
-                write_str(out, "Sure? MENU");
+                write_str(out, "MENU = DELETE");
                 true
             } else {
                 false
@@ -1126,16 +1217,23 @@ fn format_field_value(
     }
 }
 
-fn fmt_ch_num(out: &mut [u8], num: u16) {
+/// The number the main screen shows for slot `num`: its position in the group being shown, at least two digits
+/// ("01"; in ALL the printed channel number). Returns the length written.
+fn fmt_num(api: &Api, out: &mut [u8], num: u16) -> usize {
+    let pos = (api.chan_group_pos)(shown_group(), num) as u32;
+    let mut i = 0;
+    if pos < 10 {
+        out[0] = b'0';
+        i = 1;
+    }
+    i + (api.fmt_u32)(pos, out[i..].as_mut_ptr()) as usize
+}
+
+/// "CH" and the number; returns the length written.
+fn fmt_ch_num(api: &Api, out: &mut [u8], num: u16) -> usize {
     out[0] = b'C';
     out[1] = b'H';
-    let mut digits = [b'0'; 3];
-    let mut n = num as u32;
-    for k in (0..3).rev() {
-        digits[k] = (n % 10) as u8 + b'0';
-        n /= 10;
-    }
-    out[2..5].copy_from_slice(&digits);
+    2 + fmt_num(api, &mut out[2..], num)
 }
 
 fn draw(api: &Api) -> AppResult {
@@ -1179,13 +1277,13 @@ fn draw(api: &Api) -> AppResult {
                     }
                     match list.channel_at(gi) {
                         Some(num) => {
+                            // "01 K5RWK       147.1200": the number the main screen shows, the name, the frequency
                             let ch = read_channel(api, num);
-                            let name = channel_name_bytes(&ch.name);
-                            if name.is_empty() {
-                                fmt_ch_num(&mut rows[i].label, num);
-                            } else {
-                                write_bytes(&mut rows[i].label, name);
-                            }
+                            let n = fmt_num(api, &mut rows[i].label, num);
+                            rows[i].label[n] = b' ';
+                            write_bytes(&mut rows[i].label[n + 1..], channel_name_bytes(&ch.name));
+                            fmt_mhz4(api, ch.rx_freq_deci_hz() * 10, &mut rows[i].value);
+                            rows[i].has_value = true;
                         }
                         None => write_str(&mut rows[i].label, "+ NEW"),
                     }
@@ -1224,23 +1322,43 @@ fn draw(api: &Api) -> AppResult {
         }
     }
 
-    let mut title_buf = [0u8; 16];
+    let mut title_buf = [0u8; TITLE_LEN];
     match &state.phase {
-        Phase::List(_) => write_str(&mut title_buf, "CHANNELS"),
+        Phase::List(_) => group_title(api, &mut title_buf),
         Phase::Detail(edit) => {
             if edit.is_new {
-                write_str(&mut title_buf, "NEW");
+                write_str(&mut title_buf, "NEW ");
+                fmt_ch_num(api, &mut title_buf[4..], edit.num);
             } else {
-                fmt_ch_num(&mut title_buf, edit.num);
+                fmt_ch_num(api, &mut title_buf, edit.num);
             }
         }
         Phase::Exit => {}
     }
 
+    // The strip at the bottom says what the keys do in this state.
+    let hint: &[u8] = match &state.phase {
+        Phase::List(_) => b"MENU open   * # group",
+        // leaving the editor without SAVE drops the changes, so EXIT says so
+        Phase::Detail(edit) if !edit.editing => match field_at(edit.field_index) {
+            Field::Save => b"MENU save    EXIT discard",
+            Field::Delete => b"MENU delete  EXIT discard",
+            _ => b"MENU edit    EXIT discard",
+        },
+        Phase::Detail(edit) => match field_at(edit.field_index) {
+            Field::Name => b"0-9 UP/DN MENU ok EXIT del",
+            Field::Freq | Field::Offset => b"0-9 type MENU ok EXIT del",
+            Field::Delete => b"MENU delete it  EXIT keep",
+            _ => b"UP/DN  MENU ok  EXIT undo",
+        },
+        Phase::Exit => b"",
+    };
+    (api.list_hint)(hint.as_ptr(), hint.len() as u16);
+
     let rows_ptr = core::ptr::addr_of!(ROWS) as *const ListRow;
     (api.draw_list)(
         title_buf.as_ptr(),
-        16,
+        TITLE_LEN as u16,
         rows_ptr,
         VISIBLE_ROWS as u16,
         window_start as u16,
@@ -1248,6 +1366,12 @@ fn draw(api: &Api) -> AppResult {
         total as u16,
         show_arrows,
     );
+    if let Some(num) = state.saved {
+        let mut text = [0u8; 16];
+        text[..6].copy_from_slice(b"SAVED ");
+        let n = 6 + fmt_ch_num(api, &mut text[6..], num);
+        (api.toast)(text.as_ptr(), n as u16);
+    }
 
     AppResult::Continue
 }
