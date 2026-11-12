@@ -111,6 +111,14 @@ pub fn run_session(
             frame::CMD_EXTRA_WRITE => {
                 handle_extra_write(app, frame.addr, &frame.data[..frame.len])
             }
+            frame::CMD_FM_WRITE => handle_table_write(
+                app,
+                frame.addr,
+                &frame.data[..frame.len],
+                frame::CMD_FM_WRITE,
+                addr::FM_STATION_ADDR,
+                addr::FM_STATION_TABLE,
+            ),
             frame::CMD_READ_FLASH_RAW => handle_read_flash_raw(app, frame.addr),
             frame::CMD_END => {
                 send_response(frame::CMD_END, frame.addr, &[]);

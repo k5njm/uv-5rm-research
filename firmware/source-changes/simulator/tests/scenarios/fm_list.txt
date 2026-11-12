@@ -1,0 +1,29 @@
+# The station list: the one playing has a speaker, the list scrolls, * arms a delete (amber), EXIT disarms.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 917 KKXT Adult Album Alt
+fmstation 933 WBAP News/Talk
+fmstation 963 KSCS Country
+fmstation 1011 WRR Classical
+fmstation 1045 KKDA Hip-Hop
+handoff fm 1011
+app fm
+wait 0.5
+key menu
+shot playing_selected
+key down
+shot moved
+key star
+shot armed_delete
+key exit
+shot disarmed
+key up
+key up
+key up
+key up
+shot scrolled
+key exit
+wait 0.1
+shot back_in_tuner

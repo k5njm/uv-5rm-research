@@ -262,6 +262,15 @@ class Build(unittest.TestCase):
         self.put("custom-range.csv", [row()])
         self.assertTrue(any("CUSTOM RANGE" in e for e in cp.build(self.dir)[2]))
 
+    def test_subdirectories_are_not_groups_and_a_misplaced_fm_list_says_where_it_belongs(self):
+        self.put("weather.csv", [row("W1", "162.55")])
+        os.mkdir(os.path.join(self.dir, "fm"))                                  # FM station lists live here (fm_stations.py)
+        wb(os.path.join(self.dir, "fm", "dallas.csv"), b"Name,Frequency,Detail\nKERA,90.1,Public Radio\n")
+        self.assertEqual(cp.build(self.dir)[2], [])
+        self.put("fm-broadcast.csv", [row("KERA", "90.1")])
+        errs = cp.build(self.dir)[2]
+        self.assertTrue(any("belong in channels/fm/" in e for e in errs), errs)
+
     def test_base_keeps_unassigned_slots(self):
         base = bytearray(b"\xff" * (SLOT * SLOTS))
         base[0:SLOT] = cp.encode(row("OLD0", "162.4"))[0]               # inside weather: replaced

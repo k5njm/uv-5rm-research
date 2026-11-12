@@ -18,6 +18,10 @@ Nothing here has been written to a real radio yet; the whole path is tested only
   rules allow it; the radio's TX BANDS and TX INHIBIT settings decide what it will transmit on.
 - `Detail` (location or description, at most 16 ASCII characters) goes into a second file, `OUT.extras`, which the main
   screen shows beside the channel number in memory mode. Install it with `channel_extras.py PORT build-out/channels.extras`.
+- **FM broadcast station lists are not memory channels** and do not go here: `channel_plan.py` reads every `.csv` in this
+  directory as a channel group, so a file such as `fm-broadcast.csv` fails the build (`no group is named ...`). They live in
+  `channels/fm/` (a subdirectory, which `channel_plan.py` does not read), one file per list, and go to the FM app through
+  `fm_stations.py`, a separate path described below.
 - Required columns: `Name`, `Frequency`; the rest of the CHIRP columns are optional (see the docstring for the rules).
 - Names are at most 12 printable ASCII characters. They are never truncated; a longer name fails the build.
 - A build fails, and writes nothing, if a group overflows, two files claim a slot, or a row cannot be parsed.
@@ -33,3 +37,22 @@ python3 firmware/source-changes/restore_backup.py PORT build-out/channels.img --
 Without `--base`, every slot the CSVs do not fill is written EMPTY, erasing whatever the radio has there (the undo file
 restores it). Use `--base` with a `radio_read.py` backup to keep the other channels. Channels whose transmit frequency is
 outside the radio's transmit plan are flagged in the table but still written, as the upstream uploader does.
+
+## FM station names (`channels/fm/`)
+
+`channels/fm/dallas.csv` is a list of Dallas-area broadcast stations (from radio-locator.com, receive only) for the FM app;
+copy it and put in your own. CHIRP format, but only three columns are read: `Name` (at most 12 printable ASCII characters,
+not truncated), `Frequency` (MHz, 87.5 to 108.0, a multiple of 0.1) and `Detail` (at most 16 characters, shown under the
+name: a format or a city). Other columns are ignored, so a CHIRP export works as it is. At most 127 stations, no frequency
+twice. The name need not repeat the frequency: the app shows both. Nothing about Dallas is in the app.
+
+```
+python3 firmware/source-changes/fm_stations.py build channels/fm/dallas.csv -o build-out/fm.fmst
+python3 firmware/source-changes/fm_stations.py install PORT build-out/fm.fmst --before build-out/fm-before.bin
+```
+
+The table goes to 0x1D8000 of the radio's data flash (two 4 KB halves; the FM app keeps its saves there) through a
+programming-port command of its own (`F`), which erases those two sectors and accepts nothing outside them. That command
+is new in the core: an older core refuses it and nothing is written. Installing replaces the list on the radio, including
+stations saved there. `fm_stations.py show FILE` prints a table file or the `--before` backup. Like everything here it has
+only been tried against the fake radio.
