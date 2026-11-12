@@ -1598,11 +1598,27 @@ fn test_search_qt() {
     check(sim().ptt_calls == 0 && sim().tx_enable_calls == 0, "never transmits");
 }
 
-// ---- simulated RF chip registers and FSK modem, for TEXT ----
+// ---- simulated RF chip registers and FSK modem, for TEXT and FSK PROBE ----
+//
+// What the model takes from the FD6818B register document (build-out/refs, HARDWARE.md "FSK modem registers"):
+//   REG_59 bit 12 receive on, bit 14 clear RX FIFO, bit 3 four-byte sync; REG_3F masks REG_02's flags;
+//   REG_5E bits 2:0 the RX FIFO almost-full threshold (the FIFO holds 8 words); REG_5D the packet length, an 11-bit
+//   byte count minus one (bits 15:8 low, 7:5 high); REG_0B bit 6/7 sync found positive/negative.
+// And from measurements on the radio: TEXT's one interrupt per word at threshold 1; the first FSK PROBE capture
+// (a sync, no words, and a done flag about the packet's length later).
+// GUESSES, not measured: that a held clear bit keeps the FIFO empty (level, not edge); that done comes exactly when
+// the counted bytes have been delivered and the receiver then waits for the next sync; that the almost-full flag is
+// raised when a word arrives and the FIFO then holds at least the threshold (not re-raised for words already
+// there); the FIFO returning 0 when read empty; that words only reach the FIFO after a sync; overflow past 8 words drops the
+// newest; and the pacing: events are taken as the app polls, not by the clock, with the time a word takes on the air
+// (REG_72) added per word. The sync match does not look at the sync registers or REG_59 bit 3 at all: the scenario or
+// test decides what the air carries.
 
 #[derive(Clone)]
 enum AirEvent {
     Sync,
+    /// A sync the chip matched with the data inverted (REG_0B bit 7 instead of bit 6).
+    SyncInverted,
     Word(u16),
     Burst(Vec<u16>),
     Done,
@@ -1623,6 +1639,18 @@ struct Chip {
     tx_key_time: u32,
     state_writes: Vec<u16>,
     tones: Vec<u16>,
+    /// A sync has been heard and the length counter has not run out: words reach the FIFO.
+    in_frame: bool,
+    since_sync: u32,
+    /// REG_59 bit 14 is high: the RX FIFO is held empty.
+    rx_clear_held: bool,
+    /// Words that arrived with the FIFO full (8) and were lost.
+    overflow: u32,
+    /// The most words the FIFO ever held.
+    max_fifo: usize,
+    /// GUESS switch: after the length counter runs out the chip keeps putting words in the FIFO (the other reading of
+    /// TEXT's "it goes on decoding noise as words") instead of waiting for the next sync.
+    stream_past_done: bool,
 }
 
 static mut CHIP: Option<Chip> = None;
@@ -1637,6 +1665,7 @@ fn chip_reset() {
     regs[0x2B] = 0x0300;
     regs[0x40] = 0x34D0;
     regs[0x72] = 0x1111;
+    regs[0x5E] = (64 << 3) | 4; // register document defaults: TX threshold 64, RX threshold 4
     unsafe {
         CHIP = Some(Chip {
             regs,
@@ -1653,6 +1682,12 @@ fn chip_reset() {
             tx_key_time: 0,
             state_writes: Vec::new(),
             tones: Vec::new(),
+            in_frame: false,
+            since_sync: 0,
+            rx_clear_held: false,
+            overflow: 0,
+            max_fifo: 0,
+            stream_past_done: false,
         });
     }
 }
@@ -1671,11 +1706,13 @@ pub(crate) fn sim_rf_write(addr: u8, value: u16) {
             }
             if value & 0x4000 != 0 {
                 c.rx_fifo.clear();
+                c.in_frame = false;
                 // A restarted receiver waits for the next sync, so the noise it was decoding is gone.
-                while matches!(c.script.front(), Some(e) if !matches!(e, AirEvent::Sync)) {
+                while matches!(c.script.front(), Some(e) if !matches!(e, AirEvent::Sync | AirEvent::SyncInverted)) {
                     c.script.pop_front();
                 }
             }
+            c.rx_clear_held = value & 0x4000 != 0;
             if value & 0x0800 != 0 {
                 if !sim().transmitting {
                     c.tx_without_key += 1;
@@ -1711,23 +1748,71 @@ pub(crate) fn sim_rf_write(addr: u8, value: u16) {
     }
 }
 
+/// A word's time on the air: 16 bits at the baud REG_72 selects (4646 is 450 baud, 356 units of 100 us).
+fn word_time(c: &Chip) -> u32 {
+    let r = c.regs[0x72] as u32;
+    if r == 0 { 356 } else { (1_651_910 + r / 2) / r }
+}
+
+/// REG_5D's packet length in words: an 11-bit byte count minus one, rounded up to whole words.
+fn length_words(c: &Chip) -> u32 {
+    let r = c.regs[0x5D] as u32;
+    let bytes = ((r >> 8) & 0xFF | ((r >> 5) & 7) << 8) + 1;
+    bytes.div_ceil(2)
+}
+
+/// Raises an interrupt flag if REG_3F enables it.
+fn raise(c: &mut Chip, flag: u16) {
+    if c.regs[0x3F] & flag != 0 {
+        c.pending |= flag;
+    }
+}
+
 pub(crate) fn sim_rf_read(addr: u8) -> u16 {
     let c = chip();
     match addr {
         0x0C => {
-            // The modem only hears anything with RX on.
-            if c.pending == 0 && c.regs[0x59] & 0x1000 != 0 {
+            // The modem only hears anything with RX on. A poll takes the air forward to the next interrupt.
+            while c.pending == 0 && c.regs[0x59] & 0x1000 != 0 {
                 match c.script.pop_front() {
-                    Some(AirEvent::Sync) => c.pending |= 2,
-                    Some(AirEvent::Word(w)) => {
-                        c.rx_fifo.push_back(w);
-                        c.pending |= 0x1000;
-                        // A word's real time on the air at 450 baud.
-                        sim().now = sim().now.wrapping_add(356);
+                    Some(ev @ (AirEvent::Sync | AirEvent::SyncInverted)) => {
+                        c.in_frame = true;
+                        c.since_sync = 0;
+                        c.regs[0x0B] = if matches!(ev, AirEvent::Sync) { 1 << 6 } else { 1 << 7 };
+                        raise(c, 2);
                     }
-                    Some(AirEvent::Burst(words)) => c.rx_fifo.extend(words),
-                    Some(AirEvent::Done) => c.pending |= 0x2000,
-                    None => {}
+                    Some(AirEvent::Word(w)) => {
+                        // A word's real time on the air.
+                        sim().now = sim().now.wrapping_add(word_time(c));
+                        if c.in_frame {
+                            if !c.rx_clear_held {
+                                if c.rx_fifo.len() < 8 {
+                                    c.rx_fifo.push_back(w);
+                                    c.max_fifo = c.max_fifo.max(c.rx_fifo.len());
+                                } else {
+                                    c.overflow += 1;
+                                }
+                            }
+                            c.since_sync += 1;
+                            if c.rx_fifo.len() >= (c.regs[0x5E] & 7).max(1) as usize {
+                                raise(c, 0x1000);
+                            }
+                            if c.since_sync == length_words(c) {
+                                raise(c, 0x2000);
+                                c.in_frame = c.stream_past_done;
+                            }
+                        }
+                    }
+                    Some(AirEvent::Burst(words)) => {
+                        c.since_sync += words.len() as u32;
+                        c.rx_fifo.extend(words);
+                        break;
+                    }
+                    Some(AirEvent::Done) => {
+                        raise(c, 0x2000);
+                        c.in_frame = false;
+                    }
+                    None => break,
                 }
             }
             (c.pending != 0) as u16
@@ -2469,6 +2554,162 @@ fn test_rf_api() {
     check(sim().ptt_calls == ptt && unsafe { TONE_ON_CALLS } == tone, "a cue never keys PTT or calls the transmitting tone function");
 }
 
+// ---- FSK PROBE against the modem model ----
+
+fn probe_open() {
+    nor_clear();
+    reset(404_800_000);
+    chip_reset();
+    fskprobe::entry(&API, AppEvent::Enter);
+    fskprobe::entry(&API, AppEvent::Draw);
+}
+
+fn probe_air(words: usize) {
+    let c = chip();
+    c.script.push_back(AirEvent::Sync);
+    for i in 0..words {
+        c.script.push_back(AirEvent::Word(0x1000 + i as u16));
+    }
+}
+
+fn test_fskprobe() {
+    let app: Entry = fskprobe::entry;
+
+    let refused0 = unsafe { RF_WRITES_REFUSED };
+    println!("FSK PROBE: setup");
+    probe_open();
+    press(app, 12);
+    let c = chip();
+    check(c.regs[0x59] == 0x1008, "receive on with a 4-byte sync, no invert, no FIFO clear held (the first capture's setup had neither)");
+    check(c.regs[0x5D] == 0x3B20 && c.regs[0x5E] == (64 << 3) | 1, "316 bytes (the RS41 frame less 4 sync bytes) in REG_5D's 11 bits; threshold 1");
+    check(c.regs[0x58] == 0x0309 && c.regs[0x72] == 49557 && c.regs[0x3F] == 0x3002, "FSK on at 2.4K bandwidth, 4800 baud, three interrupts");
+    check(c.regs[0x5A] == 0x086D && c.regs[0x5B] == 0x5388 && c.regs[0x5C] == 0x5625, "RS41 sync words, no chip CRC");
+
+    println!("FSK PROBE: a frame arrives word by word");
+    probe_air(158);
+    run_ms(app, 1500);
+    let (syncs, words, frames, cut) = fskprobe::debug_counts();
+    check((syncs, words, frames, cut) == (1, 158, 1, 0), "one sync, all 158 words, one whole frame, none cut");
+    check(chip().overflow == 0 && chip().max_fifo == 1, "one word per interrupt, the FIFO never held more");
+    check(chip().regs[0x59] == 0x1008, "and it is listening for the next sync");
+    check(fskprobe::debug_last() == [0x1000 + 154, 0x1000 + 155, 0x1000 + 156, 0x1000 + 157], "the last words read are the frame's last");
+
+    println!("FSK PROBE: threshold 4 takes four words per interrupt and the tail on done");
+    probe_open();
+    press(app, 12);
+    press(app, 17);
+    check(chip().regs[0x5E] & 7 == 1, "AB only moves the cursor");
+    press(app, 0);
+    check(chip().regs[0x5E] & 7 == 4, "0 on the TH item sets the almost-full threshold to 4 on the running modem");
+    probe_air(158);
+    run_ms(app, 1500);
+    check(fskprobe::debug_counts() == (1, 158, 1, 0), "158 words in 39 interrupts of 4 and a tail of 2 on done");
+    check(chip().overflow == 0 && chip().max_fifo <= 4, "none lost");
+
+    println!("FSK PROBE: the chip counts 256 bytes and stops, then the app has only 128 words");
+    probe_open();
+    press(app, 12);
+    press(app, 0);
+    check(chip().regs[0x5D] == 0xFF00, "LEN 256 writes the largest an 8-bit field can say");
+    probe_air(158);
+    run_ms(app, 1500);
+    check(fskprobe::debug_counts() == (1, 128, 0, 1), "128 words, no frame, and the cut-off frame is counted");
+    probe_air(158);
+    run_ms(app, 1500);
+    check(fskprobe::debug_counts().2 == 0 && fskprobe::debug_counts().3 == 2, "the same again: it keeps trying");
+
+    println!("FSK PROBE: the other reading, the chip keeps streaming past done");
+    probe_open();
+    chip().stream_past_done = true;
+    press(app, 12);
+    press(app, 0);
+    probe_air(158);
+    run_ms(app, 1500);
+    check(fskprobe::debug_counts() == (1, 158, 1, 0), "the app carries on past the early done and ends the frame by count");
+
+    println!("FSK PROBE: LEN 2048, the app ends the frame itself");
+    probe_open();
+    press(app, 12);
+    press(app, 0);
+    press(app, 0);
+    check(chip().regs[0x5D] == 0xFFE0, "LEN 2048");
+    probe_air(158);
+    run_ms(app, 1500);
+    check(fskprobe::debug_counts() == (1, 158, 1, 0) && chip().regs[0x59] == 0x1008, "whole frame by count, re-armed");
+
+    println!("FSK PROBE: the options, one by one");
+    for item in 1u8..=4 {
+        probe_open();
+        press(app, 12);
+        for _ in 0..item {
+            press(app, 17);
+        }
+        press(app, 0);
+        let c = chip();
+        match item {
+            1 => check(c.regs[0x5E] & 7 == 4, "TH 4"),
+            2 => check(c.regs[0x59] == 0x1408, "INV+ sets bit 10"),
+            3 => check(c.regs[0x58] == 0x0301, "BW 1.2 is exactly the first capture's and TEXT's value"),
+            _ => check(c.regs[0x59] == 0x1000, "S2 clears bit 3: a 2-byte sync"),
+        }
+    }
+
+    println!("FSK PROBE: the first capture's setup, replayed on the model");
+    chip_reset();
+    {
+        // What the old probe wrote (REG_59 twice, ending with bit 14 high and no bit 3).
+        for (a, v) in [(0x70u8, 0x00E0u16), (0x72, 49557), (0x58, 0x0301), (0x5A, 0x086D), (0x5B, 0x5388), (0x5C, 0x5625), (0x5D, 64 << 8), (0x5E, (1 << 3) | 1), (0x3F, 0x3002)] {
+            sim_rf_write(a, v);
+        }
+        sim_rf_write(0x59, 0x1500 | 0xC000);
+        sim_rf_write(0x59, 0x1500 | 0x4000);
+        probe_air(72);
+        let mut flags = 0u16;
+        let mut polls = 0;
+        while sim_rf_read(0x0C) & 1 != 0 && polls < 10 {
+            sim_rf_write(0x02, 0);
+            flags |= sim_rf_read(0x02);
+            polls += 1;
+        }
+        check(flags & 0x1002 == 0x0002 && flags & 0x2000 != 0, "a sync and a done flag and no almost-full flag: the signature of the first capture");
+        check(chip().rx_fifo.is_empty(), "with the FIFO empty");
+    }
+
+    println!("FSK PROBE: capture header and flags");
+    probe_open();
+    press(app, 17);
+    press(app, 17);
+    press(app, 0);
+    press(app, 11);
+    run(app, 1);
+    check(&nor()[0x1B_0000..0x1B_0008] == b"FSKCAP2\0", "capture header is version 2");
+    check(nor()[0x1B_0019] == 2 && nor()[0x1B_001A] == 0x18, "header: version 2, options INV on and 2.4K bandwidth");
+    chip().script.push_back(AirEvent::SyncInverted);
+    for i in 0..158u16 {
+        chip().script.push_back(AirEvent::Word(0x2000 + i));
+    }
+    run_ms(app, 1500);
+    press(app, 11);
+    let rec = |i: usize| -> (u16, u8) {
+        let o = 0x1B_0100 + i * 8;
+        (u16::from_le_bytes([nor()[o + 4], nor()[o + 5]]), nor()[o + 6])
+    };
+    check(rec(0) == (0, 1 | 16), "first record: the sync, and the chip said it matched inverted");
+    check(rec(1) == (0x2000, 2), "then the first word");
+    check(rec(158) == (0x2000 + 157, 2 | 4 | 32), "last record: word, chip done, frame ended by count");
+    check(nor()[0x1B_0100 + 159 * 8 + 6] == 0xFF, "159 records and then erased");
+
+    println!("FSK PROBE: leaving");
+    probe_open();
+    press(app, 12);
+    probe_air(5);
+    run_ms(app, 50);
+    check(press(app, 13), "Exit leaves");
+    check(chip().regs[0x59] == 0x0028 && chip().regs[0x58] == 0 && chip().regs[0x70] == 0 && chip().regs[0x3F] == 0, "modem left off, REG_59 at the core's idle value");
+    check(sim().ptt_calls == 0 && sim().tx_enable_calls == 0, "never touched the transmitter");
+    check(unsafe { RF_WRITES_REFUSED } == refused0, "never wrote a register outside the allow-list");
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("bootcard") {
@@ -2491,6 +2732,7 @@ fn main() {
     test_fox();
     test_search_qt();
     test_text();
+    test_fskprobe();
     test_menus();
     test_rf_api();
     check(unsafe { TONE_ON_CALLS } == 0, "no app called the transmitting tone function");

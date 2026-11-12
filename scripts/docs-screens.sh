@@ -43,6 +43,7 @@ FRAMES=(
   "hamtools_idtimer/armed_10_00              hamtools-idtimer"
   "hamtools_wavelength/typed_446_000         hamtools-wavelength"
   "fskprobe_idle/on_quiet                    fskprobe"
+  "fskprobe_options/all_changed              fskprobe-options"
 )
 
 command -v sips >/dev/null || { echo "error: sips not found (this script only runs on macOS)" >&2; exit 1; }
