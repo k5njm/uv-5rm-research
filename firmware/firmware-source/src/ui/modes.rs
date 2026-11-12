@@ -32,6 +32,10 @@ impl<'a, 'b> ListSource for ModeSource<'a, 'b> {
         w.put_str(modes_table()[index].name);
     }
 
+    fn hint(&mut self, w: &mut dyn crate::fmtlite::Sink) {
+        w.put_str("MENU use     EXIT back");
+    }
+
     fn value(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) -> bool {
         if index == self.current {
             w.put_str("*");

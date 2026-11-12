@@ -444,6 +444,13 @@ extern "C" fn toast(text: *const u8, len: u16) {
     let label = cstr(unsafe { std::slice::from_raw_parts(text, len as usize) });
     ui::toast::draw_toast(sim(), label, ui::toast::OK);
 }
+/// The hint the app last set (`Api::list_hint`), shown in the strip at the bottom of the list.
+static mut LIST_HINT: String = String::new();
+extern "C" fn list_hint(text: *const u8, len: u16) {
+    let s = if text.is_null() { "" } else { cstr(unsafe { std::slice::from_raw_parts(text, len as usize) }) };
+    assert!(s.len() <= 26 && s.is_ascii(), "list hint must be at most 26 ASCII characters: {s:?}");
+    unsafe { LIST_HINT = s.to_string() };
+}
 extern "C" fn settings_get(id: u16) -> u32 {
     match id {
         0 => 3,
@@ -495,6 +502,9 @@ impl ui::list::ListSource for BufferListSource {
         if let Some(r) = self.window_row(i) {
             w.put_str(cstr(&r.label));
         }
+    }
+    fn hint(&mut self, w: &mut dyn Sink) {
+        w.put_str(unsafe { &*std::ptr::addr_of!(LIST_HINT) });
     }
     fn value(&mut self, i: usize, w: &mut dyn Sink) -> bool {
         match self.window_row(i) {
@@ -789,6 +799,7 @@ static API: Api = Api {
     chan_in_group,
     current_group,
     toast,
+    list_hint,
 };
 
 type Entry = fn(&Api, AppEvent) -> AppResult;

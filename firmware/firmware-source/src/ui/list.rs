@@ -17,11 +17,17 @@ const SELECT_BG: Rgb565 = Rgb565::new(4, 24, 26);
 const EDIT_BG: Rgb565 = Rgb565::new(31, 42, 0);
 const EDIT_FG: Rgb565 = Rgb565::BLACK;
 const VALUE_DIM: Rgb565 = Rgb565::new(18, 36, 18);
+const HINT_BG: Rgb565 = Rgb565::new(4, 9, 4);
+const HINT_FG: Rgb565 = Rgb565::new(20, 40, 20);
 
 const ROW_HEIGHT: i32 = FONT_6X10.character_size.height as i32 + 4;
 const TITLE_HEIGHT: i32 = ROW_HEIGHT;
 const LIST_TOP: i32 = TITLE_HEIGHT;
-const VISIBLE_ROWS: usize = ((SCREEN_H - LIST_TOP) / ROW_HEIGHT) as usize;
+/// The bottom strip says what the keys do on this screen ("MENU open  EXIT back"); every list keeps it, so lists
+/// always show the same number of rows. Apps size their row buffers to `VISIBLE_ROWS` (7).
+const HINT_HEIGHT: i32 = ROW_HEIGHT + 2;
+const VISIBLE_ROWS: usize = ((SCREEN_H - LIST_TOP - HINT_HEIGHT) / ROW_HEIGHT) as usize;
+const HINT_TOP: i32 = SCREEN_H - HINT_HEIGHT;
 const RIGHT_MARGIN: i32 = 4;
 
 const ARROW_GAP: i32 = 6;
@@ -40,10 +46,13 @@ pub(crate) trait ListSource {
     fn cursor(&mut self, _index: usize) -> Option<usize> {
         None
     }
+    /// What the keys do here, for the strip at the bottom of the screen (at most a row of text).
+    fn hint(&mut self, _w: &mut dyn crate::fmtlite::Sink) {}
 }
 
 pub(crate) struct Cache {
     title: Option<TitleKey>,
+    hint: Option<TitleKey>,
     selected: Option<usize>,
     total: Option<usize>,
     scroll_top: Option<usize>,
@@ -96,6 +105,7 @@ impl Cache {
     pub fn new() -> Self {
         Cache {
             title: None,
+            hint: None,
             selected: None,
             total: None,
             scroll_top: None,
@@ -129,6 +139,13 @@ pub(crate) fn draw_list<D>(
 
     let title_changed = !cache.matches_title(title);
     let first = cache.selected.is_none() || title_changed;
+    let mut hint: TextBuf<TITLE_MAX> = TextBuf::new();
+    source.hint(&mut hint);
+    let hint_key = TitleKey::of(hint.as_str());
+    if first || cache.hint != Some(hint_key) {
+        draw_hint(lcd, hint.as_str());
+    }
+    cache.hint = Some(hint_key);
 
     if first {
         draw_full(lcd, title, source, selected, show_arrows, total, top);
@@ -211,12 +228,34 @@ fn draw_full<D>(
         draw_row(lcd, source, top + slot, selected, show_arrows, total, slot);
     }
     let bottom = LIST_TOP + VISIBLE_ROWS as i32 * ROW_HEIGHT;
-    draw_backdrop(
-        lcd,
-        &mut |addr, buf| source.read_flash(addr, buf),
-        bottom,
-        SCREEN_H - bottom,
-    );
+    if HINT_TOP > bottom {
+        draw_backdrop(
+            lcd,
+            &mut |addr, buf| source.read_flash(addr, buf),
+            bottom,
+            HINT_TOP - bottom,
+        );
+    }
+}
+
+fn draw_hint<D>(lcd: &mut D, hint: &str)
+where
+    D: DrawTarget<Color = Rgb565>,
+{
+    Rectangle::new(
+        Point::new(0, HINT_TOP),
+        Size::new(SCREEN_W as u32, HINT_HEIGHT as u32),
+    )
+    .into_styled(PrimitiveStyle::with_fill(HINT_BG))
+    .draw(lcd)
+    .ok();
+    Text::new(
+        hint,
+        Point::new(4, HINT_TOP + FONT_6X10.baseline as i32 + 3),
+        MonoTextStyle::new(&FONT_6X10, HINT_FG),
+    )
+    .draw(lcd)
+    .ok();
 }
 
 fn draw_title<D>(lcd: &mut D, title: &str)

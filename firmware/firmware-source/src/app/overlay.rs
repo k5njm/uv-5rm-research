@@ -383,6 +383,7 @@ fn handle_result(app: &mut App, syst: &mut SYST, result: AppResult) {
                 LOADED_ENTRY = Some(entry);
                 NEEDS_FULL_CLEAR = true;
                 LIST_CACHE = None;
+                LIST_HINT = (0, [0; 26]);
                 // Per segment, not per app: the tracking segment may key the
                 // transmitter, the editor it chains back to may not.
                 APP_TX_ENABLED = false;
@@ -408,6 +409,7 @@ pub(crate) fn enter(app: &mut App, syst: &mut SYST, slot: u8) {
                 NEEDS_FULL_CLEAR = true;
 
                 LIST_CACHE = None;
+                LIST_HINT = (0, [0; 26]);
                 HANDOFF_LEN = 0;
                 APP_TX_ENABLED = false;
                 APP_HOLDS_RX = false;
@@ -850,6 +852,8 @@ extern "C" fn api_utc_set(secs: u32) {
 }
 
 static mut LIST_CACHE: Option<Cache> = None;
+/// The hint an app last set with `Api::list_hint` (length, bytes); cleared when an app starts.
+static mut LIST_HINT: (u8, [u8; 26]) = (0, [0; 26]);
 
 struct BufferListSource<'a> {
     rows: &'a [ListRow],
@@ -873,6 +877,13 @@ impl<'a> ListSource for BufferListSource<'a> {
 
     fn read_flash(&mut self, addr: u32, buf: &mut [u8]) {
         app_ref().storage_mut().read_raw(addr, buf);
+    }
+
+    fn hint(&mut self, w: &mut dyn crate::fmtlite::Sink) {
+        let (len, buf) = unsafe { core::ptr::read(core::ptr::addr_of!(LIST_HINT)) };
+        if let Ok(s) = core::str::from_utf8(&buf[..len as usize]) {
+            w.put_str(s);
+        }
     }
 
     fn label(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) {
@@ -955,6 +966,23 @@ extern "C" fn api_chan_in_group(index: u8, num: u16) -> bool {
 #[inline(never)]
 extern "C" fn api_current_group() -> u8 {
     app_ref().chan_mode_index() as u8
+}
+
+#[inline(never)]
+extern "C" fn api_list_hint(text: *const u8, len: u16) {
+    let mut buf = [0u8; 26];
+    let mut n = 0;
+    if !text.is_null() {
+        let bytes = unsafe { core::slice::from_raw_parts(text, len as usize) };
+        for &b in bytes.iter().take(26) {
+            if b == 0 || !b.is_ascii() {
+                break;
+            }
+            buf[n] = b;
+            n += 1;
+        }
+    }
+    unsafe { *core::ptr::addr_of_mut!(LIST_HINT) = (n as u8, buf) };
 }
 
 #[inline(never)]
@@ -1575,4 +1603,5 @@ static API: Api = Api {
     chan_in_group: api_chan_in_group,
     current_group: api_current_group,
     toast: api_toast,
+    list_hint: api_list_hint,
 };

@@ -22,6 +22,10 @@ impl<'a, 'b> ListSource for LauncherSource<'a, 'b> {
         self.0.launcher_label_at(index, w);
     }
 
+    fn hint(&mut self, w: &mut dyn crate::fmtlite::Sink) {
+        w.put_str("MENU open    EXIT back");
+    }
+
     fn value(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) -> bool {
         if self.0.launcher_available_at(index) {
             false

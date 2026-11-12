@@ -206,6 +206,9 @@ pub struct Api {
     /// A notice box in the middle of the screen (like TX PROHIBITED), drawn over whatever is there. Call it after
     /// `draw_list` on every Draw while it should show. `len` 0 removes it: the next `draw_list` repaints in full.
     pub toast: extern "C" fn(text: *const u8, len: u16),
+    /// What the keys do on this screen, for the strip at the bottom of `draw_list` ("MENU open  EXIT back", at most
+    /// 26 characters). It stays until changed; `len` 0 clears it. Lists show 7 rows above the strip.
+    pub list_hint: extern "C" fn(text: *const u8, len: u16),
 }
 
 /// One tone of a [`Api::play_cue`] sequence: `hz_div10` = frequency / 10 (88 = 880 Hz), `ms` = duration.

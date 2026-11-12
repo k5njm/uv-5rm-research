@@ -21,7 +21,8 @@ const CONTACT_COUNT: usize = 20;
 const SUBAUDIO_MAX_INDEX: i32 = 259;
 const OCCUPIED_BYTES: usize = 125; // 1000 bits
 
-const VISIBLE_ROWS: usize = 8;
+/// Rows the shared list shows above its key-hint strip.
+const VISIBLE_ROWS: usize = 7;
 /// Title bytes handed to `draw_list`: a full row of the list font.
 const TITLE_LEN: usize = 26;
 
@@ -1355,6 +1356,18 @@ fn draw(api: &Api) -> AppResult {
         }
         Phase::Exit => {}
     }
+
+    // The strip at the bottom says what the keys do in this state.
+    let hint: &[u8] = match &state.phase {
+        Phase::List(_) => b"MENU open   * # group",
+        Phase::Detail(edit) if !edit.editing => b"MENU edit    EXIT back",
+        Phase::Detail(edit) => match field_at(edit.field_index) {
+            Field::Name | Field::Freq | Field::Offset => b"0-9 type MENU ok EXIT del",
+            _ => b"UP/DN  MENU ok  EXIT undo",
+        },
+        Phase::Exit => b"",
+    };
+    (api.list_hint)(hint.as_ptr(), hint.len() as u16);
 
     let rows_ptr = core::ptr::addr_of!(ROWS) as *const ListRow;
     (api.draw_list)(

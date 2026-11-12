@@ -15,7 +15,8 @@ pub const KEY_DOWN: u8 = 15;
 
 pub const SETTINGS_BYTES: usize = 168;
 pub const SIDE_CFG_BYTES: usize = 14;
-pub const VISIBLE_ROWS: usize = 8;
+/// Rows the shared list shows above its key-hint strip.
+pub const VISIBLE_ROWS: usize = 7;
 
 pub const COORD_NOT_SET: i32 = i32::MAX;
 pub const RIT_STEP_HZ: i32 = 10;
@@ -1830,6 +1831,14 @@ fn draw(api: &Api) -> AppResult {
         }
         _ => {}
     }
+
+    // The strip at the bottom says what the keys do in this state (EXIT while changing a value undoes it).
+    let hint: &[u8] = match &state.phase {
+        Phase::Items(st) if st.editing => b"UP/DN MENU save EXIT undo",
+        Phase::Items(_) => b"MENU change  EXIT back",
+        _ => b"MENU open    EXIT back",
+    };
+    (api.list_hint)(hint.as_ptr(), hint.len() as u16);
 
     let rows_ptr = core::ptr::addr_of!(ROWS) as *const ListRow;
     (api.draw_list)(
