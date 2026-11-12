@@ -1,0 +1,48 @@
+name: repro
+# Builds under native amd64 and emulated arm64 and requires identical images (scripts/dev.sh repro). It takes about
+# 20 minutes and its answer only changes with the toolchain or the build scripts, so it runs when those change,
+# once a week, and on request.
+on:
+  push:
+    branches: [main]
+    paths:
+      - dev/Dockerfile
+      - firmware/toolchain.env
+      - "**/rust-toolchain.toml"
+      - "**/Cargo.lock"
+      - "**/Cargo.toml"
+      - "**/.cargo/config.toml"
+      - "**/memory.x"
+      - "**/app.x"
+      - scripts/dev.sh
+      - firmware/tools/build_core.sh
+      - firmware/firmware-source/tools/mkapp.py
+      - .github/workflows/repro.yml
+  pull_request:
+    paths:
+      - dev/Dockerfile
+      - firmware/toolchain.env
+      - "**/rust-toolchain.toml"
+      - "**/Cargo.lock"
+      - "**/Cargo.toml"
+      - "**/.cargo/config.toml"
+      - "**/memory.x"
+      - "**/app.x"
+      - scripts/dev.sh
+      - firmware/tools/build_core.sh
+      - firmware/firmware-source/tools/mkapp.py
+      - .github/workflows/repro.yml
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with: { platforms: arm64 }
+      - run: scripts/dev.sh repro
+        env:
+          WITH_BROWSER: "0"   # no Chromium layer under QEMU
