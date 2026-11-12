@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 use bf5rh_abi::{Api, AppEvent, AppResult};
 
@@ -112,7 +112,7 @@ struct Snap {
 
 static mut LAST_SNAP: Option<Snap> = None;
 
-#[no_mangle]
+#[cfg_attr(target_os = "none", no_mangle)]
 pub extern "C" fn app_entry(api: &Api, ev: AppEvent) -> AppResult {
     unsafe {
         API_PTR = api as *const Api;
@@ -732,6 +732,7 @@ fn draw_picker_row(api: &Api, index: usize, selected: usize, row_top: i16) {
     }
 }
 
+#[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe {

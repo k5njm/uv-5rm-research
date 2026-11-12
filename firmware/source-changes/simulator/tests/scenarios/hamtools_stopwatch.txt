@@ -1,0 +1,14 @@
+# Stopwatch: start, lap, stop, reset.
+app hamtools
+key ab
+shot idle
+key menu
+wait 12.3
+key star
+wait 30
+key star
+shot running_two_laps
+key menu
+shot stopped
+key 0
+shot reset

@@ -1,0 +1,12 @@
+{
+  "default": {
+    "boards": ["5RHNRFB-YP07"],
+    "rf_chip": "FD6818B",
+    "note": "Upstream's current target (bf-5rh-firmware-open issue #18). No stock image exists for this board."
+  },
+  "bk4819": {
+    "boards": ["5RHBK"],
+    "rf_chip": "BK4819",
+    "note": "Upstream UV-5RM-Radio-Mod PR #3 (feature 'bk4819'). Tested by its author on one radio."
+  }
+}

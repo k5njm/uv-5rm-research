@@ -1,0 +1,12 @@
+# Search / QT Scan: a FRS-band signal carrying a 100.0 Hz tone.
+master 462562500
+signal 462562500 110 12 always
+app searchqt
+wait 2
+shot tone_found
+key up
+shot detecting
+wait 2
+shot tone_found_again
+key 1                     # switch to carrier search
+shot search_uhf

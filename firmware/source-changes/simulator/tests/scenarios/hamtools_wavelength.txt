@@ -1,0 +1,19 @@
+# Wavelength calculator: default 146.520 MHz, then a typed frequency.
+app hamtools
+key ab
+key ab
+shot default_146_520
+key star
+key 4
+key 4
+key 6
+key 0
+key 0
+key 0
+shot typed_446_000
+key star
+key 7
+key 0
+key 7
+key 4
+shot typed_7_074

@@ -5,7 +5,7 @@ Custom High-Altitude Balloon (HAB) and Radiosonde tracking suite developed for t
 > [!WARNING]
 > ### NOT IMPLEMENTED: DESIGN SKETCHES THAT DO NOT COMPILE
 > As of the Nov-2026 audit ([AUDIT.md](AUDIT.md)) none of `aprs`, `horus`, `rs41` compile, no `.app` exists, and `setup_balloon_radio.py` will refuse to run (missing overlays). Feature descriptions below are **intent, not behaviour**. Known defects:
-> * **APRS:** CRC is MSB-first `0x1021` (AX.25 needs reflected `0x8408`); no NRZI, bit-stuffing or flags; odd-length frame drops the last CRC byte; BK4819 FSK is not shown to be a 1200/2200 Hz Bell 202 modem; hardcoded callsign `K5RWK-7` and Richardson TX coordinates (must be user-configured).
+> * **APRS:** CRC is MSB-first `0x1021` (AX.25 needs reflected `0x8408`); no NRZI, bit-stuffing or flags; odd-length frame drops the last CRC byte; BK4819 FSK is not shown to be a 1200/2200 Hz Bell 202 modem; it hardcoded a third party's callsign and position (now replaced by placeholders; a real callsign must come from user configuration).
 > * **Horus:** uses a `$$` sync and 1200 baud; Horus Binary needs a 4FSK modem, Golay FEC and its own unique word.
 > * **RS41:** sync words and "PRBS-15" scrambler claim are unverified against `radiosonde_auto_rx`; uses `f64::sqrt` (not available in `no_std`).
 
@@ -28,7 +28,7 @@ Designed to bridge your handheld radio directly with the [Richardson Area Balloo
 ### Capabilities
 * **1200 Baud Bell 202 Demodulation:** Operates over the BK4819 transceiver's FSK engine with hardware HDLC flag detection (`0x7E`).
 * **AX.25 Packet Decoder:**
-  - Extracts source callsign and SSID (e.g. `K5RWK-11`, `W5HAB-9`).
+  - Extracts source callsign and SSID (e.g. `N0CALL-11`).
   - Unpacks destination, digipeater path (`WIDE1-1, WIDE2-1`).
   - Parses APRS position strings (`!DDMM.hhN/DDDMM.hhW$`).
   - Extracts altitude tags (`/A=084210`).

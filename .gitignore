@@ -42,3 +42,9 @@ venv/
 *.swp
 *.swo
 *~
+*-backup.bin
+*-backup.rgb565
+backup.bin
+
+# Containerised build output
+build-out/

@@ -1,8 +1,40 @@
-"""Send a one-region .BF to the KDH bootloader. Same frame sequence as tools/flash.py in bf-5rh-firmware-open."""
-import hashlib, struct, sys, time
-import serial
+"""Send a one-region .BF to the KDH bootloader. Same frame sequence as tools/flash.py in bf-5rh-firmware-open.
 
-BF, PORT, EXPECT_SHA = sys.argv[1:4]
+  flash_bf.py FILE.BF PORT SHA256_PREFIX --board BOARD --variant default|bk4819 [--check-only]
+
+BOARD is the text the radio shows when you hold 8 while powering on (e.g. 5RHNRFB-YP07). It must be
+one of the boards that VARIANT supports (firmware/variants.json); otherwise nothing is opened or sent.
+--check-only validates the file and the board gate and exits without touching the serial port.
+The SHA must match the file; that and the board text are what stop a wrong image reaching a radio.
+UNVERIFIED on real hardware.
+"""
+import hashlib, json, os, struct, sys, time
+
+_args = sys.argv[1:]
+CHECK_ONLY = "--check-only" in _args
+_args = [a for a in _args if a != "--check-only"]
+
+
+def _opt(name):
+    if name in _args:
+        i = _args.index(name)
+        v = _args[i + 1] if i + 1 < len(_args) else None
+        del _args[i:i + 2]
+        return v
+    return None
+
+
+BOARD, VARIANT = _opt("--board"), _opt("--variant")
+if len(_args) != 3 or not BOARD or not VARIANT:
+    raise SystemExit(__doc__)
+BF, PORT, EXPECT_SHA = _args
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "variants.json")) as _f:
+    _VARIANTS = json.load(_f)
+if VARIANT not in _VARIANTS:
+    raise SystemExit(f"unknown variant {VARIANT!r}; choose one of {sorted(_VARIANTS)}")
+if BOARD not in _VARIANTS[VARIANT]["boards"]:
+    raise SystemExit(f"BOARD GATE: variant {VARIANT!r} supports {_VARIANTS[VARIANT]['boards']}, not {BOARD!r}. "
+                     "Nothing was opened or sent. Hold 8 while powering on and type exactly what the screen shows.")
 HEADER, FOOTER = 0xAA, 0xEF
 CMD_HANDSHAKE, CMD_UPDATE, CMD_PACKAGES, CMD_END = 0x01, 0x03, 0x04, 0x45
 ACK, CHUNK, RETRIES, TIMEOUT = 0x06, 1024, 5, 2.0
@@ -33,7 +65,11 @@ assert count == 1 and len_data == 0 and len(raw) == 16 + len_fw and 0 < len_fw <
 region = raw[16:]
 assert region[3] == 0x20 and region[7] == 0x08, "vector table doesn't look like an application"
 pkgs = -(-len_fw // CHUNK)
-print(f"file ok: sha {sha[:16]}, {len_fw} bytes, {pkgs} packages")
+print(f"file ok: sha {sha[:16]}, {len_fw} bytes, {pkgs} packages; board {BOARD} accepted for {VARIANT}")
+if CHECK_ONLY:
+    print("check only: serial port not opened")
+    sys.exit(0)
+import serial
 
 port = serial.Serial(PORT, 115200, timeout=0.03)
 port.dtr = True

@@ -1,0 +1,13 @@
+# Band Sweep over VHF with two transmitters, one of them keying on and off.
+master 146000000
+signal 146520000 120 -1 always
+signal 146940000 110 -1 duty 3 6
+app bandsweep
+wait 1
+shot sweeping
+wait 6
+shot after_first_pass
+key menu                  # listen to the strongest hit
+shot listening
+key exit
+shot back_to_sweep

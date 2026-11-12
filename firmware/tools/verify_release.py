@@ -3,6 +3,9 @@
 
   python3 tools/verify_release.py            # run from firmware/ (or anywhere)
   python3 tools/verify_release.py --bf X.BF --apps DIR
+  python3 tools/verify_release.py --apps build-out --image build-out/fw-default.bin --image build-out/fw-bk4819.bin
+                                   (also checks freshly BUILT raw core images and overlays against the same floors;
+                                    --no-committed skips the committed .BF/.app files)
 
 Checks (any failure => exit 1):
   * .BF header/length consistency, single region, SP/reset vector sanity,
@@ -20,7 +23,8 @@ SLOT_SIZE = 32 * 1024
 ARENA = 8192
 KEYS = (b"KDHT", b"RBGI")
 PKG = 1024
-MIN_FW_HEADROOM = 0  # report-only; raise once the core image has room
+MIN_FW_HEADROOM = 64  # bytes of core flash that must stay free (88 today): alarm before it is eaten
+MIN_ARENA_SPARE = 64  # bytes of 8 KB arena each app must leave free (TEXT has 73)
 
 
 def unxor(block, key):
@@ -67,6 +71,7 @@ def verify_bf(path):
     check(cnt == 1 and l2 == 0, "single region, no config region (as upstream-tested)")
     check(0 < l1 <= APP_AREA, f"firmware {l1} bytes fits {APP_AREA}-byte app area "
                               f"({APP_AREA - l1} bytes headroom)")
+    check(APP_AREA - l1 >= MIN_FW_HEADROOM, f"core headroom {APP_AREA - l1} >= floor {MIN_FW_HEADROOM}")
     img = decrypt(d[16:16 + l1])
     sp, rst = struct.unpack_from("<II", img, 0)
     check(0x20000000 < sp <= 0x20004000, f"stack pointer {sp:#x} inside 16 KB SRAM")
@@ -74,6 +79,19 @@ def verify_bf(path):
           f"reset vector {rst:#x} inside application area (thumb bit set)")
     check(b"PROGRAMBF" in img, "image carries the bootloader re-entry marker PROGRAMBF")
     return img
+
+
+def verify_image(path):
+    """A raw core image as written by elf2bin.py (before wrapping): fit, vectors, headroom floor."""
+    print(f"[IMAGE] {os.path.basename(path)}")
+    with open(path, "rb") as f:
+        d = f.read()
+    print(f"  sha256 {sha(d)}")
+    check(0 < len(d) <= APP_AREA, f"{len(d)} bytes fits the {APP_AREA}-byte app area ({APP_AREA - len(d)} bytes headroom)")
+    check(APP_AREA - len(d) >= MIN_FW_HEADROOM, f"core headroom {APP_AREA - len(d)} >= floor {MIN_FW_HEADROOM}")
+    sp, rst = struct.unpack_from("<II", d, 0)
+    check(0x20000000 < sp <= 0x20004000, f"stack pointer {sp:#x} inside 16 KB SRAM")
+    check(rst & 1 and 0x08001000 <= rst < 0x08001000 + APP_AREA, f"reset vector {rst:#x} inside application area")
 
 
 def abi_hash():
@@ -102,6 +120,7 @@ def verify_apps(apps_dir):
                 check(zlib.crc32(d[off:off + ilen]) & 0xFFFFFFFF == crc, f"{n}[{i}]: crc32")
             check(ilen + bss <= ARENA, f"{n}[{i}]: {ilen}+{bss} bss fits {ARENA}-byte arena "
                                        f"({ARENA - ilen - bss} spare)")
+            check(ARENA - ilen - bss >= MIN_ARENA_SPARE, f"{n}[{i}]: arena spare >= floor {MIN_ARENA_SPARE}")
         print(f"  sha256 {sha(d)}  {n}")
 
 
@@ -109,9 +128,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bf", default=os.path.join(FW, "UV-5RM_Custom_Firmware.BF"))
     ap.add_argument("--apps", default=os.path.join(FW, "apps"))
+    ap.add_argument("--image", action="append", default=[], help="a freshly built raw core image (repeatable)")
+    ap.add_argument("--no-committed", action="store_true", help="skip the committed .BF (and use only --apps/--image)")
     a = ap.parse_args()
-    verify_bf(a.bf)
+    if not a.no_committed:
+        verify_bf(a.bf)
     verify_apps(a.apps)
+    for img in a.image:
+        verify_image(img)
     print(f"\n{'FAILED' if fails else 'PASSED'}: {len(fails)} failure(s)")
     return 1 if fails else 0
 

@@ -1,0 +1,12 @@
+# Interval adjusts only while disarmed, in 1-minute steps, within 1..30 minutes.
+app hamtools
+key up
+key up
+shot interval_12m
+key down
+key down
+key down
+key down
+shot interval_8m
+key exit
+expect exit               # nothing running: a plain Exit leaves

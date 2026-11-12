@@ -1,0 +1,5 @@
+# Fox Hunt with nothing on the air: the meter sits at the noise floor.
+master 146520000
+app foxhunt
+wait 3
+shot noise_floor

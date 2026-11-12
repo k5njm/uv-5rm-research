@@ -15,6 +15,9 @@ Installs 9 slots optimized for Balloonatics High-Altitude Balloon chasing:
 """
 import os, sys
 
+raise SystemExit("DESIGN ONLY: the aprs/horus/rs41 apps do not compile and are not validated against reference "
+                 "protocol vectors (see AUDIT.md and HAB-TRACKING-APPS.md). Nothing was sent to any radio.")
+
 here = os.path.dirname(os.path.abspath(__file__))
 source = open(os.path.join(here, "cps_tool.py"), encoding="utf-8").read()
 exec(source[:source.index("def do_logo")])

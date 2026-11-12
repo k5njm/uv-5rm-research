@@ -5,19 +5,79 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Pinned Rust toolchain (the version in firmware-source/rust-toolchain.toml, as in dev/Dockerfile)
+        # rustup picks a toolchain from the *current directory's* rust-toolchain.toml, and several steps run
+        # from other directories, so install the pinned one and make it the default for the whole job.
+        run: |
+          V=$(sed -n 's/^channel = "\(.*\)"/\1/p' firmware/firmware-source/rust-toolchain.toml)
+          rustup toolchain install "$V" --profile minimal -t thumbv7em-none-eabi
+          rustup default "$V"
+          rustc --version
       - name: Release gate (shipped .BF and .app files)
         run: python3 -I firmware/tools/verify_release.py
+      - name: Boot logo / tune tools against a fake radio
+        run: |
+          pip install pillow
+          python3 firmware/tests/test_boot_logo_tune_tools.py
       - name: Host simulator (existing apps)
         working-directory: firmware/source-changes/simulator
         run: |
           cargo build --release
           mkdir -p /tmp/simout
           ./target/release/sim /tmp/simout ../../skull_logo.rgb565
-      - name: Core firmware builds and fits 60 KB
+      - name: App unit tests (logic.rs tests run through the simulator crate)
+        working-directory: firmware/source-changes/simulator
+        run: cargo test --release
+      - name: Scenario + golden-frame tests
+        working-directory: firmware/source-changes/simulator
+        run: |
+          export OUT=/tmp/scenario-frames
+          ./run_scenarios.sh
+          for st in d74 proxx ft5d; do STYLE=$st ./run_scenarios.sh; done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scenario-frames
+          path: /tmp/scenario-frames
+      - name: Host tool tests (fake radio, fake KDH bootloader, recovery tools)
+        run: |
+          pip install pillow numpy
+          for t in firmware/tests/test_*.py; do python3 "$t"; done
+      - name: HIL pipeline (synthetic camera, fake injector)
+        run: |
+          pip install pillow numpy
+          python3 hil/test_hil.py
+      - name: HAM TOOLS overlay builds for the target and fits the 8 KB arena
         working-directory: firmware/firmware-source
         run: |
-          cargo build --release
-          python3 -I ../source-changes/elf2bin.py target/thumbv7em-none-eabi/release/bf5rh-fw /tmp/fw.bin
+          sudo apt-get install -y llvm >/dev/null
+          mkdir -p /tmp/shim /tmp/out
+          for t in objcopy nm size; do ln -sf "$(command -v llvm-$t || command -v llvm-$t-*)" /tmp/shim/rust-$t; done
+          for st in classic d74 proxx ft5d; do
+            f=""; [ $st != classic ] && f="style-$st"
+            MKAPP_FEATURES=$f PATH=/tmp/shim:$PATH python3 tools/mkapp.py apps/hamtools --name "HAM TOOLS" -o /tmp/out/hamtools-$st.app
+          done
+      - name: Core firmware builds (default YP07/FD6818B and bk4819 variants) and fits 60 KB
+        working-directory: firmware
+        run: |
+          mkdir -p /tmp/out
+          cargo build --release --manifest-path firmware-source/Cargo.toml --config firmware-source/.cargo/config.toml --target-dir /tmp/t/fw
+          python3 -I source-changes/elf2bin.py /tmp/t/fw/thumbv7em-none-eabi/release/bf5rh-fw /tmp/out/fw-default.bin
+          cargo build --release --features bk4819 --manifest-path firmware-source/Cargo.toml --config firmware-source/.cargo/config.toml --target-dir /tmp/t/fwbk
+          python3 -I source-changes/elf2bin.py /tmp/t/fwbk/thumbv7em-none-eabi/release/bf5rh-fw /tmp/out/fw-bk4819.bin
+          sha256sum /tmp/out/*.bin | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-images
+          path: |
+            /tmp/out/*.bin
+            /tmp/out/*.app
+      - name: Size budgets on the freshly built images (core headroom and per-app arena floors)
+        run: python3 -I firmware/tools/verify_release.py --no-committed --apps /tmp/out --image /tmp/out/fw-default.bin --image /tmp/out/fw-bk4819.bin
+      - name: Pinned image hashes (reproducibility regression)
+        run: |
+          mkdir -p /tmp/pinned && cp /tmp/out/*.bin /tmp/out/*.app /tmp/pinned/
+          python3 firmware/tools/pin_hashes.py /tmp/pinned
   hab-apps:
     # aprs/horus/rs41 do not compile yet (see AUDIT.md). The failure is reported as a
     # warning annotation, not a red check. Remove continue-on-error once they build.
@@ -33,3 +93,32 @@ jobs:
           if ! cargo build --release; then
             echo "::warning title=${{ matrix.app }} does not compile::Known issue tracked in AUDIT.md"
           fi
+  web:
+    # Headless-Chromium test of web/ (phase 1: planning + fake radio) against the CI-built images.
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: firmware-images, path: /tmp/dl }
+      - name: Manifest from the CI-built images
+        run: |
+          python3 firmware/tools/make_manifest.py /tmp/dl /tmp/dl/manifest.json
+          mkdir /tmp/served && cp web/index.html web/builder.js /tmp/dl/manifest.json /tmp/dl/*.app /tmp/dl/*.bin /tmp/served/
+      - name: Playwright (pinned, same version as dev/Dockerfile)
+        run: |
+          npm install --prefix /tmp/pw playwright@1.49.1
+          /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
+      - name: Browser test
+        run: NODE_PATH=/tmp/pw/node_modules node web/test/run.cjs /tmp/served
+  repro:
+    # Build under native amd64 and emulated arm64 and require identical images (scripts/dev.sh repro).
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with: { platforms: arm64 }
+      - run: scripts/dev.sh repro
+        env:
+          WITH_BROWSER: "0"   # no Chromium layer under QEMU

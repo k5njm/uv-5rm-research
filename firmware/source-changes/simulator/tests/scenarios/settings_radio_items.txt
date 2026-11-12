@@ -1,0 +1,13 @@
+# Settings, radio segment (started the way Chain starts it: handoff group 0, open its items).
+# MODEL CAVEAT: all-zero settings record in the simulator (see settings_menu_groups.txt).
+handoff 0 1
+app settings
+shot radio_items
+key down
+shot step_selected
+key menu                  # edit STEP
+shot step_editing
+key up
+shot step_value_changed
+key exit
+shot step_accepted

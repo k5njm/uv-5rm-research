@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UV-5RM firmware builder (phase 1, fake radio)</title>
+<style>
+  :root { --bg:#fff; --fg:#111; --muted:#666; --line:#ccc; --err:#b00020; --warn:#8a5a00; --accent:#0b57d0; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#121212; --fg:#eee; --muted:#aaa; --line:#444; --err:#ff6b81; --warn:#ffc266; --accent:#8ab4f8; } }
+  body { background:var(--bg); color:var(--fg); font:16px/1.45 system-ui, sans-serif; max-width:46rem; margin:0 auto; padding:1rem; }
+  h1 { font-size:1.3rem; } fieldset { border:1px solid var(--line); margin:1rem 0; padding:.75rem; }
+  .app { display:flex; gap:.75rem; align-items:center; padding:.2rem 0; } label { cursor:pointer; }
+  input[type=text], select { font:inherit; padding:.25rem; background:var(--bg); color:var(--fg); border:1px solid var(--line); }
+  button { font:inherit; padding:.5rem 1rem; } .err { color:var(--err); } .warn { color:var(--warn); }
+  pre { background:color-mix(in srgb, var(--fg) 8%, var(--bg)); padding:.6rem; overflow:auto; }
+  .banner { border-left:4px solid var(--warn); padding:.4rem .8rem; background:color-mix(in srgb, var(--warn) 12%, var(--bg)); }
+</style>
+</head>
+<body>
+<h1>UV-5RM firmware builder</h1>
+<p class="banner"><strong>Phase 1: planning only.</strong> This page validates a selection and writes it to a <em>software</em> radio.
+It has no access to serial ports and cannot flash a real radio. UNVERIFIED: not yet tested in a browser.</p>
+
+<fieldset><legend>1. Core variant</legend>
+  <select id="core" aria-label="Core variant"></select>
+  <p>Hold <kbd>8</kbd> while powering the radio on and type exactly what the screen shows:
+     <input type="text" id="board" placeholder="e.g. 5RHNRFB-YP07" autocomplete="off"></p>
+</fieldset>
+<fieldset><legend>2. Apps and styles</legend><div id="apps"></div>
+  <p><small>Manifest: <input type="file" id="manifestFile" accept="application/json"></small></p>
+</fieldset>
+<fieldset><legend>3. Check</legend><ul id="problems"></ul><pre id="plan">[]</pre></fieldset>
+<p><button id="write" disabled>Write to the fake radio</button></p>
+<pre id="result"></pre>
+<script src="builder.js"></script>
+</body>
+</html>

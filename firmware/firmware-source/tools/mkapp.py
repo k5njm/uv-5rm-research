@@ -102,9 +102,11 @@ def cargo_build(app_dir: Path, bin_name: str) -> Path:
     print(f"[..] {app_dir.name}: cargo build --release")
     touch_if_stale_linker_script(app_dir, elf_path(app_dir))
     full_env = {**os.environ, "RUSTFLAGS": APP_RUSTFLAGS}
-    subprocess.run(
-        ["cargo", "build", "--release"], cwd=app_dir, env=full_env, check=True
-    )
+    cmd = ["cargo", "build", "--release"]
+    features = os.environ.get("MKAPP_FEATURES")  # e.g. MKAPP_FEATURES=style-d74
+    if features:
+        cmd += ["--features", features]
+    subprocess.run(cmd, cwd=app_dir, env=full_env, check=True)
     elf = app_dir / "target" / "thumbv7em-none-eabi" / "release" / bin_name
     if not elf.exists():
         sys.exit(f"[ERR] No elf generated: {elf}")
@@ -124,7 +126,10 @@ def entry_address(elf: Path) -> int:
     for line in out.splitlines():
         parts = line.split()
         if len(parts) >= 3 and parts[-1] == "app_entry":
-            return int(parts[0], 16)
+            # GNU nm reports Thumb functions with bit 0 set, LLVM nm does not. Normalise to the GNU
+            # form the shipped packages use, so the package bytes do not depend on which nm ran.
+            # (The firmware ORs in the Thumb bit itself when it loads an app: overlay.rs.)
+            return int(parts[0], 16) | 1
     sys.exit(f"[ERR] {elf} missing app_entry")
 
 
