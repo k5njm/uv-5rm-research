@@ -1396,6 +1396,8 @@ extern "C" fn api_save_master_vfo(freq_hz: u32, subaudio_code: u16) {
     s.cfg.subaudio_tx = sub;
     s.refresh_cfg_freqs();
     app.save_vfo();
+    // Handing the radio a frequency means "take me there": leave to the main screen, not back to the APPS list.
+    app.app_from_menu = false;
 }
 
 const SETTINGS_BYTES: usize = crate::flash_map::SETTINGS_BYTES;

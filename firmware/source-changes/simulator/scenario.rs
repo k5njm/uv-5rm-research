@@ -25,8 +25,8 @@
 //!   fmcore DECI...      the core's bare FM station list (what the FM app shows when there is no table)
 //!   setting OFFSET V...   bytes of the settings record the app reads, written together through the core's clamp (settings app)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
-//!   key K               single press (Press, Single, Release). K = 0-9 star pound menu exit up down ab side1 side2
-//!   hold K              long press: Press, Long, Release as the keypad sends them. Only up down exit star pound 0 side1 side2 have one
+//!   key K               single press (Press, Single, Release). K = 0-9 star pound menu exit up down vm ab band side1 side2
+//!   hold K              long press: Press, Long, Release as the keypad sends them. Only up down exit star pound 0 vm band side1 side2 have one
 //!                       (device/keypad.rs); any other key is an error here, because the radio would see a plain press
 //!   repeat K N          up or down held past 1.5 s: Press, Long, N Repeat events, Release
 //!   step MS             radio time advanced per tick by `wait` (default 5; larger = faster)
@@ -99,7 +99,9 @@ fn key_id(k: &str) -> Option<u8> {
         "exit" => 13,
         "up" => 14,
         "down" => 15,
+        "vm" => 16,
         "ab" => 17,
+        "band" => 18,
         "side1" => 19,
         "side2" => 20,
         d if d.len() == 1 && d.as_bytes()[0].is_ascii_digit() => d.as_bytes()[0] - b'0',

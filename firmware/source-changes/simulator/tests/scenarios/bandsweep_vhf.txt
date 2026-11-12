@@ -1,4 +1,5 @@
-# Band Sweep over VHF with two transmitters, one of them keying on and off.
+# Band Sweep over 2 m (the radio is on 146 MHz) with two transmitters, one of them keying on and off.
+# MENU listens to the strongest hit, MENU again stops listening and the sweep carries on.
 master 146000000
 signal 146520000 120 -1 always
 signal 146940000 110 -1 duty 3 6
@@ -9,5 +10,12 @@ wait 6
 shot after_first_pass
 key menu                  # listen to the strongest hit
 shot listening
-key exit
+key menu                  # stop listening: back to sweeping
+expect noexit
 shot back_to_sweep
+key menu
+key exit                  # EXIT while listening also returns to the sweep
+expect noexit
+shot back_after_exit
+key exit                  # EXIT in the sweep leaves
+expect exit

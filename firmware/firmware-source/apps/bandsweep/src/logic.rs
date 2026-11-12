@@ -5,6 +5,7 @@
 use bf5rh_abi::{Api, AppEvent, AppResult};
 
 const KIND_SINGLE: u8 = 2;
+const KIND_LONG: u8 = 3;
 const KIND_REPEAT: u8 = 4;
 const KEY_ASTERISK: u8 = 10;
 const KEY_POUND: u8 = 11;
@@ -12,7 +13,8 @@ const KEY_MENU: u8 = 12;
 const KEY_EXIT: u8 = 13;
 const KEY_UP: u8 = 14;
 const KEY_DOWN: u8 = 15;
-const KEY_AB: u8 = 17;
+const KEY_VM: u8 = 16; // the VFO/MR key
+const KEY_BAND: u8 = 18; // the BAND key (the green band/channels key)
 const KEY_SIDE1: u8 = 19;
 
 const F5: u8 = 0;
@@ -44,21 +46,36 @@ const LIST_ROWS: usize = 5;
 const STATUS_Y: i16 = 104;
 const HINT_TOP: i16 = 112;
 
-/// `(name, low Hz, high Hz)`; the last is the typed custom range.
-const BANDS: [(&[u8], u32, u32); 6] = [
-    (b"VHF", 136_000_000, 174_000_000),
-    (b"UHF", 400_000_000, 520_000_000),
-    (b"AIR", 118_000_000, 137_000_000),
-    (b"220", 200_000_000, 260_000_000),
-    (b"350", 300_000_000, 390_000_000),
-    (b"CUSTOM", 144_000_000, 148_000_000),
+/// `(name, low Hz, high Hz, step index)`, in frequency order; the last is the typed custom range. Every preset lies inside
+/// what the receiver hears (`app/group_table.rs` `RX_BANDS`: 108-174, 200-260, 350-520 MHz), and the named ones use the
+/// core's own `SCAN_BANDS` edges and names, so this app and the main screen agree. The step is the one that fits the
+/// band's channel raster: 25 kHz for the wide blocks, air (25 kHz AM channels; 8.33 kHz channels fall between two grid
+/// points and are found at the nearer one) and the marine and weather channels; 12.5 kHz for 2 m, MURS, 1.25 m, 70 cm and
+/// GMRS, where the narrow channels are. The 1 key still switches the step.
+const BANDS: [(&[u8], u32, u32, u8); 16] = [
+    (b"AIR", 108_000_000, 136_000_000, 0),
+    (b"136-144", 136_000_000, 144_000_000, 0),
+    (b"2M", 144_000_000, 148_000_000, 1),
+    (b"148-174", 148_000_000, 174_000_000, 0),
+    (b"MURS", 151_820_000, 154_600_000, 1),
+    (b"MARINE", 156_000_000, 162_025_000, 0),
+    (b"WX", 162_400_000, 162_550_000, 0),
+    (b"200-222", 200_000_000, 222_000_000, 0),
+    (b"1.25M", 222_000_000, 225_000_000, 1),
+    (b"225-260", 225_000_000, 260_000_000, 0),
+    (b"350-420", 350_000_000, 420_000_000, 0),
+    (b"70CM", 420_000_000, 450_000_000, 1),
+    (b"450-462", 450_000_000, 462_550_000, 0),
+    (b"GMRS", 462_550_000, 467_725_000, 1),
+    (b"467-520", 467_725_000, 520_000_000, 0),
+    (b"CUSTOM", 144_000_000, 148_000_000, 0),
 ];
 const CUSTOM: usize = BANDS.len() - 1;
 
 const STEPS_HZ: [u32; 2] = [25_000, 12_500];
 
-const RX_MIN_HZ: u32 = 16_000_000;
-const RX_MAX_HZ: u32 = 560_000_000;
+const RX_MIN_HZ: u32 = 108_000_000;
+const RX_MAX_HZ: u32 = 520_000_000;
 const AM_LOW_HZ: u32 = 108_000_000;
 const AM_HIGH_HZ: u32 = 136_000_000;
 
@@ -392,16 +409,27 @@ fn enter(api: &Api) -> AppResult {
     st.view = View::Sweep;
     st.input_len = 0;
     st.n_ignored = 0;
-    // Open on the band the radio is already tuned to, when there is one.
+    // Open on the narrowest band the radio is already tuned into, when there is one.
     let hz = (api.get_master_freq)();
-    st.band = BANDS[..CUSTOM]
-        .iter()
-        .position(|b| (b.1..=b.2).contains(&hz))
-        .unwrap_or(0);
-    st.restart((api.uptime_100us)());
+    let mut best = 0;
+    let mut span = u32::MAX;
+    for (i, b) in BANDS[..CUSTOM].iter().enumerate() {
+        if (b.1..=b.2).contains(&hz) && b.2 - b.1 < span {
+            best = i;
+            span = b.2 - b.1;
+        }
+    }
+    set_band(api, st, best);
     start_sweep_rx(api);
     (api.set_backlight_hold)(true);
     AppResult::Continue
+}
+
+/// Switch to preset `band` with its own step, and start the sweep over.
+fn set_band(api: &Api, st: &mut State, band: usize) {
+    st.band = band;
+    st.step_index = BANDS[band].3 as usize;
+    st.restart((api.uptime_100us)());
 }
 
 fn leave(api: &Api) -> AppResult {
@@ -536,6 +564,11 @@ fn stop_listen(api: &Api, st: &mut State) {
     start_sweep_rx(api);
 }
 
+/// `app/group_table.rs` `RX_BANDS`: what the receiver hears. A custom range must start and stop inside one block.
+fn receivable(hz: u32) -> bool {
+    (RX_MIN_HZ..=174_000_000).contains(&hz) || (200_000_000..=260_000_000).contains(&hz) || (350_000_000..=RX_MAX_HZ).contains(&hz)
+}
+
 fn commit_input(api: &Api, st: &mut State, stage: u8) {
     let mut khz: u32 = 0;
     for i in 0..INPUT_DIGITS {
@@ -557,7 +590,7 @@ fn commit_input(api: &Api, st: &mut State, stage: u8) {
     } else {
         // Anything out of the receiver's range goes back to the start field.
         let (lo, hi) = (st.custom_lo, st.custom_hi);
-        if lo < hi && lo >= RX_MIN_HZ && hi <= RX_MAX_HZ {
+        if lo < hi && receivable(lo) && receivable(hi) {
             st.band = CUSTOM;
             st.view = View::Sweep;
             st.restart((api.uptime_100us)());
@@ -602,19 +635,25 @@ fn key(api: &Api, id: u8, kind: u8) -> AppResult {
         return AppResult::Continue;
     }
     if st.view == View::Listen {
-        if kind == KIND_SINGLE && id == KEY_MENU {
-            // Tune the main screen's VFO to what is being heard (no tone) and leave; SPECTRUM opens centred on it.
+        if kind == KIND_SINGLE && id == KEY_VM {
+            // Tune the main screen's VFO to what is being heard (no tone) and leave for the main screen: the core returns
+            // there, not to the APPS list, because the app handed over a frequency (`api_save_master_vfo`).
             (api.save_master_vfo)(st.listen_hz, 0);
-            stop_listen(api, st);
             return AppResult::Exit;
         }
-        if kind == KIND_SINGLE && id == KEY_EXIT {
-            stop_listen(api, st);
+        if kind == KIND_SINGLE && matches!(id, KEY_MENU | KEY_EXIT) {
+            stop_listen(api, st); // MENU again or EXIT: stop listening, the sweep carries on
         }
         return AppResult::Continue;
     }
     if kind == KIND_REPEAT && matches!(id, KEY_UP | KEY_DOWN) {
         move_selection(st, id == KEY_DOWN);
+        return AppResult::Continue;
+    }
+    if kind == KIND_LONG && id == KEY_BAND {
+        // hold BAND: the band before this one (BAND steps forward)
+        let prev = if st.band == 0 || st.band >= CUSTOM { CUSTOM - 1 } else { st.band - 1 };
+        set_band(api, st, prev);
         return AppResult::Continue;
     }
     if kind != KIND_SINGLE {
@@ -624,9 +663,15 @@ fn key(api: &Api, id: u8, kind: u8) -> AppResult {
         KEY_EXIT => return AppResult::Exit,
         KEY_UP | KEY_DOWN => move_selection(st, id == KEY_DOWN),
         KEY_MENU => start_listen(api, st),
-        KEY_AB => {
-            st.band = (st.band + 1) % CUSTOM;
-            st.restart((api.uptime_100us)());
+        KEY_VM => {
+            if st.n_hits > 0 {
+                (api.save_master_vfo)(st.hits[st.selected].hz, 0);
+                return AppResult::Exit;
+            }
+        }
+        KEY_BAND => {
+            let next = if st.band >= CUSTOM - 1 { 0 } else { st.band + 1 };
+            set_band(api, st, next);
         }
         KEY_SIDE1 => st.remove_selected(),
         KEY_ASTERISK => {
@@ -830,7 +875,7 @@ fn draw_status(api: &Api, st: &State) {
             a.i(api, (api.read_rssi)() as i32 - RSSI_DBM_BASE);
             a.s(b"DBM");
             line(api, STATUS_Y, a.as_slice(), TRACE, BLACK);
-            draw_hint(api, b"MENU tune  EXIT sweep");
+            draw_hint(api, b"MENU sweep  VFO/MR tune");
             return;
         }
         View::Sweep => {}
@@ -852,7 +897,7 @@ fn draw_status(api: &Api, st: &State) {
     line(api, STATUS_Y, a.as_slice(), GRAY, BLACK);
     draw_hint(
         api,
-        if st.n_hits > 0 { b"MENU hear  A/B band" } else { b"A/B band  1 step  5 range" },
+        if st.n_hits > 0 { b"MENU hear  VFO/MR tune" } else { b"BAND next  1 step  5 range" },
     );
 }
 

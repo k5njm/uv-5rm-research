@@ -1,0 +1,13 @@
+# Band Sweep: VFO/MR in the sweep view takes the selected hit to the VFO and leaves; with no hit it does nothing.
+master 146000000
+signal 146520000 120 -1 always
+app bandsweep
+wait 0.5
+key vm
+expect noexit
+expect vfo none
+wait 7
+shot hits
+key vm
+expect exit
+expect vfo 146512500 0

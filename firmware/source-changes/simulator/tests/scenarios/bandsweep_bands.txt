@@ -1,0 +1,23 @@
+# Band Sweep: the radio is on the air band; BAND steps through the presets (frequency order), hold BAND goes back.
+master 121500000
+signal 121500000 110 -1 always
+signal 162550000 100 -1 always
+app bandsweep
+wait 3
+shot air
+key band
+shot b136_144
+key band
+shot b2m
+key band
+shot b148_174
+wait 4
+shot b148_174_hit
+key band
+key band
+key band
+shot weather
+hold band
+shot back_to_marine
+key 1
+shot step_toggled

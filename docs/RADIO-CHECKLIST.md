@@ -77,6 +77,8 @@ calibration copy you already hold. If it differs, **stop**: do not transmit.
 - [ ] **22.** `MENU`, `9` opens FM on 100.0 MHz. The large digits, the name line, the four signal bars and the tuning scale read
   well at real size; the speaker mark shows in the station list (step 25). (AUDIT 45)
 - [ ] **23.** Type `981`: it tunes at once. Type `1100`: `RANGE 87.5-108.0`. `UP` and `DOWN` move 0.1 MHz. (AUDIT 45)
+- [ ] **23a.** On a strong station, press `UP` and `DOWN` several times, type a frequency, `#` and `*` between saved stations, and tune from the list: the audio must keep playing under every key
+  beep (a short beep, then the broadcast again), not cut after the first key. The same after saving and after a cancelled delete. Report if there is a gap and how long. (AUDIT 55)
 - [ ] **24.** Hold `UP` for a second on an empty spot: `SEEKING`, the audio mutes, and it stops on the next station or gives up after three seconds. Let go as soon as `SEEKING` shows. Write down whether the
   four bars match how strong the station is. (AUDIT 45)
 - [ ] **25.** `MENU` opens STATIONS. `+ SAVE THIS` (the first row when the tuned frequency is not saved) saves the tuned frequency and the list stays on it (it reads `(unnamed)`); `*` then `EXIT` cancels; `*` then `MENU` deletes that new station
@@ -86,11 +88,13 @@ calibration copy you already hold. If it differs, **stop**: do not transmit.
 
 - [ ] **26.** Tune to a frequency with a known signal (NOAA 162.400 or a local repeater) and open SPECTRUM (`MENU`, `4`). The signal is marked and `PEAK` reads its
   frequency. On a quiet frequency, no peak is marked from noise at the default settings. (AUDIT 50)
-- [ ] **27.** With the signal marked, `MENU` tunes the VFO to the peak and leaves; the main screen shows that frequency in VFO mode. Then open SPECTRUM on a quiet frequency and press `MENU`: `NO SIGNAL` shows clearly
+- [ ] **27.** With the signal marked, `MENU` tunes the VFO to the peak and leaves, to the main screen (even when SPECTRUM was opened from the APPS list); it shows that frequency in VFO mode. Then open SPECTRUM on a quiet frequency and press `MENU`: `NO SIGNAL` shows clearly
   over the drawing and SPECTRUM stays open. (AUDIT 50)
 - [ ] **28.** In SPECTRUM press `A/B`: it stops on the signal and you hear it; `MENU` tunes to it. (AUDIT 50)
-- [ ] **29.** BAND SWEEP (`MENU`, `5`; it starts on VHF, which holds NOAA 162.400): after a pass or two the list shows hits. `MENU` hears one, `MENU` again tunes the VFO to it and leaves, `EXIT` instead goes back
-  to the sweep. The title bar and strip are legible. (AUDIT 50)
+- [ ] **29.** BAND SWEEP (`MENU`, `5`; tune the main screen to 162.400 first and it opens on `148-174`): after a pass or two the list shows hits. `MENU` hears one, `MENU` again stops listening and the sweep
+  carries on (the pass counter keeps going), `EXIT` while listening does the same. The title bar and strip are legible. (AUDIT 50, 55)
+- [ ] **29a.** In BAND SWEEP press `BAND` a few times: the title bar names each preset (`AIR`, `136-144`, `2M`, `148-174`, `MURS`, `MARINE`, `WX` ...) and the sweep restarts; hold `BAND` goes back one. Open it from the
+  APPS list, hear a hit, press `VFO/MR`: you land on the main screen (not the APPS list) on that frequency in VFO mode. Try `VFO/MR` from the sweep view with a hit selected. (AUDIT 55)
 
 ## Part 6: FSK PROBE (receive only; steps in [SONDE-APP.md](SONDE-APP.md))
 

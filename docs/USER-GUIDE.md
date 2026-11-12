@@ -484,7 +484,8 @@ triangle, and the line under the waterfall reads `PEAK` with its frequency and l
 strip reads `MENU tune peak  EXIT leave` while a peak is marked and `MENU tune here  EXIT leave` while listening. With no peak it
 reads `UP DN pan  5 freq  EXIT` (`MENU` still works: it shows `NO SIGNAL`) and the line under the waterfall reads `NO SIGNAL  PAN 800k`.
 
-**`MENU` tunes the VFO to the marked peak and leaves SPECTRUM.** The active side switches to VFO mode on that frequency with no
+**`MENU` tunes the VFO to the marked peak and leaves SPECTRUM, to the main screen** (not back to the APPS list: handing the radio
+a frequency means "take me there"). The active side switches to VFO mode on that frequency with no
 tone, and the memory channel it was on is left unchanged. With nothing above the trigger line, `NO SIGNAL` shows and SPECTRUM
 stays open. The frequency is the sweep's own grid point (a step of `ST` from the centre you opened it on), so with a coarse step
 it can be a few kHz off the signal. "Strongest" is the highest of the latest reading of every bin.
@@ -516,31 +517,52 @@ were hearing (the strip says `MENU tune here` while listening).
 ## BAND SWEEP
 
 BAND SWEEP (slot 5) makes repeated passes over a whole band, much wider than SPECTRUM, and keeps a list of the strongest
-frequencies it found. It only receives. Bands: VHF (136 to 174 MHz), UHF (400 to 520), AIR (118 to 137), 220 (200 to 260), 350 (300
-to 390) and a custom range.
+frequencies it found. It only receives. It opens on the narrowest band that holds the main-screen frequency. `BAND` steps through
+the presets in frequency order (hold `BAND` to go back one) and the title bar names the one in use:
 
-![BAND SWEEP over VHF: a graph on top, a list of hits with strength and sighting count, and the strip MENU hear, A/B band.](img/bandsweep.png)
+| Preset | Range (MHz) | Step | | Preset | Range (MHz) | Step |
+|---|---|---|---|---|---|---|
+| `AIR` (AM) | 108 to 136 | 25 kHz | | `200-222` | 200 to 222 | 25 kHz |
+| `136-144` | 136 to 144 | 25 kHz | | `1.25M` | 222 to 225 | 12.5 kHz |
+| `2M` | 144 to 148 | 12.5 kHz | | `225-260` | 225 to 260 | 25 kHz |
+| `148-174` | 148 to 174 | 25 kHz | | `350-420` | 350 to 420 | 25 kHz |
+| `MURS` | 151.820 to 154.600 | 12.5 kHz | | `70CM` | 420 to 450 | 12.5 kHz |
+| `MARINE` | 156.000 to 162.025 | 25 kHz | | `450-462` | 450 to 462.550 | 25 kHz |
+| `WX` | 162.400 to 162.550 | 25 kHz | | `GMRS` | 462.550 to 467.725 | 12.5 kHz |
+| | | | | `467-520` | 467.725 to 520 | 25 kHz |
+
+The named ones use the same edges and names as the main screen's band scan (`SCAN_BANDS` in `group_table.rs`), and every preset is
+inside what the receiver hears (108 to 174, 200 to 260 and 350 to 520 MHz). Each opens on the step in the table; `1` switches it.
+Air channels are 25 kHz apart; 8.33 kHz channels fall between two grid points and show at the nearer one. Beside them is `CUSTOM`,
+is the range you type with `5`.
+
+![BAND SWEEP over 2 m: a graph on top, a list of hits with strength and sighting count, and the strip MENU hear, VFO/MR tune.](img/bandsweep.png)
 
 The title bar shows the start and stop of the band and its name. The line under the list shows the step (`ST25K` or `ST12.5K`),
 `T+` (detection margin), `D` (dwell) and `P` (pass number and time). The selected hit is blue and the trace is green. An empty list
-reads `NO SIGNALS YET`, and the strip then reads `A/B band  1 step  5 range`.
+reads `NO SIGNALS YET`, and the strip then reads `BAND next  1 step  5 range`.
 
-**`MENU` hears the selected hit** (an `RX` line with its frequency and level). **`MENU` again tunes the main screen's VFO to it (no
-tone) and leaves**; `EXIT` goes back to the sweep instead.
+**`MENU` hears the selected hit** (an `RX` line with its frequency and level). **`MENU` again stops listening and the sweep carries on**;
+`EXIT` does the same. **`VFO/MR` tunes the main screen's VFO to the frequency being heard (no tone) and leaves, to the main screen**; in the
+sweep view it does the same with the selected hit (and does nothing while the list is empty). `EXIT` in the sweep leaves to wherever the
+app was opened from.
 
-![Listening to a hit: RX 146.525 MHz and the level, strip MENU tune, EXIT sweep.](img/bandsweep-listening.png)
+![Listening to a hit: RX 146.512 MHz and the level, strip MENU sweep, VFO/MR tune.](img/bandsweep-listening.png)
 
 | Key | Action |
 |---|---|
 | `UP`, `DOWN` | Select a hit (holding repeats) |
-| `MENU` | Hear the selected hit; again: tune the VFO to it and leave |
+| `MENU` | Hear the selected hit; again: stop hearing, the sweep resumes |
+| `VFO/MR` | Tune the VFO to the hit being heard (or the selected one) and leave to the main screen |
 | `EXIT` | While hearing: back to the sweep. Otherwise: leave |
-| `A/B` | Next band (VHF, UHF, AIR, 220, 350) |
+| `BAND` | Next band; hold: the band before |
 | `1` | Step 25 kHz or 12.5 kHz |
-| `5` | Type a custom range: start, `MENU`, stop, `MENU` (six digits each, MHz with three decimals; 16 to 560 MHz) |
+| `5` | Type a custom range: start, `MENU`, stop, `MENU` (six digits each, MHz with three decimals; both ends inside 108 to 174, 200 to 260 or 350 to 520 MHz) |
 | `0`, `6` | Longer, shorter dwell |
 | `*`, `#` | Raise, lower the detection margin |
 | `SIDE1` | Remove the selected hit |
+
+`A/B` does nothing in BAND SWEEP.
 
 ![Typing a custom range: START 144 so far, strip MENU next, EXIT back.](img/bandsweep-range.png)
 

@@ -1342,9 +1342,9 @@ fn on_for(period_s: u32, on_s: u32) -> impl Fn(u32) -> bool {
 
 fn test_sweep() {
     let app: Entry = bandsweep::entry;
-    println!("Band Sweep: VHF with constant and intermittent signals");
-    bs_fresh(146_950_000);
-    add(146_950_000, 100, -1, |_| true);
+    println!("Band Sweep: 148-174 MHz with constant and intermittent signals");
+    bs_fresh(155_000_000);
+    add(160_200_000, 100, -1, |_| true);
     add(162_550_000, 90, -1, |_| true);
     add(155_350_000, 110, -1, on_for(45, 10));
     add(151_880_000, 80, -1, |_| true);
@@ -1357,10 +1357,10 @@ fn test_sweep() {
     shot("bs_3_vhf");
     let dump = bandsweep::debug_dump();
     println!("     {dump}");
-    check(dump.contains("hz=155350000") && dump.contains("hz=146950000") && dump.contains("hz=162550000") && dump.contains("hz=151875000"), "found all four signals");
+    check(dump.contains("hz=155350000") && dump.contains("hz=160200000") && dump.contains("hz=162550000") && dump.contains("hz=151875000"), "found all four signals");
     check(dump.contains("n=4"), "no false signals from noise");
-    let order = dump.find("155350000").unwrap_or(0) < dump.find("146950000").unwrap_or(0)
-        && dump.find("146950000").unwrap_or(0) < dump.find("162550000").unwrap_or(0);
+    let order = dump.find("155350000").unwrap_or(0) < dump.find("160200000").unwrap_or(0)
+        && dump.find("160200000").unwrap_or(0) < dump.find("162550000").unwrap_or(0);
     check(order, "strongest first");
     check(dump.contains("pass_s="), "timed a full pass");
     println!("     pass time: {}", bandsweep::debug_pass());
@@ -1387,12 +1387,28 @@ fn test_sweep() {
     println!("     {dump}");
     check(bandsweep::debug_count() == before - 1 && !dump.contains(&hidden), "Side 1 hides the selected signal and it stays hidden");
 
-    println!("Band Sweep: send to VFO for Spectrum");
+    println!("Band Sweep: MENU toggles listening; VFO/MR sends the frequency to the VFO");
     let selected = bandsweep::debug_selected_hz();
     press(app, 12); // listen to it
     check(sim().vfo_saved.is_none(), "listening alone hands nothing to the VFO");
-    check(press(app, 12), "Menu while listening leaves");
-    check(sim().vfo_saved == Some((selected, 0)), "saved the selected frequency to VFO with no tone");
+    let tuned_before = sim().retunes;
+    check(!press(app, 12), "MENU while listening does not leave");
+    check(!sim().holds_rx, "MENU again stops listening");
+    run(app, 3);
+    check(sim().retunes > tuned_before, "and the sweep resumes");
+    press(app, 12);
+    check(press(app, 16), "VFO/MR while listening leaves");
+    check(sim().vfo_saved == Some((selected, 0)), "saved the heard frequency to the VFO with no tone");
+    app(&API, AppEvent::Leave);
+    bs_fresh(155_000_000);
+    add(155_350_000, 110, -1, |_| true);
+    app(&API, AppEvent::Enter);
+    run(app, 12);
+    check(press(app, 16) && sim().vfo_saved == Some((155_350_000, 0)), "VFO/MR in the sweep view takes the selected hit to the VFO and leaves");
+    app(&API, AppEvent::Leave);
+    bs_fresh(155_000_000);
+    app(&API, AppEvent::Enter);
+    check(!press(app, 16) && sim().vfo_saved.is_none(), "VFO/MR with no hit does nothing");
     app(&API, AppEvent::Leave);
 
     println!("Band Sweep: airband");
@@ -1400,20 +1416,29 @@ fn test_sweep() {
     add(121_500_000, 100, -1, |_| true);
     app(&API, AppEvent::Enter);
     run(app, 12);
-    check(bandsweep::debug_band() == 2, "opens on the band the radio is tuned to");
+    check(bandsweep::debug_band() == 0, "opens on the band the radio is tuned to (AIR)");
     press(app, 12);
     check(sim().modulation == 1 && sim().cfg_rx == 121_500_000, "listens in AM");
     press(app, 13);
     check(sim().modulation == 0, "back to FM for sweeping");
 
     println!("Band Sweep: band, step and custom range");
+    press(app, 18);
+    check(bandsweep::debug_band() == 1 && bandsweep::debug_total() == 8_000_000 / 25_000 + 1, "BAND moves to the next band (136-144) and restarts");
     press(app, 17);
-    check(bandsweep::debug_total() == (220_000_000u32 + 40_000_000 - 200_000_000 - 20_000_000 + 20_000_000) / 25_000 + 1, "A/B moves to the next band and restarts");
+    check(bandsweep::debug_band() == 1, "A/B does nothing in the sweep");
+    hold(app, 18);
+    check(bandsweep::debug_band() == 0, "hold BAND goes back one band");
+    hold(app, 18);
+    check(bandsweep::debug_band() == 14, "and wraps below the first band to the last preset");
+    press(app, 18);
+    check(bandsweep::debug_band() == 0, "BAND wraps past the last preset");
     bs_fresh(440_000_000);
     app(&API, AppEvent::Enter);
-    check(bandsweep::debug_total() == 4801, "UHF 400-520 at 25 kHz is 4801 steps");
+    check(bandsweep::debug_total() == 30_000_000 / 12_500 + 1, "70CM 420-450 opens at its own 12.5 kHz step");
     press(app, 1);
-    check(bandsweep::debug_total() == 9601, "1 changes to 12.5 kHz steps");
+    check(bandsweep::debug_total() == 30_000_000 / 25_000 + 1, "1 changes to 25 kHz steps");
+    press(app, 1);
     run(app, 40);
     println!("     pass time at 12.5 kHz: {}", bandsweep::debug_pass());
     shot("bs_5_uhf");
@@ -1445,13 +1470,14 @@ fn test_sweep() {
 
     println!("Band Sweep: more signals than the list holds");
     bs_fresh(440_000_000);
+    bs_fresh(480_000_000);
     for i in 0..40u32 {
-        add(400_000_000 + i * 2_000_000, 80 + i as u16, -1, |_| true);
+        add(470_000_000 + i * 1_000_000, 80 + i as u16, -1, |_| true);
     }
     app(&API, AppEvent::Enter);
     run(app, 60);
     let dump = bandsweep::debug_dump();
-    check(bandsweep::debug_count() == 24 && dump.contains("hz=478000000"), "keeps the 24 strongest");
+    check(bandsweep::debug_count() == 24 && dump.contains("hz=486000000") && !dump.contains("hz=485000000"), "keeps the 24 strongest");
     for _ in 0..30 {
         press(app, 15);
     }
