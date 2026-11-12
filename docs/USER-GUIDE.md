@@ -186,9 +186,9 @@ SETTINGS is app 1. It has six groups. Use `UP` and `DOWN` and `MENU` to open one
 3. `UP` and `DOWN` change the value. Pressing `0` sets it to its lowest choice (off, none, or the first in the list).
 4. Press `MENU` to **keep** the change, or `EXIT` to **undo** it and put the old value back.
 
-The strip at the bottom says which keys do what at that moment: `MENU change  EXIT back` when you are only looking, and
+A list longer than the screen has a small grey mark on its right edge showing how far down you are. The strip at the bottom says which keys do what at that moment: `MENU change  EXIT back` when you are only looking, and
 `UP/DN MENU save EXIT undo` while a value is being changed. For numbers you type it reads `0-9 type MENU ok EXIT del` (latitude and
-longitude: `0-9  * N/S E/W  MENU ok`), and for VERSION and RF CHIP ID `UP/DN page    EXIT back`.
+longitude: `0-9  * N/S  MENU ok` and `0-9  * E/W  MENU ok`), and for VERSION and RF CHIP ID `UP/DN page    EXIT back`.
 
 ![Changing AUTO KEYLOCK: the row is amber, the value has arrows, and the bottom strip reads UP/DN MENU save EXIT undo.](img/settings-editing.png)
 
@@ -201,7 +201,7 @@ Notes:
   longitude as three integer digits and four decimals.
 * Some RADIO items (FREQ STEP, BANDWIDTH, TX POWER, RX TONE, TX TONE, RPT SHIFT, RPT OFFSET) and ANI CALL change the frequency
   currently on the main screen, not the stored settings. The source calls them "RAM-only".
-* RESET ALL: `MENU` shows `MENU = WIPE` (strip: `MENU wipe all  EXIT cancel`); a second `MENU` erases the saved VFO data, the settings record, the saved channel state and the FM list and
+* RESET ALL: `MENU` turns the row amber and shows `MENU = RESET` (strip: `MENU confirm  EXIT cancel`); a second `MENU` erases the saved VFO data, the settings record, the saved channel state and the FM list and
   restarts the radio. Channels are not erased. After a reset, TX INHIBIT is on again. Read from the source; not tried on a radio.
 
 ### What is in each group
@@ -319,7 +319,7 @@ presses give the digit `5`. The strip reads `0-9 UP/DN MENU ok EXIT del`.
 
   ![The SAVED notice after saving CH001.](img/chanmgr-saved.png)
 
-* **DELETE:** select DELETE and press `MENU`; the row reads `MENU = DELETE` (strip: `MENU delete it  EXIT keep`). `MENU` again erases the channel (no notice
+* **DELETE:** select DELETE and press `MENU`; the row turns amber and reads `MENU = DELETE` (strip: `MENU confirm  EXIT cancel`). `MENU` again erases the channel (no notice
   is shown); `EXIT` cancels.
 
 Channels written by stock firmware or CHIRP have a name field padded with `FF` bytes. CHAN MGR treats that as an empty

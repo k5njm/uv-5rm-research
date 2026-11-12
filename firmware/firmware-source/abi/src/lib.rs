@@ -25,8 +25,12 @@ pub struct ListRow {
     pub label: [u8; 16],
     pub value: [u8; 18],
     pub has_value: bool,
+    /// Position of the text cursor in `value` while it is being typed; -1 for none; `ROW_ARMED` for a row that
+    /// is waiting for a confirming key (delete, reset): drawn in the "changing" colour, without a cursor.
     pub cursor: i16,
 }
+
+pub const ROW_ARMED: i16 = -2;
 
 #[repr(C)]
 pub struct Api {

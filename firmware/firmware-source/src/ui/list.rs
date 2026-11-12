@@ -28,6 +28,7 @@ const HINT_HEIGHT: i32 = ROW_HEIGHT + 2;
 const VISIBLE_ROWS: usize = ((SCREEN_H - LIST_TOP - HINT_HEIGHT) / ROW_HEIGHT) as usize;
 const HINT_TOP: i32 = SCREEN_H - HINT_HEIGHT;
 const RIGHT_MARGIN: i32 = 4;
+const SCROLL_W: i32 = 2;
 
 const ARROW_GAP: i32 = 6;
 
@@ -44,6 +45,10 @@ pub(crate) trait ListSource {
     }
     fn cursor(&mut self, _index: usize) -> Option<usize> {
         None
+    }
+    /// The row is waiting for a confirming key (delete, reset): it gets the "changing" colour.
+    fn armed(&mut self, _index: usize) -> bool {
+        false
     }
     /// What the keys do here, for the strip at the bottom of the screen (at most a row of text).
     fn hint(&mut self, _w: &mut dyn crate::fmtlite::Sink) {}
@@ -146,6 +151,7 @@ pub(crate) fn draw_list<D>(
         draw_hint(lcd, hint.as_str());
     }
 
+    let mut rows_drawn = true;
     if first {
         draw_full(lcd, title, source, selected, show_arrows, total, top);
     } else {
@@ -195,8 +201,13 @@ pub(crate) fn draw_list<D>(
                     total,
                     slot_of(selected, top),
                 );
+            } else {
+                rows_drawn = false;
             }
         }
+    }
+    if rows_drawn {
+        draw_scroll_mark(lcd, total, top);
     }
 
     cache.title = Some(TitleKey::of2(title, hint.as_str()));
@@ -208,6 +219,35 @@ pub(crate) fn draw_list<D>(
 
 fn slot_of(index: usize, top: usize) -> usize {
     index - top
+}
+
+/// Where a list of `total` rows scrolled to `top` puts its position mark: (offset from the top of the rows,
+/// height), in pixels. None when every row fits on the screen.
+fn scroll_mark(total: usize, top: usize) -> Option<(i32, i32)> {
+    if total <= VISIBLE_ROWS {
+        return None;
+    }
+    let track = VISIBLE_ROWS as i32 * ROW_HEIGHT;
+    let height = (track * VISIBLE_ROWS as i32 / total as i32).max(6);
+    let steps = (total - VISIBLE_ROWS) as i32;
+    Some(((track - height) * top.min(total - VISIBLE_ROWS) as i32 / steps, height))
+}
+
+/// A list longer than the screen shows where it is: a mark on the right edge, sized to the part on show. Rows paint
+/// the full width, so this is drawn after them.
+fn draw_scroll_mark<D>(lcd: &mut D, total: usize, top: usize)
+where
+    D: DrawTarget<Color = Rgb565>,
+{
+    if let Some((offset, height)) = scroll_mark(total, top) {
+        Rectangle::new(
+            Point::new(SCREEN_W - SCROLL_W, LIST_TOP + offset),
+            Size::new(SCROLL_W as u32, height as u32),
+        )
+        .into_styled(PrimitiveStyle::with_fill(VALUE_DIM))
+        .draw(lcd)
+        .ok();
+    }
 }
 
 fn draw_full<D>(
@@ -300,7 +340,7 @@ fn draw_row<D>(
     }
 
     // "You are changing this": a value with arrows, or a typed field (it has a text cursor).
-    let editing = is_selected && (show_arrows || source.cursor(index).is_some());
+    let editing = is_selected && (show_arrows || source.cursor(index).is_some() || source.armed(index));
     if is_selected {
         Rectangle::new(
             Point::new(0, row_top),
@@ -423,11 +463,13 @@ fn draw_value_with_cursor<D>(
 ) where
     D: DrawTarget<Color = Rgb565>,
 {
-    draw_value(lcd, text, baseline_y, fg);
-
+    // A cursor after the last character needs a cell of its own, or it hangs off the edge of the screen.
     let char_w = FONT_6X10.character_size.width as i32;
-    let width = text.chars().count() as i32 * char_w;
-    let x0 = SCREEN_W - RIGHT_MARGIN - width;
+    let cells = text.chars().count().max(cursor_index + 1) as i32;
+    let x0 = SCREEN_W - RIGHT_MARGIN - cells * char_w;
+    Text::new(text, Point::new(x0, baseline_y), MonoTextStyle::new(&FONT_6X10, fg))
+        .draw(lcd)
+        .ok();
 
     draw_cursor_box(lcd, text, cursor_index, x0, row_top, baseline_y, fg);
 }

@@ -535,6 +535,9 @@ impl ui::list::ListSource for BufferListSource {
             _ => None,
         }
     }
+    fn armed(&mut self, i: usize) -> bool {
+        matches!(self.window_row(i), Some(r) if r.cursor == bf5rh_abi::ROW_ARMED)
+    }
 }
 
 static mut LIST_CACHE: Option<ui::list::Cache> = None;

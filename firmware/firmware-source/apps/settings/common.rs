@@ -1546,7 +1546,7 @@ fn value_text_for(
         #[cfg(feature = "g_system")]
         Reset => {
             if editing_this {
-                write_str(out, "MENU = WIPE")
+                write_str(out, "MENU = RESET")
             } else {
                 0
             }
@@ -1872,6 +1872,9 @@ fn draw(api: &Api) -> AppResult {
                     {
                         rows[i].cursor = n.min(17) as i16;
                     }
+                    if st.is_editing(gi) && matches!(item, SettingItem::Reset) {
+                        rows[i].cursor = bf5rh_abi::ROW_ARMED;
+                    }
                 }
                 _ => {}
             }
@@ -1892,12 +1895,14 @@ fn draw(api: &Api) -> AppResult {
     // The strip at the bottom says what the keys do in this state (EXIT while changing a value undoes it).
     let hint: &[u8] = match &state.phase {
         Phase::Items(st) if st.editing => match st.item() {
-            SettingItem::Reset => b"MENU wipe all  EXIT cancel",
+            SettingItem::Reset => b"MENU confirm  EXIT cancel",
             SettingItem::Info | SettingItem::ChipId => b"UP/DN page    EXIT back",
-            SettingItem::Lat | SettingItem::Lon => b"0-9  * N/S E/W  MENU ok",
+            SettingItem::Lat => b"0-9  * N/S  MENU ok",
+            SettingItem::Lon => b"0-9  * E/W  MENU ok",
             SettingItem::Offse | SettingItem::BattCal => b"0-9 type MENU ok EXIT del",
             _ => b"UP/DN MENU save EXIT undo",
         },
+        Phase::Items(st) if matches!(st.item(), SettingItem::Reset) => b"MENU reset   EXIT back",
         Phase::Items(_) => b"MENU change  EXIT back",
         _ => b"MENU open    EXIT back",
     };
