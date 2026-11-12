@@ -14,7 +14,10 @@ VFO, contacts and settings are not touched for a 0x8000-byte image.
 
 Placement: each CHANNELS_DIR/<name>.csv is one group. <name> (case-insensitive, '-', '_' and '/' count as spaces, '&' ignored)
 must equal a group name or short name in firmware/firmware-source/src/app/group_table.rs (parsed at run time, so the table is
-not duplicated). Channels land in that group's slots in file order; the CSV Location column is IGNORED for placement. all.csv
+not duplicated). Channels land in that group's slots in file order; the CSV Location column is IGNORED for placement. Groups overlap (GMRS
+contains the FRS channels, REPEATERS the GMRS repeater slots): a file uses only its group's OWN slots, the ones inside no
+smaller group (GMRS: 327-344, REPEATERS: 234-304), minus any all.csv has taken. A group with no slots of its own
+(FRS GMRS MURS) cannot be a file. all.csv
 is the exception: channels go to their own Location (printed number 1-1000). More channels than slots, two files claiming a
 slot, a name over 12 characters or non-printable-ASCII, an unparseable row or an out-of-range frequency fail the build with
 a message and write nothing. (CUSTOM RANGE has no slots of its own and cannot be a file.)
@@ -47,6 +50,7 @@ import argparse, csv, io, math, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 GROUP_TABLE = os.path.join(HERE, "..", "firmware-source", "src", "app", "group_table.rs")
 SLOT, SLOTS, IMAGE_LEN = 32, 1000, 0x8000
+DETAIL_MAX = 16     # optional Detail column (docs/CHANNEL-GROUPS.md); not written to the image yet
 # [U:DCS_CODES]
 DCS_CODES = ("023 025 026 031 032 036 043 047 051 053 054 065 071 072 073 074 114 115 116 122 125 131 132 134 143 145 152 155 "
              "156 162 165 172 174 205 212 223 225 226 243 244 245 246 251 252 255 261 263 265 266 271 274 306 311 315 325 331 "
@@ -163,6 +167,9 @@ def encode(row):
         raise PlanError(f"name '{name}' is {len(name)} characters; the limit is 12")
     if not re.fullmatch(r"[\x20-\x7e]*", name):
         raise PlanError(f"name '{name}' has characters other than printable ASCII")
+    detail = g("Detail")            # location / description; checked now, stored on the radio only once it has a place
+    if len(detail) > DETAIL_MAX or not re.fullmatch(r"[\x20-\x7e]*", detail):
+        raise PlanError(f"Detail '{detail}' must be at most {DETAIL_MAX} printable ASCII characters")
     freq = g("Frequency")
     if not freq:
         raise PlanError("no Frequency")
@@ -282,7 +289,15 @@ def build(directory, base=None, groups=None):
     files = sorted(f for f in os.listdir(directory) if f.lower().endswith(".csv"))
     if not files:
         raise PlanError(f"no .csv files in {directory}")
-    for fn in files:
+
+    def order(fn):          # all.csv (fixed Locations) first, then the smallest group first, then by name
+        try:
+            g = find_group(groups, fn[:-4])
+        except PlanError:
+            return (1, 0, fn)
+        return (0, 0, fn) if g[0] == "ALL" else (1, len(slots_of(g[2])), fn)
+
+    for fn in sorted(files, key=order):
         stem = fn[:-4]
         try:
             grp = find_group(groups, stem)
@@ -293,9 +308,14 @@ def build(directory, base=None, groups=None):
             errors.append(str(e))
             continue
         is_all = grp[0] == "ALL"
-        avail = slots_of(grp[2])
+        # Groups overlap (GMRS contains the FRS channels, REPEATERS contains the GMRS repeater slots). A file uses only
+        # the slots that are its group's OWN: not inside any smaller group, and not already taken (all.csv).
+        mine = slots_of(grp[2])
+        inner = {n for g in groups if g[0] not in ("ALL", "CUSTOM RANGE", grp[0]) and len(slots_of(g[2])) < len(mine)
+                 for n in slots_of(g[2])}
+        avail = [n for n in mine if n not in claims and (is_all or n not in inner)]
         if not is_all and len(rows) > len(avail):
-            errors.append(f"{fn}: {len(rows)} channels but group {grp[0]} has only {len(avail)} slots")
+            errors.append(f"{fn}: {len(rows)} channels but group {grp[0]} has only {len(avail)} free slots of its own")
         used = 0
         for k, (line, row) in enumerate(rows):
             where = f"{fn} line {line}" + (f" ({row.get('Name', '')})" if row.get("Name") else "")

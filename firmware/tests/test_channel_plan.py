@@ -26,7 +26,7 @@ def row(name="", freq="146.520", duplex="", off="0", tone="", r="88.5", c="88.5"
 
 def csv_text(rows):
     cols = ["Location", "Name", "Frequency", "Duplex", "Offset", "Tone", "rToneFreq", "cToneFreq", "DtcsCode", "DtcsPolarity",
-            "Mode", "Skip", "Power"]
+            "Mode", "Skip", "Power", "Detail"]
     return ",".join(cols) + "\n" + "".join(",".join(str(r.get(k, "")) for k in cols) + "\n" for r in rows)
 
 
@@ -173,19 +173,19 @@ class Build(unittest.TestCase):
 
     def test_group_placement_ignores_location(self):
         self.put("weather.csv", [dict(row("W1", "162.55"), Location=99), dict(row("W2", "162.4"), Location=3)])
-        self.put("repeaters.csv", [row(f"R{i}", f"146.{i:03d}") for i in range(75)])
+        self.put("repeaters.csv", [row(f"R{i}", f"146.{i:03d}") for i in range(71)])
         table, entries, errors, summary = cp.build(self.dir)
         self.assertEqual(errors, [])
         slots = {e["slot"]: cp.decode(e["record"])["name"] for e in entries}
         self.assertEqual(slots[0], "W1")
         self.assertEqual(slots[1], "W2")
         self.assertEqual(slots[233], "R0")                  # printed 234
-        self.assertEqual(slots[303], "R70")                  # printed 304 = last of the first range
-        self.assertEqual(slots[326], "R71")                  # printed 327 = first of the second range
+        self.assertEqual(slots[303], "R70")                  # printed 304 = last slot REPEATERS owns
+        self.assertNotIn(326, slots)                         # printed 327-344 belong to the smaller GMRS group
         self.assertEqual(len(table), SLOT * SLOTS)
         self.assertEqual(table[2 * SLOT:3 * SLOT], b"\xff" * SLOT)
         self.assertIn(("WEATHER", 2, 7), summary)
-        self.assertIn(("REPEATERS", 75, 89), summary)
+        self.assertIn(("REPEATERS", 71, 71), summary)
 
     def test_all_csv_uses_location(self):
         self.put("all.csv", [dict(row("P", "146.52"), Location=500)])
@@ -199,15 +199,35 @@ class Build(unittest.TestCase):
     def test_too_many_channels(self):
         self.put("weather.csv", [row(f"W{i}", "162.4") for i in range(8)])
         errors = cp.build(self.dir)[2]
-        self.assertTrue(any("8 channels" in e and "7 slots" in e for e in errors), errors)
+        self.assertTrue(any("8 channels" in e and "7 free slots" in e for e in errors), errors)
 
-    def test_two_files_claim_same_slot(self):
+    def test_detail_column_is_checked_but_not_stored(self):
+        self.put("weather.csv", [dict(row("W1", "162.55"), Detail="Richardson")])
+        table, entries, errors, _ = cp.build(self.dir)
+        self.assertEqual(errors, [])
+        self.assertNotIn(b"Richardson", table)
+        self.put("weather.csv", [dict(row("W1", "162.55"), Detail="x" * 17)])
+        self.assertTrue(any("Detail" in e for e in cp.build(self.dir)[2]))
+
+    def test_overlapping_groups_use_their_own_slots(self):
+        """GMRS (305-344) contains FRS (305-326): a GMRS file starts at 327 even when FRS is not full."""
         self.put("frs.csv", [row("F1", "462.5625")])
-        self.put("gmrs.csv", [row("G1", "462.5625")])
-        errors = cp.build(self.dir)[2]
-        self.assertTrue(any("already claimed" in e for e in errors), errors)
-        self.put("gmrs.csv", [])
+        self.put("gmrs.csv", [row("G1", "462.55")])
+        self.put("repeaters.csv", [row("R1", "146.94")])
+        _, entries, errors, _ = cp.build(self.dir)
+        self.assertEqual(errors, [])
+        self.assertEqual(sorted(e["slot"] + 1 for e in entries), [234, 305, 327])
+        # a group made only of smaller groups has nothing of its own
+        self.put("f-g-m.csv", [row("X", "462.5625")])
+        self.assertTrue(any("free slots of its own" in e for e in cp.build(self.dir)[2]))
+
+    def test_all_csv_takes_slots_first_and_duplicates_are_refused(self):
         self.put("all.csv", [dict(row("A", "146.52"), Location=305)])
+        self.put("frs.csv", [row("F1", "462.5625")])
+        _, entries, errors, _ = cp.build(self.dir)
+        self.assertEqual(errors, [])
+        self.assertEqual(sorted(e["slot"] + 1 for e in entries), [305, 306])
+        self.put("all.csv", [dict(row("A", "146.52"), Location=305), dict(row("B", "146.52"), Location=305)])
         self.assertTrue(any("already claimed" in e for e in cp.build(self.dir)[2]))
 
     def test_row_errors_reported_with_file_and_line(self):

@@ -1,0 +1,9 @@
+Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,Mode,TStep,Skip,Power,Detail,Comment
+1,GMRS 15R,462.550000,+,5.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,GMRS repeater,GMRS repeater pair 15: input +5 MHz; add the tone of your local repeater (GMRS licence required)
+2,GMRS 16R,462.575000,+,5.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,GMRS repeater,GMRS repeater pair 16: input +5 MHz; add the tone of your local repeater (GMRS licence required)
+3,GMRS 17R,462.600000,+,5.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,GMRS repeater,GMRS repeater pair 17: input +5 MHz; add the tone of your local repeater (GMRS licence required)
+4,GMRS 18R,462.625000,+,5.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,GMRS repeater,GMRS repeater pair 18: input +5 MHz; add the tone of your local repeater (GMRS licence required)
+5,GMRS 19R,462.650000,+,5.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,GMRS repeater,GMRS repeater pair 19: input +5 MHz; add the tone of your local repeater (GMRS licence required)
+6,GMRS 20R,462.675000,+,5.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,GMRS repeater,GMRS repeater pair 20: input +5 MHz; add the tone of your local repeater (GMRS licence required)
+7,GMRS 21R,462.700000,+,5.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,GMRS repeater,GMRS repeater pair 21: input +5 MHz; add the tone of your local repeater (GMRS licence required)
+8,GMRS 22R,462.725000,+,5.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,GMRS repeater,GMRS repeater pair 22: input +5 MHz; add the tone of your local repeater (GMRS licence required)
