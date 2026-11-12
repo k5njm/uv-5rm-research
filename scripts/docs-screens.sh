@@ -42,6 +42,7 @@ FRAMES=(
   "searchqt_tone/tone_found                  qtscan"
   "searchqt_tone/search_uhf                  search"
   "text_ping/typed_hi                        text"
+  "text_ping/on_air                          text-on-air"
   "fm_tuner_named/kera                       fm"
   "fm_list/playing_selected                  fm-list"
   "fm_save/save_row                          fm-save"

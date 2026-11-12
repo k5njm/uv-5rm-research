@@ -1,0 +1,12 @@
+# TEXT: notices in the bottom strip, the power setting in the title, and erase confirmation.
+allow tx
+app textapp
+key menu                  # nothing typed
+shot type_first
+key ab
+shot high_power
+hold pound
+shot erase_asked
+key 4
+key 4
+shot tap_pending       # the letter still being chosen is amber

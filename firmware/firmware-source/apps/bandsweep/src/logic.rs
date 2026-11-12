@@ -17,27 +17,33 @@ const KEY_AB: u8 = 17;
 const KEY_SIDE1: u8 = 19;
 
 const F5: u8 = 0;
+const F6: u8 = 1; // 6x10
 
 const BLACK: u16 = 0x0000;
 const WHITE: u16 = 0xFFFF;
 const GRAY: u16 = 0x8410;
 const GRID: u16 = 0x2124;
-const TRACE: u16 = 0xD000;
-const HOLD: u16 = 0x6000;
-const SELECT_BG: u16 = 0x8000;
-const YELLOW: u16 = 0xFFE0;
+const TRACE: u16 = 0x07E0; // green, as SPECTRUM: red is for transmitting
+const HOLD: u16 = 0x0320;
+const SELECT_BG: u16 = 0x231A; // blue: you are here
+const AMBER: u16 = 0xFD40; // you are changing this
+// The house look of the list screens (src/ui/list.rs): light title bar, dark hint strip.
+const TITLE_BG: u16 = 0xDEDB;
+const TITLE_FG: u16 = 0x0000;
+const HINT_BG: u16 = 0x2124;
+const HINT_FG: u16 = 0xA514;
 
 const COLS: usize = 160;
 const SCREEN_H: u16 = 128;
-const HEADER_Y: i16 = 0;
-const GRAPH_TOP: i16 = 9;
-const GRAPH_BOTTOM: i16 = 62;
-const CURSOR_Y: i16 = 63;
-const LIST_Y: i16 = 66;
+const TITLE_H: u16 = 14;
+const GRAPH_TOP: i16 = 15;
+const GRAPH_BOTTOM: i16 = 55;
+const CURSOR_Y: i16 = 56;
+const LIST_Y: i16 = 58;
 const ROW_H: i16 = 9;
 const LIST_ROWS: usize = 5;
-const STATUS_Y: i16 = 112;
-const HINT_Y: i16 = 120;
+const STATUS_Y: i16 = 104;
+const HINT_TOP: i16 = 112;
 
 /// `(name, low Hz, high Hz)`; the last is the typed custom range.
 const BANDS: [(&[u8], u32, u32); 6] = [
@@ -748,16 +754,27 @@ fn draw_column(api: &Api, st: &State, x: usize) {
     }
 }
 
+/// Light title bar as on the list screens: band start, band name, band stop (4 decimals, so all three fit).
 fn draw_header(api: &Api, st: &State) {
     let (lo, hi) = st.band_range();
-    (api.fill_rect)(0, HEADER_Y, COLS as u16, 8, BLACK);
+    (api.fill_rect)(0, 0, COLS as u16, TITLE_H, TITLE_BG);
     let mut left = Buf::new();
     left.freq(api, lo);
-    text(api, 0, HEADER_Y, left.as_slice(), WHITE, BLACK, F5);
+    left.n = left.n.saturating_sub(1);
+    text(api, 2, 2, left.as_slice(), TITLE_FG, TITLE_BG, F6);
+    let name = if st.band == CUSTOM { b"CUSTOM" as &[u8] } else { BANDS[st.band].0 };
+    text(api, (COLS as i16 - name.len() as i16 * 6) / 2, 2, name, TITLE_FG, TITLE_BG, F6);
     let mut right = Buf::new();
     right.freq(api, hi);
-    let w = right.as_slice().len() as i16 * 5;
-    text(api, COLS as i16 - w, HEADER_Y, right.as_slice(), WHITE, BLACK, F5);
+    right.n = right.n.saturating_sub(1);
+    let w = right.n as i16 * 6;
+    text(api, COLS as i16 - 2 - w, 2, right.as_slice(), TITLE_FG, TITLE_BG, F6);
+}
+
+/// What the keys do now, in the strip every list screen has at the bottom.
+fn draw_hint(api: &Api, s: &[u8]) {
+    (api.fill_rect)(0, HINT_TOP, COLS as u16, 16, HINT_BG);
+    text(api, 4, HINT_TOP + 3, s, HINT_FG, HINT_BG, F6);
 }
 
 fn draw_list(api: &Api, st: &mut State) {
@@ -805,8 +822,8 @@ fn draw_status(api: &Api, st: &State) {
                 });
             }
             a.s(b" MHZ");
-            line(api, STATUS_Y, a.as_slice(), YELLOW, BLACK);
-            line(api, HINT_Y, b"MENU NEXT  EXIT BACK", GRAY, BLACK);
+            line(api, STATUS_Y, a.as_slice(), AMBER, BLACK);
+            draw_hint(api, if stage == 0 { b"MENU next  EXIT back" } else { b"MENU sweep  EXIT back" });
             return;
         }
         View::Listen => {
@@ -815,18 +832,13 @@ fn draw_status(api: &Api, st: &State) {
             a.ch(b' ');
             a.i(api, (api.read_rssi)() as i32 - RSSI_DBM_BASE);
             a.s(b"DBM");
-            line(api, STATUS_Y, a.as_slice(), YELLOW, BLACK);
-            line(api, HINT_Y, b"MENU BACK TO SWEEP", GRAY, BLACK);
+            line(api, STATUS_Y, a.as_slice(), TRACE, BLACK);
+            draw_hint(api, b"MENU back to sweep");
             return;
         }
         View::Sweep => {}
     }
-    a.s(if st.band == CUSTOM {
-        b"CUST"
-    } else {
-        BANDS[st.band].0
-    });
-    a.s(if st.step_index == 0 { b" ST25K" } else { b" ST12.5K" });
+    a.s(if st.step_index == 0 { b"ST25K" } else { b"ST12.5K" });
     a.s(b" T+");
     a.u(api, st.margin as u32);
     a.s(b" D");
@@ -841,7 +853,10 @@ fn draw_status(api: &Api, st: &State) {
         a.ch(b'S');
     }
     line(api, STATUS_Y, a.as_slice(), GRAY, BLACK);
-    line(api, HINT_Y, b"AB BAND 1 STEP 5 RANGE MENU RX", GRAY, BLACK);
+    draw_hint(
+        api,
+        if st.n_hits > 0 { b"MENU hear  hold MENU tune" } else { b"A/B band  1 step  5 range" },
+    );
 }
 
 fn draw(api: &Api) -> AppResult {
@@ -867,6 +882,7 @@ fn draw(api: &Api) -> AppResult {
     if st.list_dirty {
         draw_list(api, st);
         st.list_dirty = false;
+        st.status_dirty = true; // the hint depends on whether there are hits
     }
     if st.status_dirty {
         draw_status(api, st);

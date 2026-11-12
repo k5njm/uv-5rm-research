@@ -476,8 +476,10 @@ custom range.
 
 ![BAND SWEEP over VHF: a graph on top and a list of hits with their strength and number of sightings.](img/bandsweep.png)
 
-The status line shows the band, step (`ST25K` or `ST12.5K`), `T+` (detection margin), `D` (dwell) and `P` (pass count and
-time). The bottom line reminds you of the keys.
+The light title bar shows the start and stop frequency of the band and its name. Under the list, the status line shows the
+step (`ST25K` or `ST12.5K`), `T+` (detection margin), `D` (dwell) and `P` (pass count and time). The strip at the bottom says
+what the keys do in the current state (listening to a hit, typing a range, or sweeping). The selected hit is blue, as in the
+other lists, and the trace is green: red is only used while the radio transmits.
 
 | Key | Action |
 |---|---|
@@ -573,13 +575,17 @@ carries.
 ### TEXT
 
 Short text messages between two radios using the radio chip's FSK modem. **It transmits.** Both radios must run TEXT on the same
-frequency. The frequency is the one on the main screen when you open the app; the title shows it and `LOW` or `HIGH` power.
+frequency. The frequency is the one on the main screen when you open the app; the light title bar shows it and `LOW` or `HIGH` power. The
+title turns red and reads `TX` for as long as the transmitter is actually keyed (each try, and each automatic confirmation),
+and only then. The strip at the bottom shows the keys, or a notice, or `TRY n OF 8` while a message is being repeated.
 
 > **A radio with TEXT open answers messages by transmitting on its own.** A message is repeated up to eight times until the
 > other radio confirms it. Use it only on a frequency where you are licensed and permitted to send digital data, on simplex.
 > TEXT has never been tested on the air; the simulator transmits into a model.
 
 ![TEXT with "HI" typed. The key letters are listed at the top.](img/text.png)
+
+![TEXT at the moment the transmitter is keyed: the title bar is red and reads TX.](img/text-on-air.png)
 
 | Key | Action |
 |---|---|

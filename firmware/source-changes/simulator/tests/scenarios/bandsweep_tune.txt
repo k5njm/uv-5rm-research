@@ -1,0 +1,9 @@
+# Band Sweep: after one pass, holding MENU puts the selected hit on the main screen's VFO and leaves.
+master 146000000
+signal 146520000 120 -1 always
+app bandsweep
+wait 7
+shot hits
+hold menu
+expect exit
+expect vfo 146525000 0
