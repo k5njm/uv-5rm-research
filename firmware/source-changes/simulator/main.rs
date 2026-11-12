@@ -32,7 +32,7 @@ mod fskprobe;
 mod spectrum;
 #[path = "../../firmware-source/apps/fm/src/main.rs"]
 mod fm;
-#[path = "../../firmware-source/apps/chanmgr/src/main.rs"]
+#[path = "chanmgr_pkg.rs"]
 mod chanmgr;
 #[cfg(feature = "settings-menu")]
 pub const MY_SEG: u8 = 0;

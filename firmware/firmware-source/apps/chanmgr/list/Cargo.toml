@@ -1,17 +1,17 @@
 [workspace]
 
 [package]
-name = "chanmgr"
+name = "list"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "chanmgr"
+name = "list"
 test = false
 bench = false
 
 [dependencies]
-bf5rh-abi = { path = "../../abi" }
+bf5rh-abi = { path = "../../../abi" }
 
 [profile.release]
 opt-level = "z"

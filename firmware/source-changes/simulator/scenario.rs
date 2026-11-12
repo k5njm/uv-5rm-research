@@ -13,7 +13,8 @@
 //!                       name (twelve 0xFF bytes); no NAME leaves twelve zero bytes
 //!                       master/signal/chan may appear before or after `app`; they are applied after the reset
 //!   air HEX [HEX...]   the simulated FSK modem hears a sync, then these 16-bit words (hex), one per poll
-//!   handoff GROUP ACTION   preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items)
+//!                       (a package of several segments, like `chanmgr`, runs as in the firmware: `Chain` switches segment)
+//!   handoff GROUP ACTION  preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items)
 //!   handoff fm DECI        preload it as the core does for a broadcast frequency typed on the main screen (tenths of MHz)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
 //!   key K               single press. K = 0-9 star pound menu exit up down ab
@@ -46,11 +47,32 @@ fn lookup(name: &str) -> Option<Entry> {
         "searchqt" => sq,
         "spectrum" => |a, e| spectrum::app_entry(a, e),
         "fm" => |a, e| fm::app_entry(a, e),
-        "chanmgr" => |a, e| chanmgr::app_entry(a, e),
+        "chanmgr" => |a, e| chain_run(
+            &[(|a, e| chanmgr::list::app_entry(a, e)) as Entry, |a, e| chanmgr::edit::app_entry(a, e)],
+            a,
+            e,
+        ),
         #[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system"))]
         "settings" => |a, e| settings::app_entry(a, e),
         _ => return None,
     })
+}
+
+/// A multi-segment package, as the firmware runs one: the event goes to the segment that is loaded, and when it answers
+/// `Chain(n)` that segment is replaced by segment `n`, which gets `Enter` (the handoff buffer survives; each segment's
+/// statics are its own because each is its own module). The `app` step resets this to segment 0.
+static mut CHAIN_SEG: usize = 0;
+
+fn chain_run(segs: &[Entry], api: &Api, ev: AppEvent) -> AppResult {
+    let mut r = segs[unsafe { CHAIN_SEG }](api, ev);
+    let mut hops = 0;
+    while let AppResult::Chain(n) = r {
+        hops += 1;
+        assert!(hops <= 4 && (n as usize) < segs.len(), "bad segment switch to {n}");
+        unsafe { CHAIN_SEG = n as usize };
+        r = segs[n as usize](api, AppEvent::Enter); // as `handle_result` does: no Leave, a fresh Enter
+    }
+    r
 }
 
 fn key_id(k: &str) -> Option<u8> {
@@ -298,6 +320,7 @@ impl Run<'_> {
                     f();
                 }
                 self.app = Some(e);
+                unsafe { CHAIN_SEG = 0 };
                 e(&API, AppEvent::Enter);
                 e(&API, AppEvent::Draw);
             }
