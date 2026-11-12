@@ -44,8 +44,8 @@ digits `0` to `9`, `*` and `#`. **Hold `#`** means press and keep pressed for ab
 
 * A key does its job **when you let go of it**. A key that has a hold function sends the hold after about one second, and then
   does *not* send the ordinary press when you let go.
-* Keys that can be held (the keypad driver, `src/device/keypad.rs`): `UP`, `DOWN`, `VFO/MR`, `BAND`, `*`, `#`, `0`, `EXIT`,
-  `SIDE1`, `SIDE2`. `MENU` and `A/B` and the digits `1` to `9` cannot be held. **There is no hold on `MENU` anywhere**: nothing
+* Keys that can be held (the keypad driver, `src/device/keypad.rs`): `UP`, `DOWN`, `VFO/MR`, `A/B`, `BAND`, `*`, `#`, `0`,
+  `EXIT`, `SIDE1`, `SIDE2`. `MENU` and the digits `1` to `9` cannot be held. **There is no hold on `MENU` anywhere**: nothing
   in this firmware needs one, and this guide never asks for it.
 * Holding `UP` or `DOWN` repeats the step after about one and a half seconds, then about ten times a second.
 * Key beeps play when a short press is accepted (on release) and when a hold fires, unless KEY BEEP is off. The repeating steps of a
@@ -77,7 +77,7 @@ of the layout, not a screenshot (here a `PS` flag shares the status line with th
 | **Status bar, left** | `PS` (battery save is working), `DWR` (dual watch is on), `SCAN UP EXIT` or `SCAN DN EXIT` while scanning (`SCAN UP` or `SCAN DN` when a `PS`, `DWR` or `VOX` flag shares the line), `VOX`, and a padlock while the keypad is locked. While transmitting, a red `MM:SS` timer replaces `PS` and `DWR` |
 | **Status bar, tag** | In memory mode the short name of the channel group (`RPT`, `WX`, `ALL`, ...; see [Channel groups](#channel-groups)). In VFO mode the band the frequency is in (`AIR`, `2M`, `MURS`, `MARINE`, `WX`, `1.25M`, `70CM`, `GMRS`) or nothing |
 | **Status bar, right** | Battery voltage and a battery icon (red at one bar or none, amber at two, green above) |
-| **Two blocks** | The upper block is side A and the lower block is side B. `A/B` moves the keys to the other side. The active side is bright, the other is dimmer. **Each side keeps its own channel group** |
+| **Two blocks** | The upper block is side A and the lower block is side B. `A/B` moves the keys to the other side. The active side is bright, the other is dimmer. With DUAL WATCH on, the coloured line at the left edge runs across both sides. **Each side keeps its own channel group** |
 | **Row 1** | `VFO`, or the channel's number in the current group (`01`; the radio's own number in group ALL, and also for a channel that is outside the group). On the right, the channel's detail text (a place or a note) when CH DISPLAY is NAME or NAME+FREQ, or the channel's name in small letters when CH DISPLAY is FREQUENCY |
 | **Marker** (left of row 1) | `RX` (green, steady) while the squelch is open on that side, `TX` (red) while transmitting, `>>` (amber) on the side that heard the last signal |
 | **Row 2** | The frequency in large digits. With CH DISPLAY NAME+FREQ and a named channel: the name (10 characters at most) and the frequency in small digits (four decimals, `147.1200`); with NAME: the name alone (16 characters at most) |
@@ -116,12 +116,29 @@ RPT FINDER's save prompt asks for the radio's own number, and the channel plan f
 | `EXIT` | Clears a half-typed number | |
 | `MENU` | Opens the [APPS list](#the-apps-list); in memory mode with digits typed, accepts the channel number instead | |
 | `VFO/MR` | Switches between VFO and memory mode. With no stored channel in the group, `NO CH IN ...` | The function set in VFO/MR LONG (default: none) |
-| `A/B` | Gives the keys to the other side | |
+| `A/B` | Gives the keys to the other side | Turns [DUAL WATCH](#dual-watch) on or off |
 | `BAND` | Opens the CH GROUPS menu | The function set in BAND LONG (default: none) |
 | `*` | Starts a DTMF entry: digits, `MENU`, `UP`, `DOWN`, `EXIT`, `*` and `#` stand for A, B, C, D, `*`, `#`; the string is sent with the next transmission, and a three-digit string is sent as an ANI id. Hold `EXIT` to cancel it | Locks or unlocks the keypad |
 | `#` | Nothing | Starts [scanning](#scanning) |
 | `SIDE1`, `SIDE2` | The function set in SIDE1 SHORT or SIDE2 SHORT (default SIDE2: the flashlight) | SIDE1 LONG, SIDE2 LONG |
 | `PTT` | Transmit, if every rule in [Transmit safety](#transmit-safety) allows it | |
+
+A key that can be held sends its press when you let go **only if you let go before about one second**: an `A/B` held for a second or more
+switches DUAL WATCH and does not also switch the side. (Every key already acts on release; a hold-capable key just stops acting once the
+hold has fired.)
+
+### Dual watch
+
+DUAL WATCH (SETTINGS > RADIO, default OFF; hold `A/B` on the main screen to switch it on or off, remembered like the setting) makes the
+receiver listen to both sides. Per the source (`poll_dual_standby` in `src/app/mod.rs`): when no signal is present the receiver swaps
+between side A and side B about every ten polls of the main loop (roughly a tenth of a second or two; the exact time depends on the loop
+speed and has not been measured), each time loading that side's frequency, tone and mode. As soon as the squelch opens on a side it stays on
+that side; when the signal ends it holds for another ten polls and then resumes swapping. Any key press, `MONITOR`, and a transmission (PTT
+always sends on the active side, so the receiver returns to it first) restart that hold; while scanning, in an app or in the menus it does not
+run, and with battery save on the swap happens once per sleep cycle instead. The status bar shows `DWR` while it is on, the dBm line under the
+signal meter starts with the side that is heard (`A -85dBm`, or `LAST B ...` once the signal has gone), and the line at the left edge of the screen runs across both sides in the active side's colour.
+The two sides keep their own channel groups; DUAL WATCH only swaps what each side is tuned to. The `RX` marker shows on the side being heard,
+and `>>` on the side that heard the last signal. **Not tried on the radio yet**: the checklist has a step.
 
 **Typed VFO frequencies** are limited to what the receiver covers: 108 to 174, 200 to 260 and 350 to 520 MHz (from the
 radio's published specification; not measured on this radio). Anything else shows `OUT OF RX RANGE`. **A frequency from 87.5

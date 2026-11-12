@@ -1088,7 +1088,7 @@ const K_REPEAT: u8 = 4;
 /// VM 16, A/B 17, Band 18, Side1 19, Side2 20). MENU is not on the list, so no app can ever see a long MENU on the
 /// radio. A test below checks this table against the source.
 pub(crate) fn keypad_long(id: u8) -> bool {
-    matches!(id, 0 | 10 | 11 | 13 | 14 | 15 | 16 | 18 | 19 | 20)
+    matches!(id, 0 | 10 | 11 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20)
 }
 /// device/keypad.rs `supports_repeat`.
 pub(crate) fn keypad_repeat(id: u8) -> bool {

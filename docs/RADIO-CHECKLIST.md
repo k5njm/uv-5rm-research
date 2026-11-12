@@ -37,6 +37,10 @@ calibration copy you already hold. If it differs, **stop**: do not transmit.
 - [ ] **7.** Memory mode on a channel that has a detail text (a place or a note; the channels from `channels/` have one, with CH DISPLAY on its default NAME+FREQ): the
   text sits right-aligned on the channel-number row. (AUDIT 33)
 - [ ] **8.** Hold `*` locks the keypad (padlock in the status bar, a beep if KEY BEEP is on); hold `*` again unlocks it.
+- [ ] **8b.** DUAL WATCH: set side A to a quiet frequency and side B to NOAA 162.400 (`A/B` moves between sides). Hold `A/B` for a second or more: `DWR` appears in the status bar, the line at the left edge runs across both
+  sides, and the radio stays on the side that is not the weather channel until it hears one, then it holds on the weather side (`RX` there) and goes back to swapping a moment after the signal ends. Hold `A/B` again: `DWR`
+  goes and the line returns to the active side only. Check a short `A/B` still switches the side, and that SETTINGS > RADIO > DUAL WATCH agrees (also after a power cycle). Note whether the swapping makes a click, drops the first
+  syllable of a call, or ever stays on the wrong side. (AUDIT 55)
 - [ ] **8a.** Tune a steady signal (NOAA 162.400): the green `RX` marker beside the active side stays lit, without flicker, for as long as the squelch is open, and goes out when the signal goes. Then a weak signal and
   SQUELCH 0 (RADIO > SQUELCH): note whether `RX` still flickers. It followed a free-running 6 Hz blink before (the guide's marker row). (AUDIT 55)
 

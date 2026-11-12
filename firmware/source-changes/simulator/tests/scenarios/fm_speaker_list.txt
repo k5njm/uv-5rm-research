@@ -38,3 +38,4 @@ key menu
 expect speaker on
 key exit
 expect speaker on
+shot last

@@ -23,3 +23,4 @@ wait 1
 expect speaker on
 key up
 expect speaker on
+shot last

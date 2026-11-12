@@ -37,3 +37,4 @@ repeat up 3
 expect speaker off
 wait 1
 expect speaker on
+shot last

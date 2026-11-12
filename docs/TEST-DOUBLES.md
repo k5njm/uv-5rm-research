@@ -276,7 +276,7 @@ set the speaker on at Enter and when a seek ended and nowhere else. The mock nev
 Fix in the app: `entry` re-asserts `set_speaker(seek_left == 0)` after every Enter, Key and Tick event (a GPIO write), so
 there is no key path that leaves the tuner silent. Fix in the double: `core_key_beep` before every Single/Long, an
 `AUDIO_OPEN` flag, and `expect speaker on|off`. New scenarios `fm_speaker_tune`, `fm_speaker_list`, `fm_speaker_seek`
-(UP/DOWN, typed frequency, `#`/`*`, tune from the list, save, delete and cancel, seek) fail 10, 2 and 6 checks against the
+(UP/DOWN, typed frequency, `#`/`*`, tune from the list, save, delete and cancel, seek) fail 6, 10 and 2 checks against the
 unfixed app and pass now.
 
 Survey of the other apps (the beep only misleads an app whose speaker is on while `audio_open` is false; with `audio_open`

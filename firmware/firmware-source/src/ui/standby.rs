@@ -344,6 +344,14 @@ where
             cache.tx_elapsed = None;
         }
 
+        // the line at the left edge: the active side's accent (blue VFO, green memory, red while transmitting), carried
+        // across both sides while DUAL WATCH is on. Its colour follows the active side's mode, so a VFO/MR toggle repaints it.
+        let stripe_changed = master_changed
+            || tx_state_changed
+            || prev.dual_standby != snap.dual_standby
+            || prev.sides[0].is_channel_mode != snap.sides[0].is_channel_mode
+            || prev.sides[1].is_channel_mode != snap.sides[1].is_channel_mode;
+
         for i in 0..2usize {
             let top = band_top(i);
             let p = &prev.sides[i];
@@ -352,7 +360,7 @@ where
             let p_tx_here = prev.is_transmitting && i == prev.master_index;
             let s_tx_here = snap.is_transmitting && i == snap.master_index;
 
-            if master_changed || p_tx_here != s_tx_here {
+            if stripe_changed || p_tx_here != s_tx_here {
                 draw_stripe(lcd, &snap, i);
             }
 
@@ -605,12 +613,21 @@ where
     D: DrawTarget<Color = Rgb565>,
 {
     let master = i == snap.master_index;
+    // DUAL WATCH: the line runs across both sides (and the one-pixel gap between them), in the active side's accent
+    let both = snap.dual_standby && !snap.is_transmitting;
+    let m_mode = snap.sides[snap.master_index].is_channel_mode;
     let color = if master {
         accent_for(snap.is_transmitting, snap.sides[i].is_channel_mode)
+    } else if both {
+        accent_for(false, m_mode)
     } else {
         HAIR
     };
     fill(lcd, 0, band_top(i), STRIPE_W, BAND_HEIGHT, color);
+    if i == 0 {
+        let gap = if both { accent_for(false, m_mode) } else { BG };
+        fill(lcd, 0, band_top(0) + BAND_HEIGHT, STRIPE_W, 1, gap);
+    }
 }
 
 fn draw_rx_status<D>(

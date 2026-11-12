@@ -191,8 +191,8 @@ print(vision.similarity(vision.rectify(f, c), real))
         kp = _read(os.path.join(os.path.dirname(HERE), "firmware", "firmware-source", "src", "device", "keypad.rs"))
         body = kp[kp.index("fn supports_long"):kp.index("fn supports_repeat")]
         names = set(re.findall(r"KeyId::(\w+)", body))
-        ours = {"up": "Up", "down": "Down", "exit": "Exit", "star": "Asterisk", "pound": "Pound", "0": "Digit0", "side1": "Side1", "side2": "Side2"}
-        self.assertEqual({ours[k] for k in sc.LONG_KEYS}, names - {"Vm", "Band"})
+        ours = {"up": "Up", "down": "Down", "exit": "Exit", "star": "Asterisk", "pound": "Pound", "0": "Digit0", "ab": "Ab", "vm": "Vm", "band": "Band", "side1": "Side1", "side2": "Side2"}
+        self.assertEqual({ours[k] for k in sc.LONG_KEYS}, names)
         with self.assertRaises(ValueError):
             sc.parse("hold menu\n")
 
