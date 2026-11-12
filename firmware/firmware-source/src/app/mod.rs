@@ -8,6 +8,7 @@ pub(crate) const TX_BLOCK_RX_ONLY: u8 = 2;
 pub(crate) const TX_BLOCK_BAND: u8 = 3;
 pub(crate) const TX_BLOCK_BUSY: u8 = 4;
 
+mod battery_filter;
 mod convert;
 mod group_table;
 mod input;
@@ -188,7 +189,7 @@ pub struct App<'a> {
     dtmf_dial: Option<DigitInput<DTMF_DIAL_MAX_DIGITS>>,
 
     battery_cal: [u8; addr::DEV_BATT_LEN],
-    battery_bars: u8,
+    battery: battery_filter::BatteryFilter,
     battery_samples: [u16; 4],
     battery_sample_idx: usize,
 
@@ -384,7 +385,7 @@ impl<'a> App<'a> {
             ani_target_override: None,
             dtmf_dial: None,
             battery_cal,
-            battery_bars: 4,
+            battery: battery_filter::BatteryFilter::new(),
             battery_samples: [0; 4],
             battery_sample_idx: 0,
             rssi_raw: 0,
@@ -758,20 +759,10 @@ impl<'a> App<'a> {
         self.battery_samples[self.battery_sample_idx] = raw12;
         self.battery_sample_idx = (self.battery_sample_idx + 1) & 3; // wrap at 4
 
-        // Bars still use the instantaneous 8-bit sample for responsiveness
-        let raw = (raw12 >> 4) as u8;
-        let t = &self.battery_cal;
-        self.battery_bars = if raw > t[5] {
-            4
-        } else if raw > t[4] {
-            3
-        } else if raw > t[3] {
-            2
-        } else if raw > t[2] {
-            1
-        } else {
-            0
-        };
+        // What the screen shows: a slow average while receiving, a live one while transmitting (battery_filter.rs)
+        let tx = self.is_transmitting();
+        let live = self.battery_raw12_avg();
+        self.battery.update(crate::hal::uptime::now32(), live, tx, &self.battery_cal);
     }
 
     pub fn init_battery_samples(&mut self) {
@@ -779,32 +770,23 @@ impl<'a> App<'a> {
             self.battery_samples[i] = self.radio.read_battery_raw();
         }
         self.battery_sample_idx = 0;
-        let raw = (self.battery_samples[3] >> 4) as u8;
-        let t = &self.battery_cal;
-        self.battery_bars = if raw > t[5] {
-            4
-        } else if raw > t[4] {
-            3
-        } else if raw > t[3] {
-            2
-        } else if raw > t[2] {
-            1
-        } else {
-            0
-        };
+        let first = self.battery_raw12_avg();
+        self.battery.init(first, crate::hal::uptime::now32(), &self.battery_cal);
     }
 
+    /// The raw ring average of the last four readings: what apps and BATTERY CAL use (responsive, not smoothed).
     pub fn battery_raw12_avg(&self) -> u16 {
         let sum: u32 = self.battery_samples.iter().map(|&v| v as u32).sum();
         (sum / 4) as u16
     }
 
     pub fn battery_bars(&self) -> u8 {
-        self.battery_bars
+        self.battery.bars()
     }
 
+    /// The voltage the main screen and boot message show (the filtered reading, battery_filter.rs).
     pub fn battery_voltage_cv(&self) -> u16 {
-        (self.battery_raw12_avg() as u32 * BATTERY_CAL_REFERENCE_CV as u32
+        (self.battery.raw12() as u32 * BATTERY_CAL_REFERENCE_CV as u32
             / self.settings.battery_cal_raw.max(1) as u32) as u16
     }
 

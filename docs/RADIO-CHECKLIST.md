@@ -22,6 +22,9 @@ calibration copy you already hold. If it differs, **stop**: do not transmit.
 ## Part 1: main screen, VFO, groups and scanning (receive only)
 
 - [ ] **1.** In VFO mode type `300000`. An amber box says `OUT OF RX RANGE` (it goes away after about two seconds), and the frequency does not change. (AUDIT 39, 40)
+- [ ] **1a.** Battery reading (receive only; AUDIT 57). Watch the voltage at the right of the status bar for a minute with the radio idle on a quiet channel: it should hold steady, moving at most 0.01 or 0.02 V and only
+  now and then, and the bars should not flicker. Note the voltage and the bars. Switch the backlight or the receive audio on and off: the number may drift over several seconds, never jump. (BATTERY CAL in SETTINGS is
+  not smoothed; it keeps its quick, noisier reading.)
 - [ ] **2.** Type `098100`. The FM app opens already tuned to 98.1 MHz (it is in slot 9 of the release). `EXIT` returns to the main screen. (AUDIT 40)
 - [ ] **3.** Type `174000`, then `UP`: the frequency goes to `200.000` (the start of the next receive band), and `DOWN` goes back to `174.000`.
   Type `520000`, `UP`: it wraps to `108.000`. (AUDIT 43)
@@ -150,6 +153,10 @@ Nothing in this part has been seen on a radio. It is the stand-in for the radios
   to hear (a dummy load radiates almost nothing; whether a message crosses that way is untested): the title bar is red and reads `TX` only while the transmitter is keyed, and the
   message arrives. Note whether the redraw during the transmission disturbs the message. (AUDIT 50)
 - [ ] **41.** Set TX INHIBIT back **on**, TX BANDS to FCC HAM and BUSY LOCKOUT to OFF when you are done.
+
+- [ ] **40a.** Battery sag under load (dummy load, TX INHIBIT off as in step 38; do this with a fully charged pack): note the idle voltage on the status bar, key `PTT` on the dummy load for about 5 seconds, and watch it. Within about a second of keying the
+  voltage should drop (a fraction of a volt, the "sag") and then hold at the lower value while keyed, and the bars may drop by one. On release it climbs back to the idle number over about two seconds, without a jump, and
+  then stays calm. Report the idle voltage, the keyed voltage and how long each change took. (AUDIT 57; the filter is `firmware-source/src/app/battery_filter.rs`.)
 
 The fault screen (`APP FAULT` / `CORE FAULT`) and the transmitter dropping at a fault (AUDIT 43) can be exercised only with the test app `apps/hello --features
 fault-test`, which is in no release and whose key `5` lets the app transmit. That is a dummy-load test and a separate decision; it is not part of this walk-through.
