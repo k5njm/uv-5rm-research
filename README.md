@@ -64,6 +64,7 @@ as CI does; the BK4819 image built on arm64 differs (AUDIT 18). CI runs only the
 |---|---|
 | [docs/USER-GUIDE.md](docs/USER-GUIDE.md) | The main screen, keys, channel groups, scanning, every app and every setting, loading from a computer, troubleshooting |
 | [docs/RADIO-CHECKLIST.md](docs/RADIO-CHECKLIST.md) | What to check on the radio after the next flash, safest first, the transmitter last |
+| [docs/GUIDE-VERIFICATION.md](docs/GUIDE-VERIFICATION.md) | The line-by-line check of the user guide and the checklist against the code: what was wrong, what could not be checked, problems found in the code |
 | [docs/INSTALL.md](docs/INSTALL.md) | The installer: risks, what you need, what it writes, recovery |
 | [docs/FIRST-FLASH-RUNBOOK.md](docs/FIRST-FLASH-RUNBOOK.md) | The manual, read-only-first procedure and what can be restored |
 | [channels/README.md](channels/README.md) | Channel lists (CHIRP CSV) and FM station lists |
