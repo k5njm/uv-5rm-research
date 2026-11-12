@@ -10,6 +10,17 @@ Faults in $FAKE_BL_DIR/faults.json (persistent):
   {"silent": true}                   never answers (radio not in flash mode / cable out)
   {"die_after_packages": N}          stops answering after N accepted packages (cable pulled)
   {"flash_fail_at": SEQ}             answers E3 for that package
+  {"lose_ack_at": SEQ}               takes package SEQ but its ACK never reaches the host (once)
+  {"duplicate_package": "e2"|"ack"}  what a repeat of the last accepted package gets. UNKNOWN for the real bootloader:
+                                     "e2" (default) answers a sequence error, "ack" answers ACK and ignores it.
+                                     flash_bf.py retries the same frame, so the two policies decide whether a lost ACK
+                                     ends a flash that is in fact going fine (the host can simply start over: the
+                                     handshake restarts the transfer)
+
+What is known (six real flashes with flash_bf.py): the happy path above. Not known, and not modelled: error behaviour in
+general, flash write/erase time (the host allows 2 s per package), a package size other than 1 KB, a file longer than
+the application area, a handshake in the middle of a transfer (this fake restarts it), what END does to a transfer that
+is not complete (this fake answers E2).
 """
 import json, os, struct
 
@@ -105,12 +116,19 @@ class Serial:
                 return self._reply(0xE1, 0)
             self.state["total"] = data[0]
         elif cmd == CMD_UPDATE:
+            if (self.state["total"] is not None and len(data) == CHUNK and self.state["got"] > 0
+                    and args == ((self.state["got"] - 1) & 0xFF) and f.get("duplicate_package") == "ack"):
+                return self._reply(cmd)                      # a repeat of the last package: acknowledged, not stored again
             if self.state["total"] is None or len(data) != CHUNK or args != (self.state["got"] & 0xFF):
                 return self._reply(0xE2, 0)
             if f.get("flash_fail_at") == self.state["got"]:
                 return self._reply(0xE3, 0)
             self.flash += data
             self.state["got"] += 1
+            if f.get("lose_ack_at") == self.state["got"] - 1 and not self.state.get("ack_lost"):
+                self.state["ack_lost"] = True
+                self._save()
+                return
         elif cmd == CMD_END:
             if self.state["got"] != self.state["total"]:
                 return self._reply(0xE2, 0)
