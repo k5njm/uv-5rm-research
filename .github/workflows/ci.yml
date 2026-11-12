@@ -1,0 +1,35 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release gate (shipped .BF and .app files)
+        run: python3 -I firmware/tools/verify_release.py
+      - name: Host simulator (existing apps)
+        working-directory: firmware/source-changes/simulator
+        run: |
+          cargo build --release
+          mkdir -p /tmp/simout
+          ./target/release/sim /tmp/simout ../../skull_logo.rgb565
+      - name: Core firmware builds and fits 60 KB
+        working-directory: firmware/firmware-source
+        run: |
+          cargo build --release
+          python3 -I ../source-changes/elf2bin.py target/thumbv7em-none-eabi/release/bf5rh-fw /tmp/fw.bin
+  hab-apps:
+    # aprs/horus/rs41 do not compile yet (see AUDIT.md). The failure is reported as a
+    # warning annotation, not a red check. Remove continue-on-error once they build.
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: { app: [aprs, horus, rs41] }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.app }} (known-broken, non-blocking)
+        working-directory: firmware/firmware-source/apps/${{ matrix.app }}
+        continue-on-error: true
+        run: |
+          if ! cargo build --release; then
+            echo "::warning title=${{ matrix.app }} does not compile::Known issue tracked in AUDIT.md"
+          fi

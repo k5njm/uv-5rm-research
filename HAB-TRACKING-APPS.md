@@ -3,8 +3,11 @@
 Custom High-Altitude Balloon (HAB) and Radiosonde tracking suite developed for the Baofeng UV-5RM custom firmware fork.
 
 > [!WARNING]
-> ### UNTESTED EXPERIMENTAL PROOF-OF-CONCEPT
-> These apps (`aprs.app`, `horus.app`, `rs41.app`) are **currently untested on physical hardware** while awaiting test radios to arrive. They are shared as an open-source proof-of-concept (PoC) for protocol research and community review. RF register settings, timings, and demodulation thresholds may require tuning upon live hardware testing.
+> ### NOT IMPLEMENTED: DESIGN SKETCHES THAT DO NOT COMPILE
+> As of the Nov-2026 audit ([AUDIT.md](AUDIT.md)) none of `aprs`, `horus`, `rs41` compile, no `.app` exists, and `setup_balloon_radio.py` will refuse to run (missing overlays). Feature descriptions below are **intent, not behaviour**. Known defects:
+> * **APRS:** CRC is MSB-first `0x1021` (AX.25 needs reflected `0x8408`); no NRZI, bit-stuffing or flags; odd-length frame drops the last CRC byte; BK4819 FSK is not shown to be a 1200/2200 Hz Bell 202 modem; hardcoded callsign `K5RWK-7` and Richardson TX coordinates (must be user-configured).
+> * **Horus:** uses a `$$` sync and 1200 baud; Horus Binary needs a 4FSK modem, Golay FEC and its own unique word.
+> * **RS41:** sync words and "PRBS-15" scrambler claim are unverified against `radiosonde_auto_rx`; uses `f64::sqrt` (not available in `no_std`).
 
 ---
 

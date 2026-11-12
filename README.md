@@ -3,10 +3,10 @@
 Comprehensive analysis, hardware specifications, host security audit, and flashing guide for the [UV-5RM-Radio-Mod](https://github.com/jakegarrett13-afk/UV-5RM-Radio-Mod) custom firmware.
 
 > [!WARNING]
-> ### EXPERIMENTAL PROOF-OF-CONCEPT — UNTESTED ON PHYSICAL HARDWARE
-> The custom applications in this repository—including **APRS transceive (`aprs.app`)**, **Horus Binary v2 telemetry (`horus.app`)**, and **Vaisala RS41 radiosonde tracking (`rs41.app`)**—are currently **untested on live radios** pending delivery of physical test hardware. 
-> 
-> They are provided strictly as an open-source **proof of concept (PoC)** for community research, protocol analysis, and peer review. Code changes and RF register timings are experimental. **Flash, transmit, and test entirely at your own risk.**
+> ### HAB APPS (`aprs`, `horus`, `rs41`) DO NOT BUILD AND ARE NOT INSTALLABLE
+> A Nov-2026 audit ([AUDIT.md](AUDIT.md)) found these three apps fail to compile, have no `.app` binaries, and contain protocol errors (wrong AX.25 CRC, no HDLC framing, wrong Horus/RS41 sync and modem settings, someone else's hardcoded callsign). They are **design sketches only**. Nothing in `firmware/apps/` includes them.
+>
+> The remaining apps come from the upstream mod, which reports testing on two radios. This repo has not yet tested anything on hardware. **Flash and transmit at your own risk.**
 
 ---
 
@@ -17,9 +17,9 @@ Comprehensive analysis, hardware specifications, host security audit, and flashi
 | **Target Hardware** | Baofeng UV-5RM / UV-5RH (Tri-Band 10W, 1.77" Color TFT, FCC ID `2AJGM-5RM`) |
 | **Amazon Listing** | ASIN: `B0CWV6GFZT` (Confirmed physical model match) |
 | **Required Firmware ID** | **`5RHNRFB-YP07`** (Must verify by holding **`8`** while powering on) |
-| **Host Code Safety** | **SAFE** (No outbound network calls, zero malware, local serial communication only) |
-| **Firmware Quality** | **SOUND** (Clean `no_std` Rust embedded codebase built on `bf-5rh-firmware-open`) |
-| **Reversibility** | **ONE-WAY** (No stock firmware dump exists; flashing cannot be reversed) |
+| **Host Code Safety** | **Verified**: no network calls in the HTML or Python tools (audited Nov 2026) |
+| **Firmware Quality** | Core firmware builds; shipped `.BF` is **not** byte-reproducible yet (toolchain was unpinned); core image has only ~88 bytes of flash headroom. Zero unit tests. See [AUDIT.md](AUDIT.md) |
+| **Reversibility** | **Effectively one-way for YP07.** The only public stock images (BK / NRF / AT1846S in amoxu's repo) target other RF chips; upstream reports they boot on a YP07 (FD6818B) but RX/TX fail. The official YP07 image has not been found. The bootloader is not overwritten, so you can always re-flash *something*, but a true factory restore is not available |
 | **CHIRP Compatibility** | **BROKEN** (CHIRP cannot read/write; use included WebSerial HTML tools) |
 
 ---
@@ -30,6 +30,7 @@ Comprehensive analysis, hardware specifications, host security audit, and flashi
 - [Unique Firmware Features & Capabilities](FEATURES.md)
 - [Upstream Lineage & Hardware References](REFERENCES.md)
 - [Hardware Specs & Amazon Purchase Validation](HARDWARE.md)
+- [Project Audit & Roadmap (Nov 2026)](AUDIT.md)
 - [Host PC/Mac Security Audit](SECURITY-AUDIT.md)
 - [Firmware Architecture & Modem Internals](FIRMWARE-INTERNALS.md)
 - [macOS Flashing & Recovery Workflow](FLASHING-WORKFLOW.md)
@@ -55,7 +56,7 @@ The Amazon purchase (ASIN `B0CWV6GFZT`, Baofeng 5RM 10W Tri-Band) is the correct
 ## Important Warnings
 
 > [!CAUTION]
-> **Flashing is permanent:** There is currently no publicly available stock factory firmware for the `YP07` board revision. Once flashed, you cannot revert to the factory Baofeng OS.
+> **Treat flashing as permanent:** The stock images in [amoxu's repo](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE/tree/main/factory_firmware) are for the BK4819, AT1846S and FD6818 boards. Upstream issue [#18](https://github.com/amoxu/Baofeng-UV-5RM-5RH-RE/issues/18) says the YP07 uses the **FD6818B**, which is not register-compatible, so they will not restore a working YP07. The official YP07 firmware has not been found. Dump nothing you can't restore: you cannot read the internal flash (read-protected). First-boot also cleans stale factory records in SPI flash, so **take the backup first** and note that no restore script exists yet.
 
 > [!WARNING]
 > **CHIRP will stop working:** The custom firmware replaces factory memory structures with a modular app overlay (`OVL1`) architecture. Standard CHIRP is incompatible; channel programming must be done via the included WebSerial HTML tools.
