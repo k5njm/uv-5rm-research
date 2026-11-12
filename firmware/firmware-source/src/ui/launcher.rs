@@ -20,7 +20,7 @@ impl<'a, 'b> ListSource for LauncherSource<'a, 'b> {
     }
 
     fn hint(&mut self, w: &mut dyn crate::fmtlite::Sink) {
-        w.put_str("MENU open    EXIT back");
+        w.put_str("MENU or 1-9 open EXIT back");
     }
 
     fn value(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) -> bool {

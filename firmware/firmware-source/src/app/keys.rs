@@ -218,6 +218,18 @@ fn dispatch_app_menu(app: &mut App, syst: &mut SYST, ev: KeyEvent) {
                 app.mode = Mode::Standby;
                 app.reset_key_idle();
             }
+            // 1-9 open the app in that slot, as the numbers in the list suggest
+            key if ev.kind == KeyEventKind::Single => {
+                if let Some(d @ 1..=9) = digit_value(key) {
+                    let index = d as usize - 1;
+                    if index < launcher::total_item_count()
+                        && launcher::is_available_at(app, index)
+                    {
+                        app.launcher_index = index;
+                        super::overlay::enter(app, syst, index as u8);
+                    }
+                }
+            }
             _ => {}
         },
         _ => {}
