@@ -13,7 +13,8 @@ Nothing here has been written to a real radio yet; the whole path is tested only
   and `gmrs.csv` (GMRS repeaters, with their tones) are local to the Dallas area. This radio is not certified for FRS,
   GMRS or MURS: those lists are for listening unless you know your licence and the rules allow it; the radio's TX BANDS
   and TX INHIBIT settings decide what it will transmit on.
-- `Detail` (location or description, at most 16 ASCII characters) is accepted and checked but NOT yet stored on the radio.
+- `Detail` (location or description, at most 16 ASCII characters) goes into a second file, `OUT.extras`, which the main
+  screen shows beside the channel number in memory mode. Install it with `channel_extras.py PORT build-out/channels.extras`.
 - Required columns: `Name`, `Frequency`; the rest of the CHIRP columns are optional (see the docstring for the rules).
 - Names are at most 12 printable ASCII characters. They are never truncated; a longer name fails the build.
 - A build fails, and writes nothing, if a group overflows, two files claim a slot, or a row cannot be parsed.

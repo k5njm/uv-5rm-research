@@ -685,6 +685,12 @@ where
                 DIM,
             );
         }
+    } else {
+        // the channel's location or description ("Richardson"), beside its number and above the name
+        let detail = app.side_detail_str(i);
+        if !detail.is_empty() {
+            text_right(lcd, detail, &FONT_6X10, baseline, if is_master { FG } else { DIM });
+        }
     }
 }
 

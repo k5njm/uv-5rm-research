@@ -149,6 +149,11 @@ pub struct App<'a> {
     tx_prohibited: bool,
     /// Why the last PTT press was refused, for the notice (`TX_BLOCK_*`).
     tx_block: u8,
+    /// The detail text (location/description) of the channel each side is on, and which channel it was read for
+    /// (`u16::MAX` = none). Read from the channel extras table when the channel changes. `App` lives on the
+    /// main stack, not in `.bss`, so this does not move the app arena.
+    details: [[u8; flash_map::addr::CHAN_DETAIL_LEN]; 2],
+    detail_of: [u16; 2],
     dual_standby: bool,
     dual_hold_ticks: u16,
     tot_ticks: u16,
@@ -351,6 +356,8 @@ impl<'a> App<'a> {
             transmitting: false,
             tx_prohibited: false,
             tx_block: 0,
+            details: [[0; flash_map::addr::CHAN_DETAIL_LEN]; 2],
+            detail_of: [u16::MAX; 2],
             flashlight,
             dual_standby: settings.dual_standby,
             dual_hold_ticks: DUAL_STANDBY_HOLD_TICKS,
@@ -891,6 +898,48 @@ impl<'a> App<'a> {
     }
     pub fn tx_block(&self) -> u8 {
         self.tx_block
+    }
+
+    /// Bring `details` in line with the channel each side is on. Called before the main screen is drawn.
+    pub fn sync_channel_details(&mut self) {
+        use flash_map::addr;
+        for i in 0..2 {
+            let num = if self.sides[i].vfo_chan == ChVfoMode::Channel {
+                self.sides[i].channel_num
+            } else {
+                u16::MAX
+            };
+            if self.detail_of[i] == num {
+                continue;
+            }
+            self.detail_of[i] = num;
+            self.details[i] = [0; addr::CHAN_DETAIL_LEN];
+            if num == u16::MAX {
+                continue;
+            }
+            let mut rec = [0u8; addr::CHAN_EXTRA_REC as usize];
+            self.storage.read_raw(
+                addr::CHAN_EXTRA_ADDR + num as u32 * addr::CHAN_EXTRA_REC,
+                &mut rec,
+            );
+            if rec[addr::CHAN_EXTRA_REC as usize - 1] != addr::CHAN_EXTRA_MARK {
+                continue; // nothing written for this channel
+            }
+            for (k, &b) in rec[..addr::CHAN_DETAIL_LEN].iter().enumerate() {
+                if !(0x20..0x7F).contains(&b) {
+                    break; // padding, or not text
+                }
+                self.details[i][k] = b;
+            }
+        }
+    }
+
+    /// Detail text of the channel side `index` is on; empty in VFO mode or when none was loaded.
+    pub fn side_detail_str(&self, index: usize) -> &str {
+        let d = &self.details[index];
+        let end = d.iter().position(|&b| b == 0).unwrap_or(d.len());
+        // only printable ASCII is ever stored (see `sync_channel_details`)
+        core::str::from_utf8(&d[..end]).unwrap_or("")
     }
 
     pub fn is_key_locked(&self) -> bool {

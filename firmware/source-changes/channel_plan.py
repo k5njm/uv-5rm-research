@@ -3,6 +3,9 @@
   channel_plan.py build CHANNELS_DIR -o OUT.img [--base EXISTING.img] [--group-table group_table.rs]
   channel_plan.py show IMAGE            (any channel image: 0x8000 / 0x7D00 bytes, or a radio_read.py backup of 0x8380)
 
+`build` also writes OUT.extras: the channel extras table (the Detail column: a location or description of up to 16
+characters per channel, which the main screen shows beside the channel number). Install it with channel_extras.py.
+
 Nothing here talks to a radio. Follow-up (preview, then write; UNVERIFIED on real hardware, see channels/README.md):
   restore_backup.py PORT OUT.img --before undo.img            dry run: says how many records differ, writes nothing
   restore_backup.py PORT OUT.img --before undo.img --write    write; undo.img gets the radio's current records first
@@ -50,7 +53,21 @@ import argparse, csv, io, math, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 GROUP_TABLE = os.path.join(HERE, "..", "firmware-source", "src", "app", "group_table.rs")
 SLOT, SLOTS, IMAGE_LEN = 32, 1000, 0x8000
-DETAIL_MAX = 16     # optional Detail column (docs/CHANNEL-GROUPS.md); not written to the image yet
+DETAIL_MAX = 16     # optional Detail column: goes into the channel extras table (OUT.extras), not the channel record
+# Channel extras table, as the core reads it (flash_map.rs CHAN_EXTRA_*): one 20-byte record per slot:
+# 16 bytes of detail text padded with 0xFF, 2 bytes reserved for group tags, 1 reserved, 0xA5 = "this record is set".
+EXTRA_REC, EXTRA_TABLE, EXTRA_MARK = 20, 20480, 0xA5
+
+
+def extras_table(entries):
+    """The extras table for these entries: a record for every placed channel (so a channel without a Detail shows
+    nothing rather than whatever was in the flash before), 0xFF everywhere else."""
+    out = bytearray(b"\xff" * EXTRA_TABLE)
+    for e in entries:
+        rec = e.get("detail", "").encode("ascii").ljust(DETAIL_MAX, b"\xff") + b"\xff\xff\xff" + bytes([EXTRA_MARK])
+        assert len(rec) == EXTRA_REC
+        out[e["slot"] * EXTRA_REC:(e["slot"] + 1) * EXTRA_REC] = rec
+    return bytes(out)
 # [U:DCS_CODES]
 DCS_CODES = ("023 025 026 031 032 036 043 047 051 053 054 065 071 072 073 074 114 115 116 122 125 131 132 134 143 145 152 155 "
              "156 162 165 172 174 205 212 223 225 226 243 244 245 246 251 252 255 261 263 265 266 271 274 306 311 315 325 331 "
@@ -337,7 +354,8 @@ def build(directory, base=None, groups=None):
                 errors.append(f"{where}: slot {slot + 1} is already claimed by {claims[slot]}")
                 continue
             claims[slot] = where
-            entries.append(dict(slot=slot, group=grp[1], record=rec, warns=warns))
+            entries.append(dict(slot=slot, group=grp[1], record=rec, warns=warns,
+                                detail=(row.get("Detail") or "").strip()))
             used += 1
         summary.append((grp[0], used, SLOTS if is_all else len(avail)))
     table = bytearray(base if base is not None else b"\xff" * (SLOT * SLOTS))
@@ -409,6 +427,11 @@ def main(argv=None):
         f.write(table.ljust(IMAGE_LEN, b"\xff"))
     print(f"wrote {a.output} ({IMAGE_LEN:#x} bytes, {len(entries)} channels placed" +
           (f", other slots from {a.base}" if base else ", every other slot empty") + ")")
+    extras = os.path.splitext(a.output)[0] + ".extras"
+    with open(extras, "wb") as f:
+        f.write(extras_table(entries))
+    n = sum(1 for e in entries if e["detail"])
+    print(f"wrote {extras} ({EXTRA_TABLE} bytes: the Detail text of {n} channels; install with channel_extras.py)")
     return 0
 
 

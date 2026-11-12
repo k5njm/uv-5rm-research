@@ -108,6 +108,9 @@ pub fn run_session(
             frame::CMD_SAT_WRITE => {
                 handle_sat_write(app, frame.addr, &frame.data[..frame.len])
             }
+            frame::CMD_EXTRA_WRITE => {
+                handle_extra_write(app, frame.addr, &frame.data[..frame.len])
+            }
             frame::CMD_READ_FLASH_RAW => handle_read_flash_raw(app, frame.addr),
             frame::CMD_END => {
                 send_response(frame::CMD_END, frame.addr, &[]);
@@ -329,25 +332,47 @@ fn handle_app_write(
 }
 
 fn handle_sat_write(app: &mut App<'_>, wire_addr: u16, data: &[u8]) {
+    handle_table_write(app, wire_addr, data, frame::CMD_SAT_WRITE, SAT_TABLE_BASE, SAT_TABLE_SIZE);
+}
+
+fn handle_extra_write(app: &mut App<'_>, wire_addr: u16, data: &[u8]) {
+    handle_table_write(
+        app,
+        wire_addr,
+        data,
+        frame::CMD_EXTRA_WRITE,
+        addr::CHAN_EXTRA_ADDR,
+        addr::CHAN_EXTRA_TABLE,
+    );
+}
+
+/// A whole table in the data region, sent as 512-byte chunks in order: the chunk at offset 0 erases the table first.
+fn handle_table_write(
+    app: &mut App<'_>,
+    wire_addr: u16,
+    data: &[u8],
+    cmd: u8,
+    base: u32,
+    size: u32,
+) {
     let offset = wire_addr as u32;
     let ok = offset.is_multiple_of(frame::SAT_CHUNK)
         && data.len() == frame::SAT_CHUNK as usize
-        && offset + frame::SAT_CHUNK <= SAT_TABLE_SIZE;
+        && offset + frame::SAT_CHUNK <= size;
     if !ok {
         send_error(wire_addr, frame::ERR_BAD_ADDR);
         return;
     }
     if offset == 0 {
         let storage = app.storage_mut();
-        let mut sector = SAT_TABLE_BASE;
-        let end = SAT_TABLE_BASE + SAT_TABLE_SIZE;
-        while sector < end {
+        let mut sector = base;
+        while sector < base + size {
             storage.norflash.erase_sector(sector);
             sector += SECTOR_SIZE;
         }
     }
-    app.storage_mut().write_raw(SAT_TABLE_BASE + offset, data);
-    send_response(frame::CMD_SAT_WRITE, wire_addr, &[]);
+    app.storage_mut().write_raw(base + offset, data);
+    send_response(cmd, wire_addr, &[]);
 }
 
 const FLASH_CHIP_SIZE: u32 = 0x20_0000;

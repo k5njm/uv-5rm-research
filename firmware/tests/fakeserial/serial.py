@@ -181,6 +181,15 @@ class Serial:
             self.chan_writes += 1
             self._persist()
             return self._reply(cmd, addr)
+        if cmd == 0x58:  # channel extras table: 512-byte chunks, the chunk at offset 0 erases the table
+            base, size = 0x1E0000, 20480
+            if addr % 512 or len(data) != 512 or addr + 512 > size:
+                return self._reply(ERR, addr, b"\x02")
+            if addr == 0:
+                self.nor[base:base + size] = b"\xff" * size
+            self.nor[base + addr:base + addr + 512] = data
+            self._persist()
+            return self._reply(cmd, addr)
         if cmd == READ_LOGO:
             self._reply(cmd, addr, bytes(self.logo[addr:addr + 512]))
         elif cmd == WRITE_LOGO:

@@ -5,7 +5,7 @@
 Ground-truth bytes are the first slots of the factory image as CHIRP decoded them from a real radio (see AGENTS/README notes).
 Nothing here opens a real port; the end-to-end test uses firmware/tests/fakeserial.
 """
-import importlib.util, os, subprocess, sys, tempfile, unittest
+import importlib.util, os, shutil, subprocess, sys, tempfile, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -327,6 +327,39 @@ class EndToEnd(Box):
         self.assertEqual(now[0x8000:], before[0x8000:])                   # VFO, contacts, settings, calibration untouched
         self.assertEqual(rb(os.path.join(self.box, "undo.img"))[:SLOT * SLOTS], before[:SLOT * SLOTS])
 
+
+
+class Extras(Build):
+    """The Detail column -> the extras table -> channel_extras.py into the FAKE radio."""
+
+    def test_table_layout_and_install(self):
+        self.put("repeaters.csv", [dict(row("K5RWK", "147.12"), Detail="Richardson"), row("NODETAIL", "146.94")])
+        out = os.path.join(self.dir, "out.img")
+        p = self.run_cli("build", self.dir, "-o", out)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        table = rb(os.path.join(self.dir, "out.extras"))
+        self.assertEqual(len(table), 20480)
+        rec = table[233 * 20:234 * 20]                       # printed channel 234
+        self.assertEqual(rec, b"Richardson" + b"\xff" * 9 + b"\xa5")
+        self.assertEqual(table[234 * 20:235 * 20], b"\xff" * 19 + b"\xa5")   # placed, no detail: marked, empty
+        self.assertEqual(table[0:20], b"\xff" * 20)                          # not placed: untouched
+        box = tempfile.mkdtemp(prefix="extrabox-")
+        self.addCleanup(shutil.rmtree, box, ignore_errors=True)
+        radio = os.path.join(box, "radio")
+        os.mkdir(radio)
+        for f in ("cps_tool.py", "channel_extras.py"):
+            shutil.copy(os.path.join(TOOLS, f), box)
+        shutil.copy(os.path.join(HERE, "fakeserial", "serial.py"), box)
+        run = lambda *a: subprocess.run([sys.executable, os.path.join(box, "channel_extras.py"), *a], cwd=box,
+                                        env=dict(os.environ, FAKE_RADIO_DIR=radio), capture_output=True, text=True, timeout=120)
+        p = run("FAKE", os.path.join(self.dir, "out.extras"), "--before", os.path.join(box, "old.extras"))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("written and verified", p.stdout)
+        self.assertEqual(rb(os.path.join(box, "old.extras")), b"\xff" * 20480)
+        p = run("FAKE", os.path.join(self.dir, "out.extras"))
+        self.assertIn("already has this table", p.stdout)
+        wb(os.path.join(box, "short.extras"), b"\0" * 10)
+        self.assertNotEqual(run("FAKE", os.path.join(box, "short.extras")).returncode, 0)
 
 if __name__ == "__main__":
     unittest.main()

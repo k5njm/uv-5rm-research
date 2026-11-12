@@ -106,6 +106,9 @@ pub fn draw(
             modes::draw_range(lcd, app, &mut state.range)
         }
         app::Mode::External(_) => app::overlay::draw(lcd, app, syst),
-        _ => standby::draw_standby(lcd, app, &mut state.standby),
+        _ => {
+            app.sync_channel_details();
+            standby::draw_standby(lcd, app, &mut state.standby)
+        }
     };
 }
