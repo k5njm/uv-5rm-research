@@ -48,6 +48,10 @@ const _: () = settings::assert_seg_features();
 #[path = "../../firmware-source/src/fmtlite.rs"]
 mod fmtlite;
 use fmtlite::Sink;
+/// The core's fault screen text and decision logic (pure); its unit tests run here.
+#[path = "../../firmware-source/src/fault_text.rs"]
+#[allow(dead_code)]
+mod fault_text;
 mod scenario;
 mod bootcard;
 
