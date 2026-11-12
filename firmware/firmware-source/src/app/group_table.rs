@@ -13,8 +13,8 @@ pub(crate) struct ChanMode {
 pub(crate) const ALL: &[(u16, u16)] = &[(1, 1000)];
 
 /// In order of use to a ham. The index is the group's number: BAND then that digit selects it (0 = ALL; groups past 9
-/// have no digit). Slot ranges are the upstream channel plan's, plus 351-380 and 381-410 for the two new groups.
-pub(crate) const MODES: [ChanMode; 15] = [
+/// have no digit). Slot ranges are the upstream channel plan's, plus 351-380, 381-410 and 411-420 for the new groups.
+pub(crate) const MODES: [ChanMode; 16] = [
     ChanMode { name: "ALL", short: "ALL", ranges: ALL },
     ChanMode { name: "REPEATERS", short: "RPT", ranges: &[(234, 304), (327, 344)] },
     ChanMode { name: "SIMPLEX", short: "SMPLX", ranges: &[(351, 380)] },
@@ -22,6 +22,7 @@ pub(crate) const MODES: [ChanMode; 15] = [
     ChanMode { name: "FRS", short: "FRS", ranges: &[(305, 326)] },
     ChanMode { name: "MURS", short: "MURS", ranges: &[(345, 349)] },
     ChanMode { name: "SATELLITES", short: "SAT", ranges: &[(381, 410)] },
+    ChanMode { name: "SONDE", short: "SONDE", ranges: &[(411, 420)] },
     ChanMode { name: "WEATHER", short: "WX", ranges: &[(1, 7)] },
     ChanMode { name: "AIR TRAFFIC", short: "AIR", ranges: &[(168, 233)] },
     ChanMode { name: "RAILROAD", short: "RAIL", ranges: &[(158, 167)] },
@@ -105,6 +106,20 @@ pub(crate) fn band_name(freq_hz: u32) -> &'static str {
     ""
 }
 
+/// What the receiver covers (Hz, inclusive), from the radio's published ranges: the air band (AM), VHF, 1.25 m and
+/// UHF. The synthesizer tunes far wider (16-560 and 740-1120 MHz), but outside these the front end hears nothing.
+/// FM broadcast (76-108 MHz) is a separate tuner chip, reached through the FM app, not the VFO.
+pub(crate) const RX_BANDS: [(u32, u32); 3] = [
+    (108_000_000, 174_000_000),
+    (200_000_000, 260_000_000),
+    (350_000_000, 520_000_000),
+];
+pub(crate) const FM_BROADCAST: (u32, u32) = (76_000_000, 108_000_000);
+
+pub(crate) fn rx_allowed(freq_hz: u32) -> bool {
+    RX_BANDS.iter().any(|&(lo, hi)| (lo..=hi).contains(&freq_hz))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,7 +132,9 @@ mod tests {
         assert_eq!(group_pos(1, 326), Some(72)); // printed 327, first of the second range
         assert_eq!(group_pos(1, 0), None);
         assert_eq!(group_pos(0, 233), Some(234)); // ALL: the printed number
-        assert_eq!(group_pos(7, 0), Some(1)); // WEATHER
+        assert_eq!(MODES[8].name, "WEATHER");
+        assert_eq!(group_pos(8, 0), Some(1)); // WEATHER
+        assert_eq!(group_pos(7, 410), Some(1)); // SONDE starts at printed 411
         assert_eq!(group_pos(2, 350), Some(1)); // SIMPLEX starts at printed 351
         assert_eq!(group_pos(6, 380), Some(1)); // SATELLITES starts at printed 381
     }
@@ -143,6 +160,16 @@ mod tests {
         assert_eq!(scan_band(300_250_000), (300_000_000, 301_000_000)); // no listed band: the megahertz it is in
         assert_eq!(band_name(146_520_000), "2M");
         assert_eq!(band_name(300_250_000), "");
+    }
+
+    #[test]
+    fn typed_vfo_frequencies_are_limited_to_what_the_receiver_covers() {
+        for ok in [118_000_000, 146_520_000, 223_500_000, 404_800_000, 446_000_000, 520_000_000] {
+            assert!(rx_allowed(ok), "{ok}");
+        }
+        for no in [16_000_000, 50_000_000, 100_100_000, 107_999_999, 300_000_000, 560_000_000, 900_000_000] {
+            assert!(!rx_allowed(no), "{no}");
+        }
     }
 }
 

@@ -132,7 +132,10 @@ fn select(app: &mut App, syst: &mut SYST, index: usize, then_scan: bool) {
             side_ops::load_channel_num(app, num);
             app.save_channel_state();
         }
-        None => app.no_channels_ticks = NO_CHANNELS_HOLD_TICKS,
+        None => {
+            app.notice_kind = super::NOTICE_NO_CHANNELS;
+            app.no_channels_ticks = NO_CHANNELS_HOLD_TICKS;
+        }
     }
     app.sync_watching_to_master(syst);
     play_mode_cue(app, syst);

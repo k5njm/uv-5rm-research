@@ -1,3 +1,8 @@
+/// Amber notices on the main screen (`App::notice_kind`).
+pub(crate) const NOTICE_NO_CHANNELS: u8 = 0;
+pub(crate) const NOTICE_OUT_OF_RANGE: u8 = 1;
+pub(crate) const NOTICE_FM_BROADCAST: u8 = 2;
+
 /// Reasons a PTT press is refused (`App::tx_block`).
 pub(crate) const TX_BLOCK_INHIBIT: u8 = 1;
 pub(crate) const TX_BLOCK_RX_ONLY: u8 = 2;
@@ -160,6 +165,8 @@ pub struct App<'a> {
     /// The running app was opened from the APPS list (EXIT goes back to it) and not by a key (EXIT goes to the
     /// main screen).
     app_from_menu: bool,
+    /// What the amber notice on the main screen says while `no_channels_ticks` runs (`NOTICE_*`).
+    notice_kind: u8,
     dual_standby: bool,
     dual_hold_ticks: u16,
     tot_ticks: u16,
@@ -366,6 +373,7 @@ impl<'a> App<'a> {
             details: [[0; flash_map::addr::CHAN_DETAIL_LEN]; 2],
             detail_of: [u16::MAX; 2],
             app_from_menu: false,
+            notice_kind: 0,
             flashlight,
             dual_standby: settings.dual_standby,
             dual_hold_ticks: DUAL_STANDBY_HOLD_TICKS,
@@ -842,6 +850,9 @@ impl<'a> App<'a> {
 
     pub fn no_channels_notice(&self) -> bool {
         self.no_channels_ticks > 0
+    }
+    pub fn notice_kind(&self) -> u8 {
+        self.notice_kind
     }
 
     pub fn poll_blink(&mut self) {

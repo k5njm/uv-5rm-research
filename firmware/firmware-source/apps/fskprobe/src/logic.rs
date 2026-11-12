@@ -53,9 +53,20 @@ const PEEK: [u8; 14] = [
 ];
 
 /// Frequencies in Hz: APRS, 2 m calling, 70 cm calling, Horus 70 cm.
-const FREQS: [u32; 4] = [144_390_000, 146_520_000, 446_000_000, 434_714_000];
+/// 404.800 is the Fort Worth NWS radiosonde frequency (the owner's local launch site); the others are test signals.
+const FREQS: [u32; 5] = [404_800_000, 144_390_000, 146_520_000, 446_000_000, 434_714_000];
 const BAUDS: [u16; 4] = [450, 1200, 2400, 4800];
-const SYNCS: [u16; 3] = [0x7E7E, 0x2DD4, 0xAAAA];
+/// Sync word presets, as the two 16-bit halves written to the chip (keys 5-9). The last two are the first four bytes
+/// of the RS41 radiosonde frame header: on the air the bits are 00001000 01101101 01010011 10001000, which is 0x086D
+/// 0x5388 if the chip shifts each byte most-significant bit first and 0x10B6 0xCA11 if least-significant first.
+/// Which one the chip uses is one of the things this app is for.
+const SYNCS: [(u16, u16); 5] = [
+    (0x7E7E, 0x7E7E),
+    (0x2DD4, 0x2DD4),
+    (0xAAAA, 0xAAAA),
+    (0x086D, 0x5388),
+    (0x10B6, 0xCA11),
+];
 
 /// REG_72 (TONE2/FSK frequency control word) = baud * 10.32444 for a 13/26 MHz crystal, * 10.48576 for 12.8/19.2/25.6/38.4 MHz
 /// (datasheet). TEXT writes 4646 for 450 baud, which is exactly 450 * 10.32444, so a 13/26 MHz crystal is assumed.
@@ -109,9 +120,9 @@ pub fn entry(api: &Api, ev: AppEvent) -> AppResult {
 }
 
 const STATE_DEFAULT: State = State {
-    freq: 0,
-    baud: 1,
-    sync: 0,
+    freq: 0, // radiosonde frequency
+    baud: 3, // 4800: the RS41's speed
+    sync: 3, // RS41 header, most-significant bit first
     running: false,
     peek: 0,
     syncs: 0,
@@ -142,8 +153,8 @@ fn modem_on(api: &Api, s: &mut State) {
     w(api, R_GAIN, (1 << 7) | 96);
     w(api, R_BAUD, baud_reg(BAUDS[s.baud]));
     w(api, R_FSK, 0x0301);
-    w(api, R_SYNC1, SYNCS[s.sync]);
-    w(api, R_SYNC2, SYNCS[s.sync]);
+    w(api, R_SYNC1, SYNCS[s.sync].0);
+    w(api, R_SYNC2, SYNCS[s.sync].1);
     w(api, R_CRC, 0x5625);
     w(api, R_SIZE, 64u16 << 8);
     w(api, R_THRESH, (1 << 3) | 1);
@@ -200,11 +211,11 @@ fn key(api: &Api, id: u8, kind: u8) -> AppResult {
                 w(api, R_BAUD, baud_reg(BAUDS[s.baud]));
             }
         }
-        5..=7 => {
+        5..=9 => {
             s.sync = (id - 5) as usize;
             if s.running {
-                w(api, R_SYNC1, SYNCS[s.sync]);
-                w(api, R_SYNC2, SYNCS[s.sync]);
+                w(api, R_SYNC1, SYNCS[s.sync].0);
+                w(api, R_SYNC2, SYNCS[s.sync].1);
             }
         }
         _ => return AppResult::Continue,
@@ -267,7 +278,7 @@ fn draw(api: &Api, s: &mut State) {
 
     n = 0;
     n = put(&mut b, n, b"SYNC ");
-    n = put_hex(&mut b, n, SYNCS[s.sync]);
+    n = put_hex(&mut b, n, SYNCS[s.sync].0);
     n = put(&mut b, n, b" BAUDREG ");
     n = put_hex(&mut b, n, baud_reg(BAUDS[s.baud]));
     line(api, 4, &b[..n], WHITE);
@@ -303,7 +314,7 @@ fn draw(api: &Api, s: &mut State) {
     n = put_hex(&mut b, n, (api.rf_reg_read)(reg));
     line(api, 8, &b[..n], WHITE);
 
-    line(api, 9, b"1-4 baud  5-7 sync", GRAY);
+    line(api, 9, b"1-4 baud  5-9 sync", GRAY);
     line(api, 10, b"MENU on/off  * freq", GRAY);
     line(api, 11, b"UP/DN reg  EXIT leave", GRAY);
 }

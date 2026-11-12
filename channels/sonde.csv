@@ -1,0 +1,2 @@
+Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,Mode,TStep,Skip,Power,Detail,Comment
+1,FWD SONDE,404.800000,off,0.000000,,88.5,88.5,023,NN,NFM,5.00,S,,NWS Fort Worth,"Radiosonde from the NWS Fort Worth upper-air site: RS41-class, 4800 baud FSK (not voice). The owner measured 404.800625 MHz; the nominal channel is 404.800. Receive only"

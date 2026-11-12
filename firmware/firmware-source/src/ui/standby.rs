@@ -283,7 +283,11 @@ where
         draw_overlay(lcd, why, ALERT);
     } else if app.no_channels_notice() {
         // Name the group: with a group other than ALL selected, channels outside its number range are skipped.
-        if app.chan_mode_index() == 0 {
+        if app.notice_kind() == app::NOTICE_OUT_OF_RANGE {
+            draw_overlay(lcd, "OUT OF RX RANGE", AMBER);
+        } else if app.notice_kind() == app::NOTICE_FM_BROADCAST {
+            draw_overlay(lcd, "BROADCAST: USE FM APP", AMBER);
+        } else if app.chan_mode_index() == 0 {
             draw_overlay(lcd, "NO CHANNELS", AMBER);
         } else {
             let mut label: TextBuf<16> = TextBuf::new();

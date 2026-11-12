@@ -149,7 +149,8 @@ class Groups(unittest.TestCase):
         self.assertEqual(g["FED & GOV"][1], "FED")
         self.assertEqual(g["SIMPLEX"][2], [(351, 380)])
         self.assertEqual(g["SATELLITES"][1:], ("SAT", [(381, 410)]))
-        self.assertEqual(len(g), 15)
+        self.assertEqual(g["SONDE"][2], [(411, 420)])
+        self.assertEqual(len(g), 16)
 
     def test_unparseable_table_fails_clearly(self):
         with tempfile.TemporaryDirectory() as d:

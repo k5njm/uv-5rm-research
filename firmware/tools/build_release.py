@@ -11,8 +11,11 @@ import json, os, subprocess, sys
 from provenance import PACKAGES, SRC
 
 LAYOUT = ["settings.app", "chanmgr.app", "searchqt.app", "spectrum.app", "bandsweep.app",
-          "foxhunt.app", "rptfinder.app", "text.app", "fm.app"]          # launcher slots 1-9, as setup_radio.py
-EXTRAS = {"hamtools.app": ("HAM TOOLS", ["apps/hamtools"]), "fskprobe.app": ("FSK PROBE", ["apps/fskprobe"])}
+          "foxhunt.app", "rptfinder.app", "fskprobe.app", "fm.app"]      # launcher slots 1-9
+# Slot 8 was TEXT (which transmits acknowledgements on its own and needs a second radio); it is FSK PROBE while the
+# radio's modem is being characterised (AUDIT 39). TEXT is still built, as an extra.
+EXTRAS = {"hamtools.app": ("HAM TOOLS", ["apps/hamtools"]), "text.app": PACKAGES["text.app"]}
+PACKAGES = dict(PACKAGES, **{"fskprobe.app": ("FSK PROBE", ["apps/fskprobe"])})
 
 
 def main():
