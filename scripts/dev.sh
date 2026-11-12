@@ -45,13 +45,18 @@ ensure_image() {
   [ "$have" = "$(stamp | tr -d '\n')" ] || { echo "dev image $IMAGE:$ARCH_TAG is missing or out of date; rebuilding" >&2; image; }
 }
 
-# run CMD... inside the container; caches in named volumes, per architecture
+# A git worktree gets its own build cache: two checkouts mounted at /work share paths, so a shared cargo target
+# directory goes stale (and two builds at once corrupt it). CACHE_TAG overrides the name.
+if [ -z "${CACHE_TAG:-}" ] && [ -f "$ROOT/.git" ]; then CACHE_TAG="wt$(printf %s "$ROOT" | shasum | cut -c1-8)"; fi
+CACHE_VOL="uv5rm-target-$ARCH_TAG${CACHE_TAG:+-$CACHE_TAG}"
+
+# run CMD... inside the container; caches in named volumes, per architecture (and per worktree)
 run() {
   ensure_image
   docker run --rm $(plat) $([ -t 1 ] && echo -t) \
     -v "$ROOT":/work \
     -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry \
-    -v "uv5rm-target-$ARCH_TAG":/cache \
+    -v "$CACHE_VOL":/cache \
     -e OUT=/work/build-out/frames \
     "$IMAGE:$ARCH_TAG" bash -c "set -euo pipefail; $*"
 }
@@ -155,7 +160,7 @@ cmd_repro() {
 
 case "${1:-}" in
   image) image ;; shell) ensure_image
-         docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "uv5rm-target-$ARCH_TAG":/cache "$IMAGE:$ARCH_TAG" bash ;;
+         docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "$CACHE_VOL":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
   manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; size-report) cmd_size_report ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; bf) cmd_bf ;; release) cmd_release ;; bundle) cmd_bundle ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
   personalize) [ -f "$ROOT/.env" ] || { echo "no .env: copy .env.sample to .env and fill it in" >&2; exit 1; }
