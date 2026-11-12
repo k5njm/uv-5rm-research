@@ -140,7 +140,7 @@ and the bottom strip reads `MENU use     EXIT back`.
 |---|---|
 | `UP` / `DOWN` | Move through the groups. |
 | `MENU` | Use the highlighted group. The radio moves to the current channel if it is in the group, otherwise to the first stored channel of the group; if the group has none, the `NO CH IN` notice appears (below). |
-| Hold `MENU` | Use the group and start scanning it at once. |
+| Hold `MENU` | Does nothing extra: the keypad sends no long press for `MENU`, so holding it is the same as pressing it (use the group). The scan-at-once action exists in the firmware but cannot be reached. |
 | `EXIT` or `BAND` | Close the menu, no change. |
 
 The chosen group is remembered when the radio is switched off.

@@ -11,6 +11,9 @@ from dataclasses import dataclass
 KEYS = {"star": 10, "pound": 11, "menu": 12, "exit": 13, "up": 14, "down": 15, "ab": 17,
         "side1": 19, "side2": 20,
         **{str(d): d for d in range(10)}}
+# device/keypad.rs `supports_long`: the only keys that ever send a Long event. Holding any other key just sends a
+# Single when it is released, so a `hold` step on it would not do what the simulator's author meant (MENU is not here).
+LONG_KEYS = {"up", "down", "exit", "star", "pound", "0", "side1", "side2"}
 SIM_ONLY = {"coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore", "txshot"}
 # The injector has no wire to the side keys, and a rig cannot capture the screen mid-transmission.
 SIDE_KEYS = ("side1", "side2")
@@ -32,11 +35,15 @@ def parse(text):
         op, args = t[0], t[1:]
         if op in ("key", "hold") and (len(args) != 1 or args[0] not in KEYS):
             raise ValueError(f"line {n}: bad key step {raw.strip()!r}")
+        if op == "hold" and args[0] not in LONG_KEYS:
+            raise ValueError(f"line {n}: the keypad never sends a long press for {args[0]!r}: {raw.strip()!r}")
+        if op == "repeat" and (len(args) != 2 or args[0] not in ("up", "down") or not args[1].isdigit() or not 1 <= int(args[1]) <= 30):
+            raise ValueError(f"line {n}: repeat needs up|down and a count 1-30 (the keypad repeats only those keys): {raw.strip()!r}")
         if op == "wait" and (len(args) != 1 or float(args[0]) < 0):
             raise ValueError(f"line {n}: wait needs seconds")
         if op == "shot" and len(args) != 1:
             raise ValueError(f"line {n}: shot needs a name")
-        if op not in ("app", "key", "hold", "wait", "shot", "expect", "allow", "coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore", "txshot"):
+        if op not in ("app", "key", "hold", "repeat", "wait", "shot", "expect", "allow", "coords", "step", "master", "signal", "chan", "air", "handoff", "group", "fmstation", "fmtable", "fmcore", "txshot"):
             raise ValueError(f"line {n}: unknown step {op!r}")
         steps.append(Step(n, op, args))
     return steps

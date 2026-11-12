@@ -18,6 +18,14 @@ import scenario as sc
 import vision
 
 
+# device/keypad.rs: a key held for LONG_PRESS_TICKS (10,000 ticks of 100 us = 1000 ms) sends a Long event, and the
+# Up/Down keys start repeating at REPEAT_FIRE_TICKS (1500 ms). A `hold` step must press longer than the first and
+# shorter than the second: the first version pressed for 900 ms, which the radio reads as a Single (the long-press
+# action never fires). test_hil.py checks these numbers against the firmware source.
+HOLD_MS = 1300
+KEY_MS = 120
+
+
 def grab_webcam(device, out):
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "v4l2", "-i", device,
                     "-frames:v", "5", "-update", "1", out], check=True, timeout=30)  # skip warm-up frames
@@ -33,7 +41,9 @@ def run(steps, golden_dir, name, injector, get_frame, corners, threshold, out_di
         if s in skipped:
             continue
         if s.op in ("key", "hold"):
-            injector.press(s.args[0], 120 if s.op == "key" else 900)
+            injector.press(s.args[0], KEY_MS if s.op == "key" else HOLD_MS)
+        elif s.op == "repeat":        # Long at 1.0 s, then a Repeat every 100 ms from 1.5 s
+            injector.press(s.args[0], 1500 + 100 * int(s.args[1]) + 50)
         elif s.op == "wait":
             sleep(float(s.args[0]))
         elif s.op == "shot":

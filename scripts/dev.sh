@@ -18,6 +18,7 @@
 #   size-report  where the core firmware's bytes go: by module, by feature, ABI wrappers and who uses them
 #   exec "CMD"   run any command in the container (cwd /work)
 #   gate         offline release gate (verify_release.py)
+#   tree         fail if a source/test directory holds an ignored or untracked file (a build that needs one fails on a clean clone)
 #   tools-test   host tool tests against the fake radio / bootloader (firmware/tests)
 #   personalize  boot screen from .env (callsign, name, radio, this build): build-out/personal/boot-logo.rgb565 and .png
 #   channels     build channels/*.csv into build-out/channels.img (channel_plan.py; then restore_backup.py, see channels/README.md)
@@ -114,7 +115,23 @@ cmd_web_test()  { cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 fir
 cmd_size_report() { cmd_firmware >/dev/null; for t in by_module by_feature api_usage; do echo "=== $t"; run "python3 firmware/tools/size/$t.py"; done; }
 cmd_gate()      { run "python3 -I firmware/tools/verify_release.py > /tmp/gate.log || { cat /tmp/gate.log; exit 1; }; tail -1 /tmp/gate.log"; }
 
+# A build or test that passes here only because of a file git does not carry fails on a clean clone: the FM station fixture
+# (firmware/tests/fixtures/fm-stations.bin) was ignored by `*.bin`, unit tests passed locally and could not compile for anyone
+# else (docs/TEST-DOUBLES.md). This lists ignored and untracked files under the source, test and tool trees, apart from
+# build output and caches, and fails if there are any. TREE_ALLOW=1 prints them and goes on (work in progress).
+cmd_tree() {
+  local bad
+  bad="$( { git -C "$ROOT" ls-files --others --ignored --exclude-standard; git -C "$ROOT" ls-files --others --exclude-standard; } 2>/dev/null \
+    | grep -E '^(firmware|hil|scripts|web|channels|dev|docs)/' \
+    | grep -vE '(^|/)(__pycache__|target|build-out|node_modules)(/|$)|\.py[co]$' | sort -u || true)"
+  if [ -n "$bad" ]; then
+    printf 'ignored or untracked files in source trees (a clean clone will not have them):\n%s\n' "$bad" >&2
+    [ "${TREE_ALLOW:-}" = 1 ] || return 1
+  fi
+}
+
 cmd_check() {
+  step "no ignored or untracked source files"; cmd_tree
   step "release gate";           cmd_gate
   step "app unit tests";         cmd_unit
   step "scenarios + styles";     cmd_scenarios
@@ -162,7 +179,7 @@ case "${1:-}" in
   image) image ;; shell) ensure_image
          docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "$CACHE_VOL":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
-  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; size-report) cmd_size_report ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; bf) cmd_bf ;; release) cmd_release ;; bundle) cmd_bundle ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
+  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; size-report) cmd_size_report ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tree) cmd_tree ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; bf) cmd_bf ;; release) cmd_release ;; bundle) cmd_bundle ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
   personalize) [ -f "$ROOT/.env" ] || { echo "no .env: copy .env.sample to .env and fill it in" >&2; exit 1; }
     ver="$(git -C "$ROOT" rev-parse --short HEAD)$(git -C "$ROOT" diff --quiet HEAD -- firmware && echo || echo +)"
     run "mkdir -p build-out/personal && cd $SIMDIR && CARGO_TARGET_DIR=/cache/sim cargo run --release -q -- bootcard /work/.env /work/build-out/personal/boot-logo $ver $(date +%F)" ;;

@@ -21,8 +21,10 @@
 //!   fmtable bad         a table whose header is damaged: the FM app must ignore it
 //!   fmcore DECI...      the core's bare FM station list (what the FM app shows when there is no table)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
-//!   key K               single press. K = 0-9 star pound menu exit up down ab side1 side2
-//!   hold K              long press
+//!   key K               single press (Press, Single, Release). K = 0-9 star pound menu exit up down ab side1 side2
+//!   hold K              long press: Press, Long, Release as the keypad sends them. Only up down exit star pound 0 side1 side2 have one
+//!                       (device/keypad.rs); any other key is an error here, because the radio would see a plain press
+//!   repeat K N          up or down held past 1.5 s: Press, Long, N Repeat events, Release
 //!   step MS             radio time advanced per tick by `wait` (default 5; larger = faster)
 //!   wait SECS           run ticks + draws for SECS of radio time
 //!   shot NAME           save NAME.png and compare with the golden of the same name
@@ -423,10 +425,10 @@ impl Run<'_> {
                 (Ok(g), Ok(a)) => unsafe { HANDOFF = vec![0xA5, g, a] }, // start a later settings segment as Chain would
                 _ => self.check(false, "handoff needs GROUP ACTION numbers"),
             },
-            ["coords", "none"] => { unsafe { COORDS = None }; self.redraw() }
+            ["coords", "none"] => { set_coords(None); self.redraw() }
             ["coords", la, lo] => match (la.parse::<f64>(), lo.parse::<f64>()) {
                 (Ok(a), Ok(o)) => {
-                    unsafe { COORDS = Some(((a * 1e5).round() as i32, (o * 1e5).round() as i32)) };
+                    set_coords(Some(((a * 1e5).round() as i32, (o * 1e5).round() as i32)));
                     self.redraw();
                 }
                 _ => self.check(false, "coords needs two decimal degrees"),
@@ -435,6 +437,10 @@ impl Run<'_> {
                 let (Some(app), Some(id)) = (self.app, key_id(k)) else {
                     return self.check(false, &format!("bad key step `{}`", t.join(" ")));
                 };
+                if t[0] == "hold" && !keypad_long(id) {
+                    // device/keypad.rs: this key never sends a Long event, so the radio would read the hold as a plain press
+                    return self.check(false, &format!("the keypad sends no long press for `{k}`: `{}`", t.join(" ")));
+                }
                 // The key runs on a helper thread: a factory reset never returns (it reboots the radio), so the
                 // simulated call parks its thread and this one carries on, having seen the call.
                 let before = crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst);
@@ -457,6 +463,15 @@ impl Run<'_> {
                         _ => self.check(false, &format!("txshot {name}: the transmitter was never keyed")),
                     }
                 }
+            }
+            ["repeat", k, n] => {
+                let (Some(app), Some(id), Ok(n)) = (self.app, key_id(k), n.parse::<u32>()) else {
+                    return self.check(false, &format!("bad repeat step `{}`", t.join(" ")));
+                };
+                if !keypad_repeat(id) {
+                    return self.check(false, &format!("the keypad repeats only up and down, not `{k}`"));
+                }
+                self.last_exit = hold_repeat(app, id, n);
             }
             ["step", ms] => self.step_ms = ms.parse().unwrap_or(5).max(1),
             ["wait", s] => match s.parse::<f64>() {

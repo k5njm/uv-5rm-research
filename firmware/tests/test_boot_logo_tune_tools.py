@@ -24,6 +24,14 @@ def rb(path):
         return f.read()
 
 
+def fake_serial():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("fake_radio_serial", os.path.join(HERE, "fakeserial", "serial.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def rgb565_le(r, g, b):
     v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
     return struct.pack("<H", v)
@@ -39,7 +47,9 @@ class Sandbox(unittest.TestCase):
         shutil.copy(os.path.join(HERE, "fakeserial", "serial.py"), self.box)
         self.logo_a = bytes((i * 7) & 0xFF for i in range(LOGO))
         wb(os.path.join(self.radio, "logo.bin"), self.logo_a)
-        self.settings = bytes((i * 3 + 1) & 0xFF for i in range(SET_LEN))
+        # A record the radio would store as it is: the firmware clamps every field (Settings::from_bytes), so an
+        # arbitrary byte pattern would not read back unchanged (it did in the older fake: AUDIT 37 family).
+        self.settings = fake_serial().normalize_settings(bytes((i * 3 + 1) & 0xFF for i in range(SET_LEN)))
         wb(os.path.join(self.radio, "settings.bin"), self.settings)
 
     def tearDown(self):

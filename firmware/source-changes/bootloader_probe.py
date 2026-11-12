@@ -1,11 +1,27 @@
 """Check that the bootloader answers. Sends only the HANDSHAKE frame; there is no write path here.
 
 Frame layout and CRC match tools/flash.py from bf-5rh-firmware-open.
+
+  bootloader_probe.py PORT [--attempts N] [--timeout SECONDS] [--no-idle]
+
+--no-idle skips the one-second listen before the first send; defaults: 5 attempts of 2 s each.
+Prints "BOOTLOADER ANSWERED", "BOOTLOADER REFUSED THE HANDSHAKE" or "NO BOOTLOADER RESPONSE".
 """
 import sys, time
 import serial
 
-PORT = sys.argv[1]
+_a = sys.argv[1:]
+def _opt(flag, default):
+    if flag in _a:
+        i = _a.index(flag)
+        v = _a[i + 1]
+        del _a[i:i + 2]
+        return type(default)(v)
+    return default
+ATTEMPTS, TIMEOUT = _opt("--attempts", 5), _opt("--timeout", 2.0)
+IDLE = "--no-idle" not in _a
+_a = [x for x in _a if x != "--no-idle"]
+PORT = _a[0]
 CMD_HANDSHAKE, ACK = 0x01, 0x06
 
 
@@ -30,17 +46,17 @@ s.dtr = True
 s.rts = True
 try:
     idle = bytearray()
-    end = time.monotonic() + 1.0
+    end = time.monotonic() + (1.0 if IDLE else 0)
     while time.monotonic() < end:
         idle += s.read(64)
     print("bytes heard before sending anything:", idle[:32].hex() or "(none)")
 
     reply = b""
-    for attempt in range(1, 6):
+    for attempt in range(1, ATTEMPTS + 1):
         s.reset_input_buffer()
         s.write(frame(CMD_HANDSHAKE, 0, b"BOOTLOADER"))
         buf = bytearray()
-        end = time.monotonic() + 2.0
+        end = time.monotonic() + TIMEOUT
         while time.monotonic() < end and len(buf) < 32:
             buf += s.read(32)
             if buf and buf[0] == 0xAA and len(buf) >= 8:
