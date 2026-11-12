@@ -63,6 +63,7 @@ jobs:
         working-directory: firmware
         run: |
           mkdir -p /tmp/out
+          export PATH=/tmp/shim:$PATH   # rust-nm, for build_core.sh's check of the app arena address
           CARGO_TARGET_DIR=/tmp/t/fw bash tools/build_core.sh small /tmp/out/fw-default.bin
           CARGO_TARGET_DIR=/tmp/t/fwbk bash tools/build_core.sh small /tmp/out/fw-bk4819.bin bk4819
           sha256sum /tmp/out/*.bin | tee -a "$GITHUB_STEP_SUMMARY"

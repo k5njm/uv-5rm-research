@@ -24,7 +24,9 @@ tail -1 "$log"
 # boots and looks fine, then hangs the radio when any app is opened (seen on hardware: AUDIT 31).
 elf="$dir/thumbv7em-none-eabi/release/bf5rh-fw"
 want="$(sed -n 's/^pub const ARENA_ADDR: usize = 0x\([0-9A-Fa-f_]*\);.*/\1/p' firmware-source/abi/src/lib.rs | tr -d _ | tr 'A-F' 'a-f')"
-got="$(rust-nm "$elf" | awk '/overlay5ARENA$/ {print $1}')"
+nm="$(command -v rust-nm || command -v llvm-nm || ls /usr/bin/llvm-nm-* 2>/dev/null | head -1 || true)"
+[ -n "$nm" ] || { echo "no rust-nm or llvm-nm found: cannot check where the app arena is" >&2; exit 1; }
+got="$("$nm" "$elf" | awk '/overlay5ARENA$/ {print $1}')"
 [ -n "$want" ] && [ "$got" = "$want" ] || { echo "ARENA is at 0x$got but apps are linked for 0x$want (abi ARENA_ADDR)" >&2; exit 1; }
 echo "arena at 0x$got (matches abi ARENA_ADDR)"
 python3 -I source-changes/elf2bin.py "$dir/thumbv7em-none-eabi/release/bf5rh-fw" "$out" | tail -2
