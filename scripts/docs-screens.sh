@@ -24,6 +24,8 @@ FRAMES=(
   "chanmgr_edit/editor                       chanmgr-channel-editor"
   "chanmgr_name_stock_blank/typed_k5r        chanmgr-naming"
   "chanmgr_save_notice/saved_notice          chanmgr-saved"
+  "chanmgr_delete_guard/delete_armed         chanmgr-delete-armed"
+  "chanmgr_discard/discard_prompt            chanmgr-discard"
   # SETTINGS
   "settings_menu_groups/groups               settings-groups"
   "settings_menu_groups/autolk_editing       settings-editing"

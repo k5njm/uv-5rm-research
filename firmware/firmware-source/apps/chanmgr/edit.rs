@@ -283,6 +283,8 @@ enum Field {
     AniCall,
     Name,
     Save,
+    /// a blank row between SAVE and DELETE: never selected
+    Gap,
     Delete,
 }
 
@@ -301,13 +303,17 @@ const BASE_FIELDS: [Field; 12] = [
     Field::Save,
 ];
 
+/// SAVE is the last of the base fields; an existing channel also has a blank row and then DELETE, so a press that
+/// is meant for SAVE (or a UP that wraps around from the top) cannot land on DELETE by one key too many.
 fn field_slots(edit: &ChannelEdit) -> usize {
-    BASE_FIELDS.len() + if edit.is_new { 0 } else { 1 }
+    BASE_FIELDS.len() + if edit.is_new { 0 } else { 2 }
 }
 
 fn field_at(index: usize) -> Field {
     if index < BASE_FIELDS.len() {
         BASE_FIELDS[index]
+    } else if index == BASE_FIELDS.len() {
+        Field::Gap
     } else {
         Field::Delete
     }
@@ -328,6 +334,7 @@ impl Field {
             Field::AniCall => "ANI CALL",
             Field::Name => "NAME",
             Field::Save => "SAVE",
+            Field::Gap => "",
             Field::Delete => "DELETE",
         }
     }
@@ -358,10 +365,31 @@ struct ChannelEdit {
     group: u8,
     ret_sel: u16,
     editing: bool,
+    /// the channel as it was when the editor opened (to tell whether anything changed)
+    orig: [u8; CHAN_SIZE],
+    /// a question waiting for its answer (CONFIRM_*)
+    confirm: u8,
     snapshot: i32,
     freq_input: DigitInput<8>,
     offset_input: DigitInput<7>,
     name_edit: NameEdit<12>,
+}
+
+const CONFIRM_NONE: u8 = 0;
+/// EXIT with changes: MENU discards them, EXIT keeps editing
+const CONFIRM_DISCARD: u8 = 1;
+/// MENU on DELETE: only a long press of # deletes (a second short MENU does nothing), EXIT cancels
+const CONFIRM_DELETE: u8 = 2;
+
+impl ChannelEdit {
+    /// Whether anything differs from what was opened. A name is compared as text, so stock's 0xFF padding and a
+    /// zero-padded name that read the same are the same.
+    fn changed(&self) -> bool {
+        let now = self.working.to_bytes();
+        let was = Channel::from_bytes(&self.orig);
+        now[..20] != self.orig[..20]
+            || channel_name_bytes(&self.working.name) != channel_name_bytes(&was.name)
+    }
 }
 
 fn derive_shift(ch: &Channel) -> (u8, u32) {
@@ -409,6 +437,8 @@ impl ChannelEdit {
             group,
             ret_sel,
             editing: false,
+            orig: working.to_bytes(),
+            confirm: CONFIRM_NONE,
             snapshot: 0,
             freq_input: DigitInput::new(),
             offset_input: DigitInput::new(),
@@ -671,9 +701,10 @@ fn format_field_value(
             true
         }
         Field::Save => false,
+        Field::Gap => false,
         Field::Delete => {
-            if edit.is_editing(index) {
-                write_str(out, "MENU = DELETE");
+            if edit.confirm == CONFIRM_DELETE {
+                write_str(out, "HOLD #");
                 true
             } else {
                 false
@@ -695,6 +726,30 @@ fn back(edit: &ChannelEdit, sel: u16, saved: u16) -> Hand {
     }
 }
 
+/// Keys while a question is open. Only the answer that is a different act from the one that asked it goes through:
+/// MENU discards (the question came from EXIT); a long # deletes (the question came from a short MENU).
+fn dispatch_confirm(
+    api: &Api,
+    ev_kind: u8,
+    ev_key: u8,
+    edit: &mut ChannelEdit,
+) -> Option<Hand> {
+    match (edit.confirm, ev_kind, ev_key) {
+        (CONFIRM_DISCARD, KIND_SINGLE, KEY_MENU) => {
+            return Some(back(edit, edit.ret_sel, NO_SLOT));
+        }
+        (CONFIRM_DELETE, KIND_LONG, KEY_POUND) => {
+            // delete = write an all-0xFF (empty) channel
+            let ch = Channel::from_bytes(&[0xFFu8; CHAN_SIZE]);
+            write_channel(api, edit.num, &ch);
+            return Some(back(edit, FIRST_SLOT, NO_SLOT));
+        }
+        (_, KIND_SINGLE, KEY_EXIT) => edit.confirm = CONFIRM_NONE,
+        _ => {}
+    }
+    None
+}
+
 /// `Some(hand)` when the editor is done and the list should take over.
 fn dispatch_detail(
     api: &Api,
@@ -703,6 +758,10 @@ fn dispatch_detail(
     edit: &mut ChannelEdit,
 ) -> Option<Hand> {
     let field = field_at(edit.field_index);
+
+    if edit.confirm != CONFIRM_NONE {
+        return dispatch_confirm(api, ev_kind, ev_key, edit);
+    }
 
     if edit.editing {
         match field {
@@ -731,11 +790,16 @@ fn dispatch_detail(
             let up = ev_key == KEY_UP;
             if !edit.editing {
                 let n = field_slots(edit);
-                edit.field_index = if up {
-                    (edit.field_index + n - 1) % n
-                } else {
-                    (edit.field_index + 1) % n
-                };
+                loop {
+                    edit.field_index = if up {
+                        (edit.field_index + n - 1) % n
+                    } else {
+                        (edit.field_index + 1) % n
+                    };
+                    if field_at(edit.field_index) != Field::Gap {
+                        break;
+                    }
+                }
             } else if field.is_scalar() {
                 adjust(api, edit, field, up);
             }
@@ -752,7 +816,8 @@ fn dispatch_detail(
                         write_channel(api, edit.num, &edit.working);
                         return Some(back(edit, edit.num, edit.num));
                     }
-                    Field::Delete => edit.editing = true,
+                    Field::Delete => edit.confirm = CONFIRM_DELETE,
+                    Field::Gap => {}
                     Field::Name => {
                         edit.name_edit.start(edit.working.name);
                         edit.editing = true;
@@ -770,12 +835,6 @@ fn dispatch_detail(
                         edit.editing = true;
                     }
                 }
-            } else if field == Field::Delete {
-                // delete = write an all-0xFF (empty) channel
-                let blank = [0xFFu8; CHAN_SIZE];
-                let ch = Channel::from_bytes(&blank);
-                write_channel(api, edit.num, &ch);
-                return Some(back(edit, FIRST_SLOT, NO_SLOT));
             } else {
                 edit.editing = false;
             }
@@ -787,9 +846,10 @@ fn dispatch_detail(
                     apply(api, edit, field, snapshot);
                 }
                 edit.editing = false;
+            } else if edit.changed() {
+                edit.confirm = CONFIRM_DISCARD;
             } else {
-                let sel = if edit.is_new { FIRST_SLOT } else { edit.ret_sel };
-                return Some(back(edit, sel, NO_SLOT));
+                return Some(back(edit, edit.ret_sel, NO_SLOT));
             }
         }
         _ => {}
@@ -868,7 +928,8 @@ fn tick(dt_100us: u32) -> AppResult {
 }
 
 fn draw(api: &Api) -> AppResult {
-    static mut ROWS: [ListRow; VISIBLE_ROWS] = [ListRow {
+    // on the stack, not in the arena (drawing is synchronous: the core is done with the rows when `draw_list` returns)
+    let mut rows = [ListRow {
         label: [0; 16],
         value: [0; 18],
         has_value: false,
@@ -884,8 +945,7 @@ fn draw(api: &Api) -> AppResult {
     let show_arrows = edit.editing && field_at(edit.field_index).is_scalar();
     let window_start = scroll_top(total, selected);
 
-    unsafe {
-        let rows = &mut *core::ptr::addr_of_mut!(ROWS);
+    {
         for i in 0..VISIBLE_ROWS {
             let gi = window_start + i;
             rows[i] = ListRow {
@@ -908,41 +968,50 @@ fn draw(api: &Api) -> AppResult {
             );
             rows[i].cursor = if edit.is_editing(gi) && field == Field::Name {
                 edit.name_edit.cursor as i16
-            } else if edit.is_editing(gi) && field == Field::Delete {
+            } else if gi == selected
+                && (edit.confirm == CONFIRM_DISCARD
+                    || (edit.confirm == CONFIRM_DELETE && field == Field::Delete))
+            {
                 bf5rh_abi::ROW_ARMED
             } else {
                 -1
             };
+            if gi == selected && edit.confirm == CONFIRM_DISCARD {
+                // the selected row turns into the question (amber, like any row waiting for a confirming key)
+                write_str(&mut rows[i].label, "DISCARD CHANGES?");
+                rows[i].has_value = false;
+            }
         }
     }
 
     let mut title_buf = [0u8; TITLE_LEN];
-    if edit.is_new {
-        write_str(&mut title_buf, "NEW ");
-        fmt_ch_num(api, &mut title_buf[4..], edit.group, edit.num);
-    } else {
-        fmt_ch_num(api, &mut title_buf, edit.group, edit.num);
-    }
+    fmt_chan_title(api, &mut title_buf, edit.group, edit.num, edit.is_new);
 
     // The strip at the bottom says what the keys do in this state.
-    let hint: &[u8] = if !edit.editing {
-        // leaving the editor without SAVE drops the changes, so EXIT says so
-        match field_at(edit.field_index) {
-            Field::Save => b"MENU save    EXIT discard",
-            Field::Delete => b"MENU delete  EXIT discard",
-            _ => b"MENU edit    EXIT discard",
+    let hint: &[u8] = if edit.confirm == CONFIRM_DISCARD {
+        b"MENU discard  EXIT keep"
+    } else if edit.confirm == CONFIRM_DELETE {
+        b"HOLD # delete EXIT cancel"
+    } else if !edit.editing {
+        // EXIT leaves at once, or asks first when something was changed
+        match (field_at(edit.field_index), edit.changed()) {
+            (Field::Save, false) => b"MENU save    EXIT back",
+            (Field::Save, true) => b"MENU save    EXIT discard",
+            (Field::Delete, false) => b"MENU delete  EXIT back",
+            (Field::Delete, true) => b"MENU delete  EXIT discard",
+            (_, false) => b"MENU edit    EXIT back",
+            (_, true) => b"MENU edit    EXIT discard",
         }
     } else {
         match field_at(edit.field_index) {
             Field::Name => b"0-9 UP/DN MENU ok EXIT del",
             Field::Freq | Field::Offset => b"0-9 type MENU ok EXIT del",
-            Field::Delete => b"MENU confirm  EXIT cancel",
             _ => b"UP/DN  MENU ok  EXIT undo",
         }
     };
     (api.list_hint)(hint.as_ptr(), hint.len() as u16);
 
-    let rows_ptr = core::ptr::addr_of!(ROWS) as *const ListRow;
+    let rows_ptr = rows.as_ptr();
     (api.draw_list)(
         title_buf.as_ptr(),
         TITLE_LEN as u16,
@@ -955,4 +1024,56 @@ fn draw(api: &Api) -> AppResult {
     );
 
     AppResult::Continue
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn opened(name: [u8; NAME_SIZE]) -> ChannelEdit {
+        let mut ch = default_channel(146_520_000);
+        ch.name = name;
+        ChannelEdit::open(3, ch, false, 0, 3)
+    }
+
+    #[test]
+    fn nothing_changed_until_something_is() {
+        let mut e = opened([0; NAME_SIZE]);
+        assert!(!e.changed());
+        e.working.tx_power = 2;
+        assert!(e.changed());
+        e.working.tx_power = 1; // back to what it was: no change
+        assert!(!e.changed());
+    }
+
+    #[test]
+    fn a_stock_blank_name_is_the_same_as_an_empty_one() {
+        let mut e = opened([0xFF; NAME_SIZE]);
+        assert!(!e.changed());
+        e.working.name = [0; NAME_SIZE]; // what accepting an untouched name editor leaves
+        assert!(!e.changed());
+        e.working.name[0] = b'K';
+        assert!(e.changed());
+    }
+
+    #[test]
+    fn a_shift_that_changes_the_transmit_frequency_is_a_change() {
+        let mut e = opened([0; NAME_SIZE]);
+        e.sftd = 1;
+        e.offset_hz = 600_000;
+        sync_tx_freq(&mut e);
+        assert!(e.changed());
+        e.sftd = 0;
+        sync_tx_freq(&mut e);
+        assert!(!e.changed());
+    }
+
+    #[test]
+    fn the_blank_row_is_never_selectable_and_delete_is_not_next_to_save() {
+        let e = opened([0; NAME_SIZE]);
+        assert_eq!(field_slots(&e), 14);
+        assert!(field_at(11) == Field::Save && field_at(12) == Field::Gap && field_at(13) == Field::Delete);
+        let new = ChannelEdit::open(3, default_channel(146_520_000), true, 0, NO_SLOT);
+        assert_eq!(field_slots(&new), 12); // a new channel has nothing to delete
+    }
 }

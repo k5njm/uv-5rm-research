@@ -1,0 +1,32 @@
+# CHAN MGR returns to the row the editor was opened from: the same group, the same selection, the same scroll.
+chan 0 146520000 CH-A
+chan 1 146540000 CH-B
+chan 2 146560000 CH-C
+chan 3 146580000 CH-D
+chan 4 146600000 CH-E
+chan 5 146620000 CH-F
+chan 6 146640000 CH-G
+chan 7 146660000 CH-H
+chan 8 146680000 CH-I
+chan 9 146700000 CH-J
+app chanmgr
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down                  # row 9 of 10, the list has scrolled
+shot row9_before
+key menu                  # open it
+shot row9_editor
+key exit                  # nothing changed: back
+shot row9_after           # identical to the first frame
+key down
+key down                  # the + NEW row
+shot new_row_before
+key menu                  # a new channel
+shot new_editor
+key exit
+shot new_row_after        # still on + NEW

@@ -246,11 +246,18 @@ pub fn fmt_num(api: &Api, out: &mut [u8], group: u8, num: u16) -> usize {
     i + (api.fmt_u32)(pos, out[i..].as_mut_ptr()) as usize
 }
 
-/// "CH" and the number; returns the length written.
-pub fn fmt_ch_num(api: &Api, out: &mut [u8], group: u8, num: u16) -> usize {
-    out[0] = b'C';
-    out[1] = b'H';
-    2 + fmt_num(api, &mut out[2..], group, num)
+/// The editor's title: the group and the channel's number in it, "REPEATERS 01" ("NEW REPEATERS 03" for a channel
+/// being created, "ALL 234" in ALL). The number is the one the main screen and the list show.
+pub fn fmt_chan_title(api: &Api, out: &mut [u8; TITLE_LEN], group: u8, num: u16, new: bool) {
+    *out = [0; TITLE_LEN];
+    let mut i = 0;
+    if new {
+        out[..4].copy_from_slice(b"NEW ");
+        i = 4;
+    }
+    i += (api.group_name)(group, out[i..].as_mut_ptr(), (TITLE_LEN - i - 5) as u16) as usize;
+    out[i] = b' ';
+    fmt_num(api, &mut out[i + 1..], group, num);
 }
 
 pub fn scroll_top(total: usize, selected: usize) -> usize {

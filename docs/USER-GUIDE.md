@@ -83,8 +83,8 @@ From the source, top to bottom:
   the keypad is locked. While transmitting, a timer (`MM:SS`) replaces `PS` and `DWR`. To the right of the flags is the short
   name of the current channel group (`ALL`, `WX`, `RPT` and so on). On the right: battery voltage and a battery icon.
 * **Two frequency blocks** (the two sides, switched with `A/B`). The one that is active has a red stripe at its left edge, and
-  the stripe turns brighter red while transmitting. Each block has three rows: the label (`VFO`, or `M001` for memory
-  channel 1) and the channel name; the frequency in large digits (with CH DISPLAY set to a name, the name instead of or
+  the stripe turns brighter red while transmitting. Each block has three rows: the label (`VFO`, or the channel's number for a
+  memory channel: `01`) and the channel name; the frequency in large digits (with CH DISPLAY set to a name, the name instead of or
   beside the frequency); and a small line with the mode (`FM`, `AM`), power (`LOW`, `MID`, `HIGH`), tone mode (`Tone`, `TSQL`,
   `DTCS` and so on), repeater shift (`+` or `-`), bandwidth (`WIDE`, `NAR`) and `R` when reverse is on.
 * **Markers at the left of a block:** `RX` while receiving, `TX` while transmitting, `>>` for the side that heard the last signal.
@@ -93,7 +93,13 @@ From the source, top to bottom:
   gives the reason: `TX INHIBIT IS ON`, `RX-ONLY CHANNEL`, `OUTSIDE TX BANDS` or `CHANNEL BUSY` (see
   [Transmit safety](#transmit-safety)); the build tested on the radio showed `TX PROHIBITED` for all of them. `NO CH IN ...` and `NO CHANNELS` (amber) are described in the next section.
 
-Channel numbers on the main screen start at 1: `M001` is the first channel slot. CHAN MGR uses the same numbers.
+**Channel numbers** are written one way everywhere: the channel's place in the current group, at least two digits, no prefix
+(`01`, `02`, ... `10`). The first channel of REPEATERS is `01` there even though it is slot 234 of the radio. In group ALL the
+number is the radio's own channel number (`01` to `1000`), so `234` is the same channel in ALL as `01` is in REPEATERS. The main
+screen, the channel list, the channel editor's title and the SAVED notice all use this number, and the number you type in memory
+mode is read the same way. A channel that was deleted leaves a gap in the numbering of its group (`01`, `02`, `04`). Two places
+still use the radio's own number, because they are about a slot and not about a group: RPT FINDER's save prompt (`CH n IN USE`)
+and the channel plan files.
 
 ## Channel groups (the BAND key)
 
@@ -201,7 +207,7 @@ Notes:
   longitude as three integer digits and four decimals.
 * Some RADIO items (FREQ STEP, BANDWIDTH, TX POWER, RX TONE, TX TONE, RPT SHIFT, RPT OFFSET) and ANI CALL change the frequency
   currently on the main screen, not the stored settings. The source calls them "RAM-only".
-* RESET ALL: `MENU` turns the row amber and shows `MENU = RESET` (strip: `MENU confirm  EXIT cancel`); a second `MENU` erases the saved VFO data, the settings record, the saved channel state and the FM list and
+* RESET ALL: `MENU` turns the row amber and shows `HOLD #` (strip: `HOLD # reset  EXIT cancel`). A second `MENU` does nothing, so a double press cannot reset the radio; **holding `#` for about a second** erases the saved VFO data, the settings record, the saved channel state and the FM list and
   restarts the radio. Channels are not erased. After a reset, TX INHIBIT is on again. Read from the source; not tried on a radio.
 
 ### What is in each group
@@ -228,16 +234,18 @@ CHAN MGR (app 2) lists, edits, adds and deletes channels. It works on one channe
 
 ### The list
 
-![CHAN MGR list, group REPEATERS: two stored channels and a + NEW row. The title reads GROUP (08/13): REPEATERS.](img/chanmgr-group-list.png)
+![CHAN MGR list, group REPEATERS: two stored channels and a + NEW row. The title reads GROUP 1: REPEATERS.](img/chanmgr-group-list.png)
 
-* The title names the group: `GROUP (08/13): REPEATERS` means group 8 of 13. If that is too long for the row, the position is
-  dropped (`GROUP: CUSTOM RANGE`), and then the name is cut with `...`.
+* The title names the group: `GROUP 1: REPEATERS`. The digit is the one that picks the group from the BAND menu.
 * When you open CHAN MGR it starts in the radio's current group. **`*` and `#` step to the previous and next group.**
 * Each row is the channel number (the same number the main screen shows), the name and the receive frequency:
-  `234 K5RWK  147.1200`.
+  `01 K5RWK  147.1200` (in group ALL, the radio's own number: `234 K5RWK`).
 * The last row is `+ NEW`. A group with nothing stored shows only that row.
 * `UP` and `DOWN` move; `MENU` opens the highlighted channel, or starts a new one on `+ NEW`; `EXIT` leaves CHAN MGR.
   The strip reads `MENU open   * # group`.
+* CHAN MGR is two programs that hand over to each other (the list, and the editor). You only notice when it happens: opening a
+  channel takes a moment longer than moving in the list, and leaving the editor puts you back on the row you came from, in the
+  same group and at the same scroll position (on `+ NEW` if you started a new channel and left without saving).
 
 ![A group with nothing stored (FRS): only the + NEW row.](img/chanmgr-group-empty.png)
 
@@ -247,7 +255,7 @@ If the group has no empty slot left, `MENU` on `+ NEW` does nothing (no message 
 
 ### Opening a channel and its fields
 
-The title is the channel number (`CH002`), or `NEW` and the slot it will take (`NEW CH235`). The fields, top to bottom:
+The title is the group and the channel's number in it (`REPEATERS 02`), or `NEW` and the number it will take (`NEW REPEATERS 03`; in ALL, `ALL 234`). The fields, top to bottom:
 
 | Field | What it is |
 |---|---|
@@ -262,14 +270,20 @@ The title is the channel number (`CH002`), or `NEW` and the slot it will take (`
 | ANI CALL | `#1` to `#20` (a DTMF contact) or NONE. |
 | NAME | Up to 12 characters. |
 | SAVE | Writes the channel. |
+| (blank row) | A gap, never selected, so that DELETE is not next to SAVE. |
 | DELETE | Only for channels that already exist. |
 
-![The channel editor for CH002. The bottom strip reads MENU edit, EXIT discard. UP from the top row wraps to the bottom.](img/chanmgr-channel-editor.png)
+![The channel editor for channel 02 of group ALL. The bottom strip reads MENU edit, EXIT back. UP from the top row wraps to the bottom.](img/chanmgr-channel-editor.png)
 
-Keys, not editing: `UP`/`DOWN` move between fields (they wrap), `MENU` starts editing the field, `EXIT` goes back to the list. The
-strip reads `MENU edit    EXIT discard` (on SAVE: `MENU save    EXIT discard`; on DELETE: `MENU delete  EXIT discard`).
+Keys, not editing: `UP`/`DOWN` move between fields (they wrap, and skip the blank row), `MENU` starts editing the field, `EXIT`
+goes back to the list. The strip reads `MENU edit    EXIT back` (on SAVE: `MENU save    EXIT back`; on DELETE: `MENU delete  EXIT back`);
+once anything has been changed, `back` becomes `discard`.
 
-**`EXIT` on the field list leaves without saving. Anything you changed is thrown away. Use SAVE.**
+**`EXIT` on the field list leaves at once if nothing was changed. If something was, the selected row turns amber and reads
+`DISCARD CHANGES?` (strip: `MENU discard  EXIT keep`). `MENU` throws the changes away; `EXIT` (or anything else but `MENU`)
+returns to the editor with the changes still there. Use SAVE to keep them.** What counts as a change is any difference from the
+channel as it was when the editor opened: a field set back to its old value is no change, and a name typed over a stock
+(`FF`-padded) blank name that reads the same is none either.
 
 Keys while editing a field:
 
@@ -315,12 +329,18 @@ presses give the digit `5`. The strip reads `0-9 UP/DN MENU ok EXIT del`.
 ### SAVE and DELETE
 
 * **SAVE:** select the SAVE row and press `MENU`. The channel is written and you return to the list with the channel
-  selected. A box reading `SAVED CH001` (green) shows for about a second and a half, or until you press a key.
+  selected. A box reading `SAVED 01` (green) shows for about a second and a half, or until you press a key.
 
-  ![The SAVED notice after saving CH001.](img/chanmgr-saved.png)
+  ![The SAVED notice after saving channel 01.](img/chanmgr-saved.png)
 
-* **DELETE:** select DELETE and press `MENU`; the row turns amber and reads `MENU = DELETE` (strip: `MENU confirm  EXIT cancel`). `MENU` again erases the channel (no notice
-  is shown); `EXIT` cancels.
+* **DELETE:** it is the last row, below a blank row, so it is never next to SAVE. Select DELETE and press `MENU`: the row turns
+  amber and reads `HOLD #` (strip: `HOLD # delete EXIT cancel`). **Hold `#` for about a second** to erase the channel (no notice
+  is shown; you return to the list). A second `MENU`, or a short press of `#`, does nothing; `EXIT` cancels. Asking and
+  answering are different keys on purpose, so a double press cannot delete a channel.
+
+  ![DELETE armed: the row is amber and the strip says what to hold.](img/chanmgr-delete-armed.png)
+
+  ![Unsaved changes: EXIT asks DISCARD CHANGES?](img/chanmgr-discard.png)
 
 Channels written by stock firmware or CHIRP have a name field padded with `FF` bytes. CHAN MGR treats that as an empty
 name, so you can type one. (This was found on the radio and fixed; the fix has not yet run on the radio.)

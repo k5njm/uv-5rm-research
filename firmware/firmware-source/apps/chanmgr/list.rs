@@ -229,7 +229,8 @@ fn tick(api: &Api, dt_100us: u32) -> AppResult {
 }
 
 fn draw(api: &Api) -> AppResult {
-    static mut ROWS: [ListRow; VISIBLE_ROWS] = [ListRow {
+    // on the stack, not in the arena (drawing is synchronous: the core is done with the rows when `draw_list` returns)
+    let mut rows = [ListRow {
         label: [0; 16],
         value: [0; 18],
         has_value: false,
@@ -242,8 +243,7 @@ fn draw(api: &Api) -> AppResult {
     let selected = list.selected_index();
     let window_start = scroll_top(total, selected);
 
-    unsafe {
-        let rows = &mut *core::ptr::addr_of_mut!(ROWS);
+    {
         for i in 0..VISIBLE_ROWS {
             let gi = window_start + i;
             rows[i] = ListRow {
@@ -277,7 +277,7 @@ fn draw(api: &Api) -> AppResult {
     let hint: &[u8] = b"MENU open   * # group";
     (api.list_hint)(hint.as_ptr(), hint.len() as u16);
 
-    let rows_ptr = core::ptr::addr_of!(ROWS) as *const ListRow;
+    let rows_ptr = rows.as_ptr();
     (api.draw_list)(
         title_buf.as_ptr(),
         TITLE_LEN as u16,
@@ -291,7 +291,7 @@ fn draw(api: &Api) -> AppResult {
     if let Some(num) = state.saved {
         let mut text = [0u8; 16];
         text[..6].copy_from_slice(b"SAVED ");
-        let n = 6 + fmt_ch_num(api, &mut text[6..], state.group, num);
+        let n = 6 + fmt_num(api, &mut text[6..], state.group, num);
         (api.toast)(text.as_ptr(), n as u16);
     }
 

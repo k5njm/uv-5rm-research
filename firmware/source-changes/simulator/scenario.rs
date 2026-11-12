@@ -23,6 +23,7 @@
 //!   wait SECS           run ticks + draws for SECS of radio time
 //!   shot NAME           save NAME.png and compare with the golden of the same name
 //!   expect exit|noexit  whether the LAST key made the app exit
+//!   expect reset|noreset  whether the app has asked for a factory reset (the radio would reboot: nothing follows `reset`)
 //!   expect backlight on|off   the app's backlight-hold request
 //!   expect cues N       speaker-only cue sequences played so far (api.play_cue); never keys PTT, checked automatically
 //!   expect rfrefused N  RF register writes the core's allow-list refused
@@ -394,7 +395,22 @@ impl Run<'_> {
                 let (Some(app), Some(id)) = (self.app, key_id(k)) else {
                     return self.check(false, &format!("bad key step `{}`", t.join(" ")));
                 };
-                self.last_exit = if t[0] == "key" { press(app, id) } else { hold(app, id) };
+                // The key runs on a helper thread: a factory reset never returns (it reboots the radio), so the
+                // simulated call parks its thread and this one carries on, having seen the call.
+                let before = crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst);
+                let is_key = t[0] == "key";
+                let worker = std::thread::spawn(move || if is_key { press(app, id) } else { hold(app, id) });
+                loop {
+                    if worker.is_finished() {
+                        self.last_exit = worker.join().unwrap_or(false);
+                        break;
+                    }
+                    if crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst) != before {
+                        self.last_exit = false;
+                        break; // the parked thread is left behind; nothing more is expected of this radio
+                    }
+                    std::thread::sleep(std::time::Duration::from_micros(200));
+                }
             }
             ["step", ms] => self.step_ms = ms.parse().unwrap_or(5).max(1),
             ["wait", s] => match s.parse::<f64>() {
@@ -404,6 +420,14 @@ impl Run<'_> {
             ["shot", n] => self.shot(n),
             ["expect", "exit"] => { let v = self.last_exit; self.check(v, "last key exited the app") }
             ["expect", "noexit"] => { let v = !self.last_exit; self.check(v, "last key did not exit the app") }
+            ["expect", "reset"] => {
+                let n = crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst);
+                self.check(n > 0, "the app asked for a factory reset")
+            }
+            ["expect", "noreset"] => {
+                let n = crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst);
+                self.check(n == 0, "the app did not ask for a factory reset")
+            }
             ["expect", "backlight", v] => {
                 let want = *v == "on";
                 let got = unsafe { BACKLIGHT_HOLD };
