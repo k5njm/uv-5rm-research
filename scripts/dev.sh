@@ -123,7 +123,7 @@ cmd_check() {
   step "core firmware";          cmd_firmware
   step "size budgets on built images"; run "python3 -I firmware/tools/verify_release.py --no-committed --apps build-out --image build-out/fw-default.bin --image build-out/fw-bk4819.bin > /tmp/g.log || { cat /tmp/g.log; exit 1; }; tail -1 /tmp/g.log"
   step "shipped apps rebuild from source"; run "python3 firmware/tools/provenance.py --strict | tail -3"
-  step "release set: every launcher app built for this core, arena floors"; cmd_release | grep -E "PASSED|FAIL|chanmgr: "
+  step "release set: every launcher app built for this core, arena floors"; cmd_release | grep -E "PASSED|FAIL|chanmgr.app +\[OK"
   step "pinned image hashes";    cmd_hashes
   step "host tool tests (fake radio / bootloader)"; cmd_tools_test
   step "web builder page (headless Chromium)"; cmd_web_test

@@ -25,6 +25,9 @@ KEYS = (b"KDHT", b"RBGI")
 PKG = 1024
 MIN_FW_HEADROOM = 64  # bytes of core flash that must stay free (88 today): alarm before it is eaten
 MIN_ARENA_SPARE = 64  # bytes of 8 KB arena each app must leave free (TEXT has 73)
+# Stricter floors, per segment, for packages that were split to make room (so they cannot quietly fill up again):
+# CHAN MGR's list must keep 1 KB free, its editor 1.5 KB.
+SEG_MIN_SPARE = {"chanmgr.app": [1024, 1536]}
 
 
 def unxor(block, key):
@@ -126,7 +129,9 @@ def verify_apps(apps_dir, committed=False):
                 check(zlib.crc32(d[off:off + ilen]) & 0xFFFFFFFF == crc, f"{n}[{i}]: crc32")
             check(ilen + bss <= ARENA, f"{n}[{i}]: {ilen}+{bss} bss fits {ARENA}-byte arena "
                                        f"({ARENA - ilen - bss} spare)")
-            check(ARENA - ilen - bss >= MIN_ARENA_SPARE, f"{n}[{i}]: arena spare >= floor {MIN_ARENA_SPARE}")
+            # (the committed set is the old single-segment build, which these floors do not describe)
+            floor = MIN_ARENA_SPARE if committed else SEG_MIN_SPARE.get(n, [MIN_ARENA_SPARE] * 4)[i]
+            check(ARENA - ilen - bss >= floor, f"{n}[{i}]: arena spare >= floor {floor}")
         print(f"  sha256 {sha(d)}  {n}")
 
 

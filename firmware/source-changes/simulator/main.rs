@@ -32,7 +32,7 @@ mod fskprobe;
 mod spectrum;
 #[path = "../../firmware-source/apps/fm/src/logic.rs"]
 mod fm;
-#[path = "../../firmware-source/apps/chanmgr/src/main.rs"]
+#[path = "chanmgr_pkg.rs"]
 mod chanmgr;
 #[cfg(feature = "settings-menu")]
 pub const MY_SEG: u8 = 0;
@@ -543,7 +543,11 @@ extern "C" fn chan_write(num: u16, buf: *const u8, len: u16) -> bool {
     assert_eq!(len, 32);
     let mut r = [0u8; 32];
     unsafe { std::ptr::copy_nonoverlapping(buf, r.as_mut_ptr(), 32) };
-    sim().chans.insert(num, r);
+    if r.iter().all(|&b| b == 0xFF) {
+        sim().chans.remove(&num); // an all-0xFF record is an empty channel, as `is_channel_empty` has it
+    } else {
+        sim().chans.insert(num, r);
+    }
     true
 }
 extern "C" fn get_master_freq() -> u32 {
@@ -788,8 +792,14 @@ extern "C" fn side_write(b: *const u8, len: u16) -> bool {
     unsafe { std::ptr::copy_nonoverlapping(b, SIDE_CFG.as_mut_ptr(), 14) };
     true
 }
+/// Times an app asked for a factory reset. The real call reboots the radio and never returns; here the caller
+/// parks forever (a scenario runs key presses on a helper thread and watches this counter: `expect reset`).
+static FACTORY_CALLS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 extern "C" fn factory() -> ! {
-    panic!("factory reset called");
+    FACTORY_CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    loop {
+        std::thread::park();
+    }
 }
 extern "C" fn batt() -> u16 {
     0

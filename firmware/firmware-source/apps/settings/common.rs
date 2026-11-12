@@ -5,9 +5,11 @@ use bf5rh_abi::{Api, AppEvent, AppResult, ListRow};
 use crate::MY_SEG;
 
 pub const KIND_SINGLE: u8 = 2;
+pub const KIND_LONG: u8 = 3;
 pub const KIND_REPEAT: u8 = 4;
 pub const KEY_DIGIT0: u8 = 0;
 pub const KEY_ASTERISK: u8 = 10;
+pub const KEY_POUND: u8 = 11;
 pub const KEY_MENU: u8 = 12;
 pub const KEY_EXIT: u8 = 13;
 pub const KEY_UP: u8 = 14;
@@ -877,6 +879,11 @@ fn dispatch_items_scalar(
     item: SettingItem,
     st: &mut ItemsState,
 ) -> Option<Phase> {
+    // RESET ALL erases settings, VFO and FM data: pressing MENU asks, and only holding # (a different key, held for
+    // a second) answers. A second MENU press does nothing, so a double press cannot reset the radio.
+    if kind == KIND_LONG && id == KEY_POUND && st.editing && item == SettingItem::Reset {
+        (api.factory_reset)() // never returns
+    }
     if kind != KIND_SINGLE && kind != KIND_REPEAT {
         return None;
     }
@@ -922,7 +929,7 @@ fn dispatch_items_scalar(
                 }
                 st.editing = true;
             } else if item == SettingItem::Reset {
-                (api.factory_reset)();
+                // asked already: see above
             } else {
                 st.editing = false;
                 if item != SettingItem::Info
@@ -1546,7 +1553,7 @@ fn value_text_for(
         #[cfg(feature = "g_system")]
         Reset => {
             if editing_this {
-                write_str(out, "MENU = RESET")
+                write_str(out, "HOLD #")
             } else {
                 0
             }
@@ -1895,7 +1902,7 @@ fn draw(api: &Api) -> AppResult {
     // The strip at the bottom says what the keys do in this state (EXIT while changing a value undoes it).
     let hint: &[u8] = match &state.phase {
         Phase::Items(st) if st.editing => match st.item() {
-            SettingItem::Reset => b"MENU confirm  EXIT cancel",
+            SettingItem::Reset => b"HOLD # reset  EXIT cancel",
             SettingItem::Info | SettingItem::ChipId => b"UP/DN page    EXIT back",
             SettingItem::Lat => b"0-9  * N/S  MENU ok",
             SettingItem::Lon => b"0-9  * E/W  MENU ok",

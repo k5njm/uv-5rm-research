@@ -13,7 +13,7 @@ SRC = os.path.join(FW, "firmware-source")
 # package file -> (display name in the header, crate dirs in segment order)
 PACKAGES = {
     "bandsweep.app": ("BAND SWEEP", ["apps/bandsweep"]),
-    "chanmgr.app": ("CHAN MGR", ["apps/chanmgr"]),
+    "chanmgr.app": ("CHAN MGR", ["apps/chanmgr/list", "apps/chanmgr/edit"]),
     "fm.app": ("FM", ["apps/fm"]),
     "foxhunt.app": ("FOX HUNT", ["apps/foxhunt"]),
     "rptfinder.app": ("RPT FINDER", ["apps/rptfind"]),
