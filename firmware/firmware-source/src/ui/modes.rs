@@ -51,7 +51,7 @@ where
         current: app.chan_mode_index(),
         app,
     };
-    draw_list(lcd, "MODE", &mut source, index, false, cache);
+    draw_list(lcd, "CH GROUPS", &mut source, index, false, cache);
 }
 
 #[derive(Clone, Copy, PartialEq)]

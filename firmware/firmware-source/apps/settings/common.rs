@@ -408,6 +408,7 @@ pub enum SettingItem {
     Side2Long,
     BandShort,
     BandLong,
+    VmLong,
     BootMode,
     BootSnd,
     BattCal,
@@ -443,9 +444,9 @@ impl SettingsGroup {
         match self {
             SettingsGroup::Radio => "RADIO",
             SettingsGroup::Sig => "AUDIO",
-            SettingsGroup::Display => "DISP",
+            SettingsGroup::Display => "DISPLAY",
             SettingsGroup::Keys => "KEYS",
-            SettingsGroup::Ani => "ANI",
+            SettingsGroup::Ani => "ANI / DTMF",
             SettingsGroup::System => "SYSTEM",
         }
     }
@@ -467,7 +468,7 @@ impl SettingsGroup {
             #[cfg(feature = "g_keys")]
             SettingsGroup::Keys => &[
                 Side1Short, Side1Long, Side2Short, Side2Long, BandShort,
-                BandLong,
+                BandLong, VmLong,
             ],
             #[cfg(feature = "g_ani")]
             SettingsGroup::Ani => &[AniTx, AniCall],
@@ -487,98 +488,100 @@ impl SettingItem {
         use SettingItem::*;
         match self {
             #[cfg(feature = "g_radio")]
-            Sql => "SQL",
+            Sql => "SQUELCH",
             #[cfg(feature = "g_radio")]
-            Step => "STEP",
+            Step => "FREQ STEP",
             #[cfg(feature = "g_radio")]
-            Tot => "TOT",
+            Tot => "TX TIMEOUT",
             #[cfg(feature = "g_radio")]
-            Tdr => "TDR",
+            Tdr => "DUAL WATCH",
             #[cfg(feature = "g_radio")]
-            Save => "SAVE",
+            Save => "BATTERY SAVE",
             #[cfg(feature = "g_radio")]
-            BusyLock => "BCL",
+            BusyLock => "BUSY LOCKOUT",
             #[cfg(feature = "g_radio")]
-            TxForbid => "TXINH",
+            TxForbid => "TX INHIBIT",
             #[cfg(feature = "g_radio")]
-            Wn => "W/N",
+            Wn => "BANDWIDTH",
             #[cfg(feature = "g_radio")]
-            TxPr => "PWR",
+            TxPr => "TX POWER",
             #[cfg(feature = "g_radio")]
-            RxCts => "R-CTC",
+            RxCts => "RX TONE",
             #[cfg(feature = "g_radio")]
-            TxCts => "T-CTC",
+            TxCts => "TX TONE",
             #[cfg(feature = "g_radio")]
-            Sftd => "SHIFT",
+            Sftd => "RPT SHIFT",
             #[cfg(feature = "g_radio")]
-            Offse => "OFFSET",
+            Offse => "RPT OFFSET",
             #[cfg(feature = "g_radio")]
-            Scrm => "SCRM",
+            Scrm => "SCRAMBLER",
             #[cfg(feature = "g_radio")]
-            ScanMd => "SCANMD",
+            ScanMd => "SCAN RESUME",
             #[cfg(feature = "g_radio")]
             Rit => "RIT",
             #[cfg(feature = "g_radio")]
-            ChDisp => "CHDISP",
+            ChDisp => "CH DISPLAY",
 
             #[cfg(feature = "g_audio")]
-            Beep => "BEEP",
+            Beep => "KEY BEEP",
             #[cfg(feature = "g_audio")]
             Vox => "VOX",
             #[cfg(feature = "g_audio")]
-            VoxLv => "VOXLV",
+            VoxLv => "VOX LEVEL",
             #[cfg(feature = "g_audio")]
-            VoxDly => "VOXDLY",
+            VoxDly => "VOX DELAY",
             #[cfg(feature = "g_audio")]
-            Rtone => "RTONE",
+            Rtone => "TONE BURST",
             #[cfg(feature = "g_audio")]
-            Tail => "STE",
+            Tail => "SQ TAIL ELIM",
             #[cfg(feature = "g_audio")]
-            Rptrl => "RPTRL",
+            Rptrl => "RPT TAIL DLY",
             #[cfg(feature = "g_audio")]
-            Roge => "ROGER",
+            Roge => "ROGER BEEP",
 
             #[cfg(feature = "g_disp")]
-            Abr => "ABR",
+            Abr => "BACKLIGHT",
             #[cfg(feature = "g_disp")]
-            AutoLk => "AUTOLK",
+            AutoLk => "AUTO KEYLOCK",
 
             #[cfg(feature = "g_keys")]
-            Side1Short => "S1-SH",
+            Side1Short => "SIDE1 SHORT",
             #[cfg(feature = "g_keys")]
-            Side1Long => "S1-LG",
+            Side1Long => "SIDE1 LONG",
             #[cfg(feature = "g_keys")]
-            Side2Short => "S2-SH",
+            Side2Short => "SIDE2 SHORT",
             #[cfg(feature = "g_keys")]
-            Side2Long => "S2-LG",
+            Side2Long => "SIDE2 LONG",
             #[cfg(feature = "g_keys")]
-            BandShort => "BND-SH",
+            BandShort => "BAND SHORT",
             #[cfg(feature = "g_keys")]
-            BandLong => "BND-LG",
+            BandLong => "BAND LONG",
+            #[cfg(feature = "g_keys")]
+            VmLong => "VFO/MR LONG",
 
             #[cfg(feature = "g_ani")]
-            AniTx => "ANI-TX",
+            AniTx => "ANI ON PTT",
             #[cfg(feature = "g_ani")]
-            AniCall => "CALL",
+            AniCall => "ANI CALL",
 
             #[cfg(feature = "g_system")]
-            FLock => "FLOCK",
+            FLock => "TX BAND LOCK",
             #[cfg(feature = "g_system")]
-            Lat => "LAT",
+            Lat => "LATITUDE",
             #[cfg(feature = "g_system")]
-            Lon => "LON",
+            Lon => "LONGITUDE",
             #[cfg(feature = "g_system")]
-            BattCal => "BATCAL",
+            BattCal => "BATTERY CAL",
             #[cfg(feature = "g_system")]
-            BootMode => "BOOTSCR",
+            BootMode => "BOOT SCREEN",
             #[cfg(feature = "g_system")]
-            BootSnd => "BOOTSND",
+            BootSnd => "BOOT SOUND",
             #[cfg(feature = "g_system")]
-            Info => "VER",
+            Info => "VERSION",
             #[cfg(feature = "g_system")]
-            ChipId => "CHIPID",
+            ChipId => "RF CHIP ID",
             #[cfg(feature = "g_system")]
-            Reset => "RESET",
+            Reset => "RESET ALL",
 
             #[allow(unreachable_patterns)]
             _ => "",
@@ -623,17 +626,38 @@ fn power_label(raw: u8) -> &'static str {
     }
 }
 
+/// Largest key-function value the core accepts (`keyfn::KEYFN_MAX`).
+#[cfg(feature = "g_keys")]
+const KEYFN_MAX: i32 = 19;
+/// The VFO/MR long-press function: record byte 66 (inside the second boot text line, which the core also uses for
+/// the channel group), valid only when the next byte is the marker. See the core's `modes::vm_long`.
+#[cfg(feature = "g_keys")]
+const VM_LONG_AT: usize = 66 - 40;
+#[cfg(feature = "g_keys")]
+const VM_LONG_MAGIC: u8 = b'K';
+
 #[cfg(feature = "g_keys")]
 fn key_function_label(v: u8) -> &'static str {
     match v {
-        1 => "WIDE/NAR",
+        1 => "BANDWIDTH",
         2 => "MONITOR",
-        3 => "MODE",
+        3 => "AM/FM",
         4 => "TX TONE",
         6 => "SCAN",
-        7 => "POWER",
+        7 => "TX POWER",
         8 => "LIGHT",
         10 => "REVERSE",
+        // 11..=19 open the app in launcher slot 1..=9 (the core's `keyfn::KeyFunction::App`); the APPS list shows the
+        // numbers. Values here stay within 9 characters: the longest label plus "^ VALUE v" must fit a 26-character row.
+        11 => "APP 1",
+        12 => "APP 2",
+        13 => "APP 3",
+        14 => "APP 4",
+        15 => "APP 5",
+        16 => "APP 6",
+        17 => "APP 7",
+        18 => "APP 8",
+        19 => "APP 9",
         _ => "NONE",
     }
 }
@@ -1151,6 +1175,11 @@ fn current_value(api: &Api, st: &ItemsState, item: SettingItem) -> i32 {
         BandShort => st.settings.band_short as i32,
         #[cfg(feature = "g_keys")]
         BandLong => st.settings.band_long as i32,
+        #[cfg(feature = "g_keys")]
+        VmLong => {
+            let t = &st.settings.boot_text_and_tune;
+            if t[VM_LONG_AT + 1] == VM_LONG_MAGIC { t[VM_LONG_AT] as i32 } else { 0 }
+        }
 
         #[cfg(feature = "g_ani")]
         AniTx => st.settings.ani_tx as i32,
@@ -1227,7 +1256,7 @@ fn adjust(api: &Api, st: &mut ItemsState, item: SettingItem, up: bool) {
 
         #[cfg(feature = "g_keys")]
         Side1Short | Side1Long | Side2Short | Side2Long | BandShort
-        | BandLong => clamp_step(cur, up, 0, 10),
+        | BandLong | VmLong => clamp_step(cur, up, 0, KEYFN_MAX),
 
         #[cfg(feature = "g_ani")]
         AniTx => 1 - cur,
@@ -1334,6 +1363,11 @@ fn apply(api: &Api, st: &mut ItemsState, item: SettingItem, v: i32) {
         BandShort => st.settings.band_short = v as u8,
         #[cfg(feature = "g_keys")]
         BandLong => st.settings.band_long = v as u8,
+        #[cfg(feature = "g_keys")]
+        VmLong => {
+            st.settings.boot_text_and_tune[VM_LONG_AT] = v as u8;
+            st.settings.boot_text_and_tune[VM_LONG_AT + 1] = VM_LONG_MAGIC;
+        }
 
         #[cfg(feature = "g_ani")]
         AniTx => st.settings.ani_tx = v != 0,
@@ -1515,7 +1549,7 @@ fn value_text_for(
         BootMode => write_str(
             out,
             match current_value(api, st, item) {
-                1 => "MSG",
+                1 => "MESSAGE",
                 2 => "LOGO",
                 _ => "NONE",
             },
@@ -1600,9 +1634,9 @@ fn value_text_for(
         ScanMd => write_str(
             out,
             match current_value(api, st, item) {
-                0 => "TIME",
+                0 => "TIMED",
                 2 => "STOP",
-                _ => "CARR",
+                _ => "CARRIER",
             },
         ),
         #[cfg(feature = "g_radio")]
@@ -1633,8 +1667,8 @@ fn value_text_for(
             out,
             match current_value(api, st, item) {
                 1 => "NAME",
-                2 => "NAME+F",
-                _ => "FREQ",
+                2 => "NAME+FREQ",
+                _ => "FREQUENCY",
             },
         ),
 
@@ -1684,9 +1718,9 @@ fn value_text_for(
         AutoLk => write_str(
             out,
             match current_value(api, st, item) {
-                1 => "5S",
-                2 => "10S",
-                3 => "15S",
+                1 => "5 SEC",
+                2 => "10 SEC",
+                3 => "15 SEC",
                 _ => "OFF",
             },
         ),
@@ -1694,18 +1728,18 @@ fn value_text_for(
         Abr => write_str(
             out,
             match current_value(api, st, item) {
-                1 => "5S",
-                2 => "10S",
-                3 => "15S",
-                4 => "20S",
-                _ => "OFF",
+                1 => "5 SEC",
+                2 => "10 SEC",
+                3 => "15 SEC",
+                4 => "20 SEC",
+                _ => "ALWAYS ON",
             },
         ),
 
         #[cfg(feature = "g_keys")]
         Side1Short | Side1Long | Side2Short | Side2Long | BandShort
-        | BandLong => {
-            let idx = current_value(api, st, item).clamp(0, 10) as u8;
+        | BandLong | VmLong => {
+            let idx = current_value(api, st, item).clamp(0, KEYFN_MAX) as u8;
             write_str(out, key_function_label(idx))
         }
 

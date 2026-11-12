@@ -247,7 +247,15 @@ where
     if app.tx_prohibited() {
         draw_overlay(lcd, "TX PROHIBITED", ALERT);
     } else if app.no_channels_notice() {
-        draw_overlay(lcd, "NO CHANNELS", AMBER);
+        // Name the group: with a group other than ALL selected, channels outside its number range are skipped.
+        if app.chan_mode_index() == 0 {
+            draw_overlay(lcd, "NO CHANNELS", AMBER);
+        } else {
+            let mut label: TextBuf<16> = TextBuf::new();
+            label.put_str("NO CH IN ");
+            label.put_str(app.chan_mode_short());
+            draw_overlay(lcd, label.as_str(), AMBER);
+        }
     }
 }
 

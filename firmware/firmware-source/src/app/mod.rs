@@ -1,6 +1,7 @@
 mod convert;
 mod input;
 mod keyfn;
+pub(crate) use keyfn::KEYFN_MAX;
 mod keys;
 mod launcher;
 mod modes;

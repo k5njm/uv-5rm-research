@@ -430,19 +430,19 @@ fn field_at(index: usize) -> Field {
 impl Field {
     fn label(self) -> &'static str {
         match self {
-            Field::Freq => "FREQ",
-            Field::Sftd => "SHIFT",
-            Field::Offset => "OFFSET",
-            Field::RxCts => "R-CTC",
-            Field::TxCts => "T-CTC",
-            Field::Power => "PWR",
-            Field::Wn => "W/N",
-            Field::ScanAdd => "SCAN",
-            Field::BusyLock => "BCL",
-            Field::AniCall => "CALL",
+            Field::Freq => "FREQUENCY",
+            Field::Sftd => "RPT SHIFT",
+            Field::Offset => "RPT OFFSET",
+            Field::RxCts => "RX TONE",
+            Field::TxCts => "TX TONE",
+            Field::Power => "TX POWER",
+            Field::Wn => "BANDWIDTH",
+            Field::ScanAdd => "IN SCAN LIST",
+            Field::BusyLock => "BUSY LOCKOUT",
+            Field::AniCall => "ANI CALL",
             Field::Name => "NAME",
             Field::Save => "SAVE",
-            Field::Delete => "DEL",
+            Field::Delete => "DELETE",
         }
     }
 
@@ -912,10 +912,13 @@ fn write_channel(api: &Api, num: u16, ch: &Channel) {
 
 struct State {
     phase: Phase,
+    /// Slot just written by SAVE; the list title says so until the next key.
+    saved: Option<u16>,
 }
 
 static mut STATE: State = State {
     phase: Phase::List(ChanList::blank()),
+    saved: None,
 };
 
 #[cfg_attr(target_os = "none", no_mangle)]
@@ -946,9 +949,21 @@ fn key(api: &Api, kind: u8, id: u8) -> AppResult {
             &mut state.phase,
             Phase::List(ChanList::blank()),
         );
+        state.saved = None;
         state.phase = match phase {
             Phase::List(list) => dispatch_list(api, kind, id, list),
-            Phase::Detail(edit) => dispatch_detail(api, kind, id, edit),
+            Phase::Detail(edit) => {
+                let saving = kind == KIND_SINGLE
+                    && id == KEY_MENU
+                    && !edit.editing
+                    && field_at(edit.field_index) == Field::Save;
+                let num = edit.num;
+                let next = dispatch_detail(api, kind, id, edit);
+                if saving && matches!(next, Phase::List(_)) {
+                    state.saved = Some(num);
+                }
+                next
+            }
             Phase::Exit => Phase::Exit,
         };
         if matches!(state.phase, Phase::Exit) {
@@ -1128,11 +1143,12 @@ fn format_field_value(
     }
 }
 
+/// `num` is the flash slot (from 0); the text is the number the main screen shows for it (M001 is slot 0).
 fn fmt_ch_num(out: &mut [u8], num: u16) {
     out[0] = b'C';
     out[1] = b'H';
     let mut digits = [b'0'; 3];
-    let mut n = num as u32;
+    let mut n = num as u32 + 1;
     for k in (0..3).rev() {
         digits[k] = (n % 10) as u8 + b'0';
         n /= 10;
@@ -1228,7 +1244,13 @@ fn draw(api: &Api) -> AppResult {
 
     let mut title_buf = [0u8; 16];
     match &state.phase {
-        Phase::List(_) => write_str(&mut title_buf, "CHANNELS"),
+        Phase::List(_) => match state.saved {
+            Some(num) => {
+                write_str(&mut title_buf, "SAVED ");
+                fmt_ch_num(&mut title_buf[6..], num);
+            }
+            None => write_str(&mut title_buf, "CHANNELS"),
+        },
         Phase::Detail(edit) => {
             if edit.is_new {
                 write_str(&mut title_buf, "NEW");

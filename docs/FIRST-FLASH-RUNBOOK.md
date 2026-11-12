@@ -1,7 +1,7 @@
 # First-flash runbook (read-only steps first)
 
-Status: **steps 1-7 have been done on a real `5RHNRFB-YP07` (V0.13, 2026-11-11, AUDIT 25); nothing has been written to a
-radio yet.** Steps 8 onward and every write tool are still tested only against fakes (`scripts/dev.sh tools-test`). Anything
+Status: **the whole sequence has been done once on a real `5RHNRFB-YP07` (V0.13, 2026-11-11, AUDIT 25 and 26): backup, flash,
+calibration check, app install.** `restore_backup.py`, the logo and tune tools and transmit are still tested only against fakes (`scripts/dev.sh tools-test`). Anything
 marked UNVERIFIED has not met real hardware. Do the first flash on a radio you can afford to lose.
 
 ## The cable
@@ -20,7 +20,7 @@ has a CH340 chip). Before any software runs:
 | Channels (1000), VFO, 20 DTMF contacts | Yes, if backed up first | `radio_read.py` backup, then `restore_backup.py` (dry run by default, undo image, per-record readback and rollback). Records are restored through the port and verified *through the port*; the port speaks logical records, not raw flash |
 | Settings (0x9000) | **No, by design** | the custom firmware keeps its own 168-byte record there; writing stock bytes could change it, for example clear the TX inhibit. Re-enter via SETTINGS |
 | DTMF/ANI header, rest of 0xA000-0xA2C0, FM list, 0xD000 scratch | **No** | the port has no write command for them (first boot erases the DTMF and FM sectors) |
-| Calibration (`0xF000-0xF260`) | Not touched by anything here | no write command exists; `dump_nor.py` records it **after** flashing. No pre-flash copy is possible with these tools |
+| Calibration (`0xF000-0xF260`) | Not touched by anything here; **a pre-flash copy is possible** | the stock firmware answers read frames for 0xF000 (and the whole 0x0000-0xFFFF space), so save it before flashing; `dump_nor.py --cal` after flashing must be identical to it (it was: AUDIT 26). No write command exists |
 | Core firmware | Re-flashable with another open build | bootloader is not overwritten (UNVERIFIED) |
 | **Stock firmware** | **No** | no stock image exists for the YP07 (FD6818B); BK/NRF stock images do not restore RX/TX on it |
 

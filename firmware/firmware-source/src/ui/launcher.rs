@@ -38,7 +38,7 @@ where
 {
     let index = app.launcher_index();
     let mut source = LauncherSource(app);
-    draw_list(lcd, "MENU", &mut source, index, false, cache);
+    draw_list(lcd, "APPS", &mut source, index, false, cache);
 
     let err = crate::app::overlay::take_load_err();
     if err != 0 {

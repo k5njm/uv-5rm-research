@@ -133,6 +133,10 @@ fn dispatch_standby(app: &mut App, syst: &mut SYST, ev: KeyEvent) {
         KeyEventKind::Long => match ev.key {
             KeyId::Asterisk => app.key_lock = !app.key_lock,
             KeyId::Pound => scan::enter(app, syst),
+            KeyId::Vm => {
+                let func = keyfn::from_u8(modes::vm_long(&app.settings));
+                keyfn::invoke(app, syst, func);
+            }
             KeyId::Side1 | KeyId::Side2 | KeyId::Band => {
                 let func = keyfn::from_u8(long_function(app, ev.key));
                 keyfn::invoke(app, syst, func);

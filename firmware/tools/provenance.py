@@ -26,8 +26,9 @@ PACKAGES = {
 }
 EXPECTED_IDENTICAL = {  # measured 2026-11: these rebuild byte-identically; a change here is a regression
     "bandsweep.app", "fm.app", "foxhunt.app", "rptfinder.app", "scanqt.app",
-    "searchqt.app", "settings.app", "spectrum.app", "text.app",
-}  # chanmgr.app and search.app are known skew (AUDIT.md finding 14)
+    "searchqt.app", "spectrum.app", "text.app",
+}  # chanmgr.app and search.app are known skew (AUDIT.md finding 14). settings.app and chanmgr.app sources have since
+#    moved ahead of the shipped binaries on purpose (readable names, VFO/MR long-press, name-editor fix: AUDIT 26).
 
 
 def segments(d):

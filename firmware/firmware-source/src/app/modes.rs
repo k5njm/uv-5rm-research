@@ -43,6 +43,19 @@ const DEFAULT_RANGE_HZ: (u32, u32) = (144_000_000, 148_000_000);
 /// that the settings app and CPS tools depend on.
 const STORE_MAGIC: u8 = b'M';
 
+/// The VFO/MR key's long-press function shares `boot_text_line2` (the settings record has no free byte): byte 10 is a
+/// `keyfn` value, valid only when byte 11 is `VM_LONG_MAGIC`. The settings app writes both.
+const VM_LONG_MAGIC: u8 = b'K';
+
+pub(super) fn vm_long(settings: &Settings) -> u8 {
+    let b = &settings.boot_text_line2;
+    if b[11] == VM_LONG_MAGIC {
+        b[10].min(super::keyfn::KEYFN_MAX)
+    } else {
+        0
+    }
+}
+
 pub(super) fn restore(settings: &Settings) -> (u8, u32, u32) {
     let b = &settings.boot_text_line2;
     if b[0] != STORE_MAGIC || b[1] > CUSTOM {
