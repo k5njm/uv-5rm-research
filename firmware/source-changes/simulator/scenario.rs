@@ -15,6 +15,10 @@
 //!   air HEX [HEX...]   the simulated FSK modem hears a sync, then these 16-bit words (hex), one per poll
 //!   handoff GROUP ACTION   preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items)
 //!   handoff fm DECI        preload it as the core does for a broadcast frequency typed on the main screen (tenths of MHz)
+//!   fmstation DECI NAME [DETAIL...]   one station in the FM app's flash table (`_` in NAME is a space, `-` is no name);
+//!                       before or after `app`. The simulated tuner hears 90.1 94.5 98.1 101.1 104.5 MHz
+//!   fmtable bad         a table whose header is damaged: the FM app must ignore it
+//!   fmcore DECI...      the core's bare FM station list (what the FM app shows when there is no table)
 //!   coords LAT LON      observer position in decimal degrees (settings 5/6); `coords none` clears
 //!   key K               single press. K = 0-9 star pound menu exit up down ab
 //!   hold K              long press
@@ -24,6 +28,7 @@
 //!   expect exit|noexit  whether the LAST key made the app exit
 //!   expect backlight on|off   the app's backlight-hold request
 //!   expect cues N       speaker-only cue sequences played so far (api.play_cue); never keys PTT, checked automatically
+//!   expect fmlive N     live stations in the FM table, as the app would read it; `expect fmtable none` for no valid table
 //!   expect rfrefused N  RF register writes the core's allow-list refused
 //!   expect captured N   records FSK PROBE left in its flash capture range
 //!   expect rxonly       (default on) fails the scenario if the app keyed PTT or the tone function
@@ -45,7 +50,7 @@ fn lookup(name: &str) -> Option<Entry> {
         "textapp" => textapp::entry,
         "searchqt" => sq,
         "spectrum" => |a, e| spectrum::app_entry(a, e),
-        "fm" => |a, e| fm::app_entry(a, e),
+        "fm" => fm::entry,
         "chanmgr" => |a, e| chanmgr::app_entry(a, e),
         #[cfg(any(feature = "settings-menu", feature = "settings-radio", feature = "settings-system"))]
         "settings" => |a, e| settings::app_entry(a, e),
@@ -293,6 +298,7 @@ impl Run<'_> {
                 reset(self.master);
                 chip_reset();   // the simulated FSK modem (TEXT)
                 nor_clear();    // a blank SPI flash for apps that save data
+                fm_reset();     // the simulated FM tuner
                 unsafe { TONE_ON_CALLS = 0; CUES.clear(); RF_WRITES_REFUSED = 0; }
                 for f in &self.setup {
                     f();
@@ -351,6 +357,30 @@ impl Run<'_> {
                 if self.app.is_some() { f(); }
                 self.setup.push(f);
             }
+            ["fmstation", deci, name, detail @ ..] => {
+                let Ok(d) = deci.parse::<u16>() else { return self.check(false, "fmstation needs tenths of a MHz") };
+                let name = if *name == "-" { String::new() } else { name.replace('_', " ") };
+                let detail = detail.join(" ");
+                let f: Setup = Box::new(move || fm_table_add(d, name.as_bytes(), detail.as_bytes()));
+                if self.app.is_some() { f(); }
+                self.setup.push(f);
+            }
+            ["fmtable", "bad"] => {
+                let f: Setup = Box::new(|| {
+                    fm_table_add(901, b"HIDDEN", b"");
+                    nor()[fm::TBL_ADDR as usize..fm::TBL_ADDR as usize + 4].copy_from_slice(b"FMSX");
+                });
+                if self.app.is_some() { f(); }
+                self.setup.push(f);
+            }
+            ["fmcore", list @ ..] => {
+                let Ok(l) = list.iter().map(|d| d.parse::<u16>()).collect::<Result<Vec<_>, _>>() else {
+                    return self.check(false, "fmcore needs tenths of a MHz");
+                };
+                let f: Setup = Box::new(move || fm_tuner().core_list = l.clone());
+                if self.app.is_some() { f(); }
+                self.setup.push(f);
+            }
             ["handoff", "fm", deci] => match deci.parse::<u16>() {
                 Ok(d) => unsafe { HANDOFF = d.to_le_bytes().to_vec() }, // as the core does for a typed broadcast frequency
                 _ => self.check(false, "handoff fm needs tenths of a MHz"),
@@ -400,6 +430,14 @@ impl Run<'_> {
                 };
                 self.check(n.parse::<usize>().ok() == Some(got), &format!("{n} captured record(s) in flash (got {got})"));
             }
+            ["expect", "fmtable", "none"] => {
+                let got = fm_table_live().is_none();
+                self.check(got, "no valid FM station table in flash");
+            }
+            ["expect", "fmlive", n] => {
+                let got = fm_table_live();
+                self.check(got.is_some() && n.parse::<usize>().ok() == got, &format!("{n} live FM station(s) in flash (got {got:?})"));
+            }
             ["expect", "rfrefused", n] => {
                 let got = unsafe { RF_WRITES_REFUSED };
                 self.check(n.parse::<u32>().ok() == Some(got), &format!("{n} refused RF register write(s) (got {got})"));
@@ -408,6 +446,44 @@ impl Run<'_> {
             _ => self.check(false, &format!("unrecognised step `{}`", t.join(" "))),
         }
     }
+}
+
+/// Puts one station into the FM table the way the host tool does (header first, then the next free record).
+fn fm_table_add(deci: u16, name: &[u8], detail: &[u8]) {
+    let base = fm::TBL_ADDR as usize;
+    let nor = nor();
+    if &nor[base..base + 4] != b"FMST" {
+        let mut h = [0xFFu8; 32];
+        h[..4].copy_from_slice(b"FMST");
+        h[4] = 1;
+        h[6..8].copy_from_slice(&1u16.to_le_bytes());
+        h[31] = 0xA5;
+        nor[base..base + 32].copy_from_slice(&h);
+    }
+    let slot = (1..=127).find(|&i| nor[base + i * 32 + 31] == 0xFF).expect("FM table full");
+    nor[base + slot * 32..base + slot * 32 + 32].copy_from_slice(&fm::make_rec(deci, name, detail));
+}
+
+/// Live stations in the FM table's active half, or None when neither half has a valid header.
+fn fm_table_live() -> Option<usize> {
+    let nor = nor();
+    let base = fm::TBL_ADDR as usize;
+    let gen = |half: usize| {
+        let h = &nor[base + half * 4096..base + half * 4096 + 32];
+        (&h[..4] == b"FMST" && h[4] == 1 && h[31] == 0xA5).then(|| u16::from_le_bytes([h[6], h[7]]))
+    };
+    let half = match (gen(0), gen(1)) {
+        (None, None) => return None,
+        (Some(_), None) => 0,
+        (None, Some(_)) => 1,
+        (Some(a), Some(b)) => if (a.wrapping_sub(b) as i16) >= 0 { 0 } else { 1 },
+    };
+    let at = base + half * 4096;
+    Some((1..=127).filter(|&i| {
+        let r = &nor[at + i * 32..at + i * 32 + 32];
+        let f = u16::from_le_bytes([r[0], r[1]]);
+        r[31] == 0xA5 && (fm::LO..=fm::HI).contains(&f)
+    }).count())
 }
 
 /// Runs one scenario file; returns the number of failures.

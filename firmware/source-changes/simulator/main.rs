@@ -30,7 +30,7 @@ mod hamtools;
 mod fskprobe;
 #[path = "../../firmware-source/apps/spectrum/src/main.rs"]
 mod spectrum;
-#[path = "../../firmware-source/apps/fm/src/main.rs"]
+#[path = "../../firmware-source/apps/fm/src/logic.rs"]
 mod fm;
 #[path = "../../firmware-source/apps/chanmgr/src/main.rs"]
 mod chanmgr;
@@ -369,10 +369,12 @@ extern "C" fn nor_read(addr: u32, out: *mut u8, len: u32) -> bool {
     true
 }
 extern "C" fn nor_write(addr: u32, data: *const u8, len: u32) -> bool {
-    // The only flash apps may write: TEXT's log and FSK PROBE's capture range.
+    // The only flash apps may write: TEXT's log, FSK PROBE's capture range and the FM station table.
     let end = addr as u64 + len as u64;
     assert!(
-        (addr >= 0x1F_0000 && end <= 0x1F_4000) || (addr >= 0x1B_0000 && end <= 0x1D_0000),
+        (addr >= 0x1F_0000 && end <= 0x1F_4000)
+            || (addr >= 0x1B_0000 && end <= 0x1D_0000)
+            || (addr >= fm::TBL_ADDR && end <= (fm::TBL_ADDR + fm::TBL_BYTES) as u64),
         "an app wrote outside its flash range: {addr:#x}+{len}"
     );
     assert!(addr / 256 == (addr + len - 1) / 256, "a write must stay inside one flash page");
@@ -384,7 +386,9 @@ extern "C" fn nor_write(addr: u32, data: *const u8, len: u32) -> bool {
 }
 extern "C" fn nor_erase(addr: u32) -> bool {
     assert!(
-        (0x1F_0000..0x1F_4000).contains(&addr) || (0x1B_0000..0x1D_0000).contains(&addr),
+        (0x1F_0000..0x1F_4000).contains(&addr)
+            || (0x1B_0000..0x1D_0000).contains(&addr)
+            || (fm::TBL_ADDR..fm::TBL_ADDR + fm::TBL_BYTES).contains(&addr),
         "an app erased outside its flash range: {addr:#x}"
     );
     assert!(addr % 4096 == 0);
@@ -402,15 +406,71 @@ extern "C" fn fmt_u32(v: u32, out: *mut u8) -> u16 {
 extern "C" fn fmt_freq(hz: u32, out: *mut u8) -> u16 {
     copy_str(&format!("{}.{:05}", hz / 1_000_000, (hz % 1_000_000) / 10), out)
 }
-extern "C" fn fm_tune(_: u32) {}
-extern "C" fn fm_status() -> u32 {
-    0
+/// The simulated FM tuner: a few stations on the air (kHz, raw RSSI), a seek that finds the next one after 0.2 s,
+/// and the core's bare 30-frequency list (scenario step `fmcore`).
+const FM_AIR: [(u32, u8); 5] = [(90_100, 70), (94_500, 42), (98_100, 58), (101_100, 30), (104_500, 66)];
+struct FmTuner {
+    khz: u32,
+    /// (time the seek ends, where it ends up; None = nothing found)
+    seeking: Option<(u32, Option<u32>)>,
+    done: bool,
+    failed: bool,
+    core_list: Vec<u16>,
 }
-extern "C" fn fm_load(_: *mut u8, _: u16) -> bool {
-    false
+static mut FM_TUNER: FmTuner = FmTuner { khz: 100_000, seeking: None, done: false, failed: false, core_list: Vec::new() };
+fn fm_tuner() -> &'static mut FmTuner {
+    unsafe { &mut *std::ptr::addr_of_mut!(FM_TUNER) }
+}
+fn fm_reset() {
+    *fm_tuner() = FmTuner { khz: 100_000, seeking: None, done: false, failed: false, core_list: Vec::new() };
+}
+extern "C" fn fm_tune(khz: u32) {
+    let t = fm_tuner();
+    t.khz = khz;
+    t.seeking = None;
+}
+extern "C" fn fm_seek(up: bool) {
+    let t = fm_tuner();
+    let mut air: Vec<u32> = FM_AIR.iter().map(|a| a.0).collect();
+    air.sort();
+    let found = if up {
+        air.iter().copied().find(|&f| f > t.khz).or(air.first().copied())
+    } else {
+        air.iter().rev().copied().find(|&f| f < t.khz).or(air.last().copied())
+    };
+    t.seeking = Some((sim().now.wrapping_add(2000), found));
+    t.done = false;
+    t.failed = false;
+}
+extern "C" fn fm_status() -> u32 {
+    let t = fm_tuner();
+    if let Some((at, found)) = t.seeking {
+        if sim().now.wrapping_sub(at) < u32::MAX / 2 {
+            t.seeking = None;
+            t.done = found.is_some();
+            t.failed = found.is_none();
+            if let Some(f) = found {
+                t.khz = f;
+            }
+        }
+    }
+    let rssi = FM_AIR.iter().find(|a| a.0 == t.khz).map_or(4, |a| a.1) as u32;
+    (rssi << 8) | (t.failed as u32) << 1 | t.done as u32
+}
+extern "C" fn fm_tuned() -> u32 {
+    fm_tuner().khz
+}
+extern "C" fn fm_load(out: *mut u8, len: u16) -> bool {
+    let t = fm_tuner();
+    assert!(len >= 60);
+    for i in 0..30 {
+        let v = t.core_list.get(i).copied().unwrap_or(0xFFFF).to_le_bytes();
+        unsafe { std::ptr::copy_nonoverlapping(v.as_ptr(), out.add(i * 2), 2) };
+    }
+    true
 }
 extern "C" fn fm_save(_: *const u8, _: u16) -> bool {
-    false
+    panic!("the FM app saves its stations in its own flash table, not through fm_channels_save");
 }
 extern "C" fn chan_read(num: u16, out: *mut u8, _len: u16) -> bool {
     match sim().chans.get(&num) {
@@ -768,9 +828,9 @@ static API: Api = Api {
     fmt_u32,
     fmt_freq,
     fm_tune_khz: fm_tune,
-    fm_seek: nop_bool,
+    fm_seek,
     fm_status,
-    fm_tuned_freq_khz: fm_status,
+    fm_tuned_freq_khz: fm_tuned,
     fm_power_off: nop,
     fm_channels_load: fm_load,
     fm_channels_save: fm_save,

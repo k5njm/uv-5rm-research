@@ -1,0 +1,20 @@
+# The tuner on a saved, named station (with a detail line), then stepping through the saved stations with # and *.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 917 KKXT Adult Album Alt
+fmstation 933 WBAP News/Talk
+fmstation 963 KSCS Country
+fmstation 1011 WRR Classical
+fmstation 1045 KKDA Hip-Hop
+handoff fm 901
+app fm
+wait 1
+shot kera
+key pound                 # next saved station up: 91.7
+wait 0.1
+shot next_saved
+key star
+key star                  # back past KERA to 89.3
+shot previous_saved

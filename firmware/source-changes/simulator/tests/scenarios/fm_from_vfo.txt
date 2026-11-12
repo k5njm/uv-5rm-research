@@ -1,5 +1,15 @@
-# A broadcast frequency typed on the main screen opens the FM app already on it (98.1 MHz here).
+# A broadcast frequency typed on the main screen opens the FM app already on it (98.1 MHz here, a saved station).
+fmstation 981 KZPS Classic Rock
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 917 KKXT Adult Album Alt
+fmstation 933 WBAP News/Talk
+fmstation 963 KSCS Country
+fmstation 1011 WRR Classical
+fmstation 1045 KKDA Hip-Hop
 handoff fm 981
 app fm
-wait 2
+wait 1
 shot tuned

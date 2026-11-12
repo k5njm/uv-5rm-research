@@ -1,0 +1,37 @@
+# Typing a frequency: digits show in amber; three digits commit when a fourth could not make a valid one (981).
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 917 KKXT Adult Album Alt
+fmstation 933 WBAP News/Talk
+fmstation 963 KSCS Country
+fmstation 1011 WRR Classical
+fmstation 1045 KKDA Hip-Hop
+handoff fm 1000
+app fm
+key 1
+key 0
+key 1
+shot typing_three
+key 1
+wait 0.1
+shot typed_1011
+key 9
+key 8
+shot typing_two
+key 1
+wait 0.1
+shot typed_981
+key 1
+key 0
+key 9
+key 9
+wait 0.1
+shot out_of_band
+key 0
+key 8
+key exit                  # EXIT clears what is typed and does not leave
+expect noexit
+wait 0.1
+shot cleared

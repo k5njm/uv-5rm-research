@@ -1,0 +1,22 @@
+# Deleting a station: * arms it, MENU confirms, EXIT would cancel.
+fmstation 881 KNTU Alternative
+fmstation 885 KEOM Classic Hits
+fmstation 893 KNON Variety
+fmstation 901 KERA Public Radio
+fmstation 917 KKXT Adult Album Alt
+fmstation 933 WBAP News/Talk
+fmstation 963 KSCS Country
+fmstation 1011 WRR Classical
+fmstation 1045 KKDA Hip-Hop
+handoff fm 933
+app fm
+wait 0.5
+key menu
+key star
+shot confirm
+key menu
+shot deleted
+expect fmlive 8
+key exit
+wait 0.1
+shot tuner_after

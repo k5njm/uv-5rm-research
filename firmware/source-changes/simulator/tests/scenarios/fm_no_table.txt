@@ -1,0 +1,12 @@
+# A damaged table is ignored and the core's bare list is shown; the first save moves it into a table.
+fmtable bad
+fmcore 901 981 1045
+handoff fm 1011
+app fm
+wait 0.5
+expect fmtable none
+key menu
+shot bare_list
+key menu
+shot saved_into_table
+expect fmlive 4
