@@ -262,6 +262,10 @@ class Serial:
                 r = self.reader.feed(b)
                 if r:
                     self._frame(r)
+        # The firmware handles a frame in milliseconds; this fake can take seconds (it rewrites a 2 MB file) on a busy
+        # machine. Its own slowness must not count as the host being silent, or tests fail at random under load.
+        if self.mode == "session":
+            self.last_byte = time.monotonic()
         return len(data)
 
     # ---- standby: the handshake (cps/mod.rs HandshakeDetector, run_session start) ----
