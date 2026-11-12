@@ -1165,8 +1165,8 @@ fn test_sweep() {
     check(sim().cfg_rx == listening_to && sim().holds_rx && sim().modulation == 0, "Menu tunes the selected signal in FM");
     run(app, 3);
     check(sim().retunes == tuned_before, "sweep pauses while listening");
-    press(app, 12);
-    check(!sim().holds_rx, "Menu returns to sweeping");
+    press(app, 13);
+    check(!sim().holds_rx, "Exit returns to sweeping");
     run(app, 3);
     check(sim().retunes > tuned_before, "sweep resumed");
 
@@ -1181,7 +1181,9 @@ fn test_sweep() {
 
     println!("Band Sweep: send to VFO for Spectrum");
     let selected = bandsweep::debug_selected_hz();
-    check(hold(app, 12), "holding Menu leaves");
+    press(app, 12); // listen to it
+    check(sim().vfo_saved.is_none(), "listening alone hands nothing to the VFO");
+    check(press(app, 12), "Menu while listening leaves");
     check(sim().vfo_saved == Some((selected, 0)), "saved the selected frequency to VFO with no tone");
     app(&API, AppEvent::Leave);
 
@@ -1193,7 +1195,7 @@ fn test_sweep() {
     check(bandsweep::debug_band() == 2, "opens on the band the radio is tuned to");
     press(app, 12);
     check(sim().modulation == 1 && sim().cfg_rx == 121_500_000, "listens in AM");
-    press(app, 12);
+    press(app, 13);
     check(sim().modulation == 0, "back to FM for sweeping");
 
     println!("Band Sweep: band, step and custom range");

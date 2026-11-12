@@ -5,7 +5,6 @@
 use bf5rh_abi::{Api, AppEvent, AppResult};
 
 const KIND_SINGLE: u8 = 2;
-const KIND_LONG: u8 = 3;
 const KIND_REPEAT: u8 = 4;
 const KEY_ASTERISK: u8 = 10;
 const KEY_POUND: u8 = 11;
@@ -603,16 +602,14 @@ fn key(api: &Api, id: u8, kind: u8) -> AppResult {
         return AppResult::Continue;
     }
     if st.view == View::Listen {
-        if kind == KIND_SINGLE && matches!(id, KEY_MENU | KEY_EXIT) {
+        if kind == KIND_SINGLE && id == KEY_MENU {
+            // Tune the main screen's VFO to what is being heard (no tone) and leave; SPECTRUM opens centred on it.
+            (api.save_master_vfo)(st.listen_hz, 0);
             stop_listen(api, st);
-        }
-        return AppResult::Continue;
-    }
-    if kind == KIND_LONG && id == KEY_MENU {
-        // Spectrum opens centered on this, for a closer look.
-        if st.n_hits > 0 {
-            (api.save_master_vfo)(st.hits[st.selected].hz, 0);
             return AppResult::Exit;
+        }
+        if kind == KIND_SINGLE && id == KEY_EXIT {
+            stop_listen(api, st);
         }
         return AppResult::Continue;
     }
@@ -833,7 +830,7 @@ fn draw_status(api: &Api, st: &State) {
             a.i(api, (api.read_rssi)() as i32 - RSSI_DBM_BASE);
             a.s(b"DBM");
             line(api, STATUS_Y, a.as_slice(), TRACE, BLACK);
-            draw_hint(api, b"MENU back to sweep");
+            draw_hint(api, b"MENU tune  EXIT sweep");
             return;
         }
         View::Sweep => {}
@@ -855,7 +852,7 @@ fn draw_status(api: &Api, st: &State) {
     line(api, STATUS_Y, a.as_slice(), GRAY, BLACK);
     draw_hint(
         api,
-        if st.n_hits > 0 { b"MENU hear  hold MENU tune" } else { b"A/B band  1 step  5 range" },
+        if st.n_hits > 0 { b"MENU hear  A/B band" } else { b"A/B band  1 step  5 range" },
     );
 }
 

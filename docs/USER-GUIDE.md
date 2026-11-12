@@ -487,8 +487,9 @@ other lists, and the trace is green: red is only used while the radio transmits.
 | Key | Action |
 |---|---|
 | `UP` / `DOWN` | Select a hit in the list. |
-| `MENU` | Listen to the selected hit (`RX` line). `MENU` or `EXIT` goes back to the sweep. |
-| Hold `MENU` | Put the selected hit on the main screen's VFO and leave the app. |
+| `MENU` | Listen to the selected hit (`RX` line). |
+| `MENU` while listening | Put that frequency on the main screen's VFO (no tone) and leave the app. |
+| `EXIT` while listening | Go back to the sweep. |
 | `A/B` | Next band (VHF, UHF, AIR, 220, 350). |
 | `1` | Switch the step between 25 and 12.5 kHz. |
 | `5` | Type a custom range: start, `MENU`, stop, `MENU` (six digits each, MHz with three decimals). |
