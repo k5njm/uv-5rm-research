@@ -33,10 +33,24 @@ Hardware-facing steps (flashing, serial, webcam, injector) cannot run in a conta
 `scripts/dev.sh bf` builds the core variants and wraps them as flashable `.BF` files. `scripts/chirp-backup.sh PORT` is the one
 exception to "serial stays on the host": CHIRP runs in a container and reaches the port through `scripts/serial_bridge.py` (loopback only).
 
-CI can be rehearsed locally before pushing (and when pushing is blocked): `scripts/ci-replay.sh verify|web` runs the workflow's own
-`run:` steps in a clean x86_64 Ubuntu container with a runner-like Rust (stable, no ARM target). It found nothing wrong after the
-toolchain fix; the one real CI failure so far (pinned toolchain not selected when a step runs outside `firmware-source/`) was
-found by the first GitHub run.
+CI (`.github/workflows/ci.yml`) is path-filtered: the `changes` job runs `scripts/ci_changed.py` (a table of which files each
+job reads, found from the code: the simulator's `#[path]` includes, what `mkapp.py` and `build_core.sh` consume, what the tool
+tests open) and a pull request runs only the jobs its files can affect (`gate`, `sim`, `tools`, `hil`, `images`, `web`). A push
+to `main` runs all of them; so does a change to a workflow, `scripts/dev.sh`, the Dockerfile, the toolchain pin, the ABI file,
+or a file the table does not list. `ci-ok` always runs and is the one check to require. When a step starts reading a new path,
+add it to `RULES` in `scripts/ci_changed.py`; `firmware/tests/test_ci_filters.py` (in `tools-test`) fails for an unlisted
+tracked file and checks example changes against the real workflow. The two-architecture rebuild is `repro.yml`.
+
+CI can be rehearsed locally before pushing (and when pushing is blocked): `scripts/ci-replay.sh gate|sim|tools|hil|images|web|all`
+(no argument prints the list) runs the workflow's own `run:` steps in a clean x86_64 Ubuntu container with a runner-like Rust
+(stable, no ARM target); it does not evaluate the path filter. It found nothing wrong after the toolchain fix; the one real CI
+failure so far (pinned toolchain not selected when a step runs outside `firmware-source/`) was found by the first GitHub run.
+
+Releases: `scripts/dev.sh bundle` builds the install bundle (core `.BF`, the launcher apps and extras for the current ABI,
+`layout.json`, `SHA256SUMS`, the host tools, `channels/`, the runbook, `INSTALL.md`; `firmware/tools/bundle_release.py`) into
+`build-out/bundle/`, and refuses a core whose hash differs from `firmware/expected-hashes.json`. `.github/workflows/release.yml`
+runs that same command in the dev container on a `v*` tag (or as a dry run by hand) and attaches the result to a GitHub release.
+Nothing personal may be bundled (`.env`, `my-backup/`, `build-out/personal`): the script fails if it finds any.
 
 ## Before a PR
 `scripts/dev.sh check` (release gate, unit tests, scenarios for every style, simulator suite, overlay builds, core firmware, HIL tests).

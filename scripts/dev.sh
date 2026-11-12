@@ -7,6 +7,9 @@
 #   firmware     build core firmware variants    hil-test   offline HIL pipeline tests
 #   release      everything one radio needs for the CURRENT core: build-out/release/ (core .BF, the nine launcher apps and
 #                extras built for the current ABI, layout.json, SHA256SUMS), checked by the release gate
+#   bundle       release + the host tools, channels, runbook and INSTALL.md: build-out/bundle/uv5rm-$VERSION/ and
+#                build-out/bundle/assets/ (the zip, its checksum, the flat release files); release.yml publishes exactly this.
+#                VERSION=v0.1.0 (default dev-<short commit>); ALLOW_UNPINNED=1 rehearses a core that is not the pinned one
 #   bf           build the core variants and wrap them as flashable build-out/fw-*.BF (prints the sha256 flash_bf.py needs)
 #   hashes       [--update] compare/record sha256 of built images with firmware/expected-hashes.json
 #   manifest     write build-out/manifest.json describing the built images (web builder input)
@@ -95,6 +98,15 @@ cmd_release() {
     python3 -I firmware/tools/verify_release.py --no-committed --apps build-out/release --image build-out/release/fw-default.bin > /tmp/rel.log || { cat /tmp/rel.log; exit 1; }; tail -1 /tmp/rel.log; \
     cd build-out/release && sha256sum fw-default.BF fw-default.bin *.app > SHA256SUMS && cat SHA256SUMS"
 }
+# The same bundle release.yml publishes (that workflow calls this command): the release set plus the host tools, channels,
+# runbook and INSTALL.md (firmware/tools/bundle_release.py). The version stamp is read on the host: the container has no
+# git identity for the mounted tree.
+cmd_bundle() {
+  cmd_release | tail -4
+  ver="${VERSION:-dev-$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo local)}"
+  extra=""; [ "${ALLOW_UNPINNED:-}" = 1 ] && extra="--allow-unpinned"
+  run "rm -rf build-out/bundle && python3 -I firmware/tools/bundle_release.py bundle --release build-out/release --out build-out/bundle --version '$ver' $extra"
+}
 cmd_hil_test()  { run "python3 hil/test_hil.py > /tmp/hil.log 2>&1 || { tail -30 /tmp/hil.log; exit 1; }; tail -3 /tmp/hil.log"; }
 cmd_tools_test() { run "for t in firmware/tests/test_*.py; do echo \"-- \$t\"; python3 -W error::ResourceWarning \$t > /tmp/t.log 2>&1 || { tail -40 /tmp/t.log; exit 1; }; tail -3 /tmp/t.log | head -2; done"; }
 cmd_hashes()    { cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/pin_hashes.py build-out $*"; }
@@ -150,10 +162,10 @@ case "${1:-}" in
   image) image ;; shell) ensure_image
          docker run --rm $(plat) -it -v "$ROOT":/work -v "uv5rm-cargo-$ARCH_TAG":/opt/cargo/registry -v "$CACHE_VOL":/cache "$IMAGE:$ARCH_TAG" bash ;;
   check) cmd_check ;; sim) cmd_sim ;; unit) cmd_unit ;; scenarios) shift; cmd_scenarios "$@" ;;
-  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; size-report) cmd_size_report ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; bf) cmd_bf ;; release) cmd_release ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
+  manifest) cmd_apps >/dev/null; cmd_firmware >/dev/null; run "python3 firmware/tools/make_manifest.py build-out build-out/manifest.json && head -c 600 build-out/manifest.json" ;; provenance) run "python3 firmware/tools/provenance.py $*" ;; web-test) cmd_web_test ;; size-report) cmd_size_report ;; exec) shift; run "$*" ;; hashes) shift; cmd_hashes "$@" ;; gate) cmd_gate ;; tools-test) cmd_tools_test ;; apps) cmd_apps ;; firmware) cmd_firmware ;; bf) cmd_bf ;; release) cmd_release ;; bundle) cmd_bundle ;; hil-test) cmd_hil_test ;; repro) cmd_repro ;;
   personalize) [ -f "$ROOT/.env" ] || { echo "no .env: copy .env.sample to .env and fill it in" >&2; exit 1; }
     ver="$(git -C "$ROOT" rev-parse --short HEAD)$(git -C "$ROOT" diff --quiet HEAD -- firmware && echo || echo +)"
     run "mkdir -p build-out/personal && cd $SIMDIR && CARGO_TARGET_DIR=/cache/sim cargo run --release -q -- bootcard /work/.env /work/build-out/personal/boot-logo $ver $(date +%F)" ;;
   channels) run "python3 firmware/source-changes/channel_plan.py build channels -o build-out/channels.img" ;;
-  *) sed -n '2,10p' "$0"; exit 1 ;;
+  *) sed -n '2,/^# Env/p' "$0"; exit 1 ;;
 esac
