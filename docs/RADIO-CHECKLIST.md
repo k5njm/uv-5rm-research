@@ -37,6 +37,8 @@ calibration copy you already hold. If it differs, **stop**: do not transmit.
 - [ ] **7.** Memory mode on a channel that has a detail text (a place or a note; the channels from `channels/` have one, with CH DISPLAY on its default NAME+FREQ): the
   text sits right-aligned on the channel-number row. (AUDIT 33)
 - [ ] **8.** Hold `*` locks the keypad (padlock in the status bar, a beep if KEY BEEP is on); hold `*` again unlocks it.
+- [ ] **8a.** Tune a steady signal (NOAA 162.400): the green `RX` marker beside the active side stays lit, without flicker, for as long as the squelch is open, and goes out when the signal goes. Then a weak signal and
+  SQUELCH 0 (RADIO > SQUELCH): note whether `RX` still flickers. It followed a free-running 6 Hz blink before (the guide's marker row). (AUDIT 55)
 
 ## Part 2: SETTINGS (receive only)
 

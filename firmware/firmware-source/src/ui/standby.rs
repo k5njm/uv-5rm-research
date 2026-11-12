@@ -630,11 +630,10 @@ fn draw_rx_status<D>(
     let text_kind = if transmitting_here {
         RxStatusText::Tx
     } else if is_watching && (app.is_monitor() || app.rssi_open()) {
-        if app.rx_blink_on() {
-            RxStatusText::Rx
-        } else {
-            RxStatusText::None
-        }
+        // Steady while the squelch is open. It used to follow a free-running blink timer (`poll_blink`, a 5-poll half
+        // period, about 6 Hz) that the main screen sampled once per frame at an uneven interval: the word flickered
+        // irregularly for as long as a signal was received (AUDIT 55).
+        RxStatusText::Rx
     } else if app.last_signal_side() == Some(i) {
         RxStatusText::LastSignal
     } else {
