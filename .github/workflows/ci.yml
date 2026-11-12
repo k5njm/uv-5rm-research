@@ -1,5 +1,13 @@
 name: ci
-on: [push, pull_request]
+# Development is local-first (AGENTS.md): scripts/dev.sh check is the gate, and this workflow repeats it on a clean
+# machine. It runs once per change (pushes to main, and pull requests), and not at all for a change that only
+# touches documentation. The two-architecture rebuild lives in repro.yml.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**/*.md", "docs/**", ".env.sample", "LICENSE"]
+  pull_request:
+    paths-ignore: ["**/*.md", "docs/**", ".env.sample", "LICENSE"]
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -79,23 +87,6 @@ jobs:
         run: |
           mkdir -p /tmp/pinned && cp /tmp/out/*.bin /tmp/out/*.app /tmp/pinned/
           python3 firmware/tools/pin_hashes.py /tmp/pinned
-  hab-apps:
-    # aprs/horus/rs41 do not compile yet (see AUDIT.md). The failure is reported as a
-    # warning annotation, not a red check. Remove continue-on-error once they build.
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: { app: [aprs, horus, rs41] }
-    steps:
-      - uses: actions/checkout@v4
-      - name: Pinned nightly (the apps' rust-toolchain.toml)
-        run: rustup toolchain install "$(sed -n 's/^SMALL_TOOLCHAIN=//p' firmware/toolchain.env)" --profile minimal -c rust-src -t thumbv7em-none-eabi
-      - name: Build ${{ matrix.app }} (known-broken, non-blocking)
-        working-directory: firmware/firmware-source/apps/${{ matrix.app }}
-        continue-on-error: true
-        run: |
-          if ! cargo build --release; then
-            echo "::warning title=${{ matrix.app }} does not compile::Known issue tracked in AUDIT.md"
-          fi
   web:
     # Headless-Chromium test of web/ (phase 1: planning + fake radio) against the CI-built images.
     needs: verify
@@ -114,14 +105,3 @@ jobs:
           /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
       - name: Browser test
         run: NODE_PATH=/tmp/pw/node_modules node web/test/run.cjs /tmp/served
-  repro:
-    # Build under native amd64 and emulated arm64 and require identical images (scripts/dev.sh repro).
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-        with: { platforms: arm64 }
-      - run: scripts/dev.sh repro
-        env:
-          WITH_BROWSER: "0"   # no Chromium layer under QEMU

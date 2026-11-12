@@ -18,7 +18,12 @@ Conventions for this repo (borrowed from the sibling `beepy-ui` project's workfl
 - App arena is 8,192 bytes; core firmware has ~88 bytes of flash free: new features are overlay apps.
 - Build overlays with `firmware/firmware-source/tools/mkapp.py` (needs `rust-objcopy`, `rust-nm`, `rust-size` on PATH; llvm-* symlinks work).
 - Never commit radio backups (`my-backup/`, `*.img`), secrets, or third-party logos/music.
-- Ship only CI-built images; do not trust a committed `.BF` (see AUDIT.md finding 6).
+- Development is local-first. Flash only an image built by `scripts/dev.sh release` whose sha256 equals the pin in
+  `firmware/expected-hashes.json`, recorded by a passing `scripts/dev.sh check` on the commit being flashed. Never flash a
+  hand-built image or a committed `.BF` (AUDIT.md finding 6). GitHub CI repeats the check on a clean machine for pushes to
+  `main` and for pull requests; it is not a gate before flashing the owner's radio, and it is the gate for other people's PRs.
+- Push a branch with an explicit destination (`git push origin BRANCH:BRANCH`) and create branches with `--no-track`:
+  a branch made from `origin/main` tracks it, and a bare push then goes to `main` (AUDIT 41).
 - Do not merge or push to upstream (jakegarrett13-afk) repos; import their PRs as source on a branch, tested.
 
 ## Build environment
