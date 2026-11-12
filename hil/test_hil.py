@@ -88,8 +88,10 @@ class Vision(unittest.TestCase):
         for k, v in self.g.items():
             self.assertGreaterEqual(vision.similarity(self.cam[k], v), 0.80, k)
 
-    # Apps whose screens are the firmware's shared list (same title bar, same selection bar).
-    LIST_APPS = {"chanmgr", "settings", "fm"}   # fm: its station list is the shared list too
+    # Apps whose screens share the house chrome (light title bar, dark hint strip at the bottom): the firmware's shared
+    # list, and TEXT, SPECTRUM and BAND SWEEP, which were given the same bars (a quiet frame of any of them is mostly
+    # that chrome, so the webcam check cannot tell them apart; the simulator compares pixel-exactly).
+    LIST_APPS = {"chanmgr", "settings", "fm", "text", "spectrum", "bandsweep"}   # fm: its station list is the shared list too
 
     def test_wrong_tool_screen_is_rejected_with_margin(self):
         app = lambda k: k.split("/")[0].split("_")[0]          # hamtools, foxhunt, settings, ...
@@ -189,8 +191,8 @@ print(vision.similarity(vision.rectify(f, c), real))
         kp = _read(os.path.join(os.path.dirname(HERE), "firmware", "firmware-source", "src", "device", "keypad.rs"))
         body = kp[kp.index("fn supports_long"):kp.index("fn supports_repeat")]
         names = set(re.findall(r"KeyId::(\w+)", body))
-        ours = {"up": "Up", "down": "Down", "exit": "Exit", "star": "Asterisk", "pound": "Pound", "0": "Digit0"}
-        self.assertEqual({ours[k] for k in sc.LONG_KEYS}, names - {"Vm", "Band", "Side1", "Side2"})
+        ours = {"up": "Up", "down": "Down", "exit": "Exit", "star": "Asterisk", "pound": "Pound", "0": "Digit0", "side1": "Side1", "side2": "Side2"}
+        self.assertEqual({ours[k] for k in sc.LONG_KEYS}, names - {"Vm", "Band"})
         with self.assertRaises(ValueError):
             sc.parse("hold menu\n")
 

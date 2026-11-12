@@ -33,6 +33,7 @@ FRAMES=(
   "settings_system_items/system_items        settings-system"
   # Apps
   "spectrum_two_signals/waterfall_filled     spectrum"
+  "spectrum_no_signal/no_signal_toast        spectrum-no-signal"
   "bandsweep_vhf/after_first_pass            bandsweep"
   "foxhunt_signal/meter_steady               foxhunt"
   "foxhunt_signal/distance_entry             foxhunt-distance"
@@ -41,6 +42,7 @@ FRAMES=(
   "searchqt_tone/tone_found                  qtscan"
   "searchqt_tone/search_uhf                  search"
   "text_ping/typed_hi                        text"
+  "text_ping/on_air                          text-on-air"
   "fm_tuner_named/kera                       fm"
   "fm_list/playing_selected                  fm-list"
   "fm_save/save_row                          fm-save"
