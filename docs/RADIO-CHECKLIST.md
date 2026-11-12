@@ -25,6 +25,17 @@ calibration copy you already hold. If it differs, **stop**: do not transmit.
 - [ ] **1a.** Battery reading (receive only; AUDIT 57). Watch the voltage at the right of the status bar for a minute with the radio idle on a quiet channel: it should hold steady, moving at most 0.01 or 0.02 V and only
   now and then, and the bars should not flicker. Note the voltage and the bars. Switch the backlight or the receive audio on and off: the number may drift over several seconds, never jump. (BATTERY CAL in SETTINGS is
   not smoothed; it keeps its quick, noisier reading.)
+- [ ] **1b.** Low battery warning (AUDIT 58; nothing here has been seen on the radio). There is no way to drain a pack on
+  demand, so make the radio believe the voltage is lower with BATTERY CAL. Write down the current BATTERY CAL value first
+  (SETTINGS > SYSTEM). Leave SETTINGS with the radio on the main screen and a quiet channel. Set BATTERY CAL to `720`
+  (type `7`, `2`, `0`: it takes the value at the third digit, and 7.20 V is under the 7.30 V first threshold). Within
+  about ten seconds (the slow average has to move) expect the red `LOW BATTERY` box for four seconds and three falling
+  tones from the speaker. No second warning should follow. Then type `690` (7.00 V is the second threshold: 6.90 V is below it): the notice and chime
+  come once, then again 10 minutes later (leave it on the main screen to check). Type `780`: no warning. Type `720`
+  again: a new warning (it re-armed above 7.45 V, which 7.80 V is). Check that KEY BEEP off silences the chime and still
+  shows the notice, that a transmission on a dummy load (step 38) never shows it, and that with a station received the
+  chime waits until the squelch closes. Put it back with `#` in BATTERY CAL (the nominal 2537) or by typing the true battery volts
+  you measured; if the main screen's voltage has not moved after leaving SETTINGS, say so (the core reads the setting at boot, power-cycle to be sure). Report what you saw and heard.
 - [ ] **2.** Type `098100`. The FM app opens already tuned to 98.1 MHz (it is in slot 9 of the release). `EXIT` returns to the main screen. (AUDIT 40)
 - [ ] **3.** Type `174000`, then `UP`: the frequency goes to `200.000` (the start of the next receive band), and `DOWN` goes back to `174.000`.
   Type `520000`, `UP`: it wraps to `108.000`. (AUDIT 43)

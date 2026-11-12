@@ -76,7 +76,7 @@ of the layout, not a screenshot (here a `PS` flag shares the status line with th
 | **Accent colour** | Blue in VFO mode, green on a memory channel, red while transmitting. The line under the status bar and the left stripe of the active side use it. The side that does not have the keys has a dark stripe |
 | **Status bar, left** | `PS` (battery save is working), `DWR` (dual watch is on), `SCAN UP EXIT` or `SCAN DN EXIT` while scanning (`SCAN UP` or `SCAN DN` when a `PS`, `DWR` or `VOX` flag shares the line), `VOX`, and a padlock while the keypad is locked. While transmitting, a red `MM:SS` timer replaces `PS` and `DWR` |
 | **Status bar, tag** | In memory mode the short name of the channel group (`RPT`, `WX`, `ALL`, ...; see [Channel groups](#channel-groups)). In VFO mode the band the frequency is in (`AIR`, `2M`, `MURS`, `MARINE`, `WX`, `1.25M`, `70CM`, `GMRS`) or nothing |
-| **Status bar, right** | Battery voltage and a battery icon (red at one bar or none, amber at two, green above). The number is an average that follows a change over several seconds, so it stays steady while you receive; while you transmit it follows the battery within a second, so the sag under load shows, and it eases back over about two seconds after you release `PTT`. The firmware does not warn about, or act on, a low battery |
+| **Status bar, right** | Battery voltage and a battery icon (red at one bar or none, amber at two, green above). The number is an average that follows a change over several seconds, so it stays steady while you receive; while you transmit it follows the battery within a second, so the sag under load shows, and it goes straight back to the resting value when you release `PTT`. A low battery shows the `LOW BATTERY` notice and plays a chime (see Low battery below); nothing else is done about it |
 | **Two blocks** | The upper block is side A and the lower block is side B. `A/B` moves the keys to the other side. The active side is bright, the other is dimmer. With DUAL WATCH on, the coloured line at the left edge runs across both sides. **Each side keeps its own channel group** |
 | **Row 1** | `VFO`, or the channel's number in the current group (`01`; the radio's own number in group ALL, and also for a channel that is outside the group). On the right, the channel's detail text (a place or a note) when CH DISPLAY is NAME or NAME+FREQ, or the channel's name in small letters when CH DISPLAY is FREQUENCY |
 | **Marker** (left of row 1) | `RX` (green, steady) while the squelch is open on that side, `TX` (red) while transmitting, `>>` (amber) on the side that heard the last signal |
@@ -126,6 +126,23 @@ RPT FINDER's save prompt asks for the radio's own number, and the channel plan f
 A key that can be held sends its press when you let go **only if you let go before about one second**: an `A/B` held for a second or more
 switches DUAL WATCH and does not also switch the side. (Every key already acts on release; a hold-capable key just stops acting once the
 hold has fired.)
+
+### Low battery
+
+The firmware turns the battery voltage into a rough charge for a 2-cell lithium-ion pack (8.40 V is 100%, 7.70 V 50%,
+6.20 V 0%; a guess from voltage alone that moves with load, temperature and age). When the resting voltage, the slow
+average that transmitting does not move, falls below 7.30 V (about 20%), the main screen shows a red `LOW BATTERY` box
+for four seconds and the speaker plays three falling tones. Below 7.00 V (about 10%) the same notice and chime repeat
+every 10 minutes until the voltage is back above 7.00 V. It warns once per discharge: it re-arms when the voltage has
+risen above 7.45 V (for example on the charger), and it warns once after power-on if the pack is already below 7.30 V.
+Not seen on a radio yet.
+
+* A transmission never triggers it, during or after: only the resting value is read.
+* The chime is speaker-only (it never keys the transmitter) and follows KEY BEEP: with KEY BEEP off there is no chime and
+  the notice still shows. It waits while a signal is being received and plays when the squelch closes.
+* In an app the chime still plays, but the notice is not drawn over the app: it appears on the main screen when you
+  return to it.
+* The firmware does not stop transmitting or switch off on a low battery.
 
 ### Dual watch
 
