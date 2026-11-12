@@ -29,11 +29,14 @@ impl<'a, 'b> ListSource for ModeSource<'a, 'b> {
     }
 
     fn label(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) {
+        // the number is the digit that selects the group from this menu
+        w.put_u32(index as u32);
+        w.put_char(' ');
         w.put_str(modes_table()[index].name);
     }
 
     fn hint(&mut self, w: &mut dyn crate::fmtlite::Sink) {
-        w.put_str("MENU use     EXIT back");
+        w.put_str("MENU or 0-9 use  EXIT back");
     }
 
     fn value(&mut self, index: usize, w: &mut dyn crate::fmtlite::Sink) -> bool {

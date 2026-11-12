@@ -149,6 +149,12 @@ pub(super) fn dispatch_menu(app: &mut App, syst: &mut SYST, ev: KeyEvent) {
             app.mode = Mode::Standby;
             app.reset_key_idle();
         }
+        // BAND then a digit: the group with that number (1 = REPEATERS, 0 = ALL)
+        (KeyEventKind::Single, key) => {
+            if let Some(d) = digit_value(key) {
+                select(app, syst, d as usize, false);
+            }
+        }
         _ => {}
     }
 }

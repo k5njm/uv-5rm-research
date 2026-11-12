@@ -20,7 +20,7 @@ OUT="$ROOT/docs/img"
 FRAMES=(
   # CHAN MGR
   "chanmgr_groups/repeaters                  chanmgr-group-list"
-  "chanmgr_groups/frs_empty                  chanmgr-group-empty"
+  "chanmgr_groups/simplex_empty                 chanmgr-group-empty"
   "chanmgr_edit/editor                       chanmgr-channel-editor"
   "chanmgr_name_stock_blank/typed_k5r        chanmgr-naming"
   "chanmgr_save_notice/saved_notice          chanmgr-saved"

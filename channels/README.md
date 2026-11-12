@@ -8,11 +8,14 @@ Nothing here has been written to a real radio yet; the whole path is tested only
   `frs.csv`, `pd-fd.csv`, ... Channels fill that group's slots in file order. The `Location` column is ignored.
   `all.csv` is the exception: channels go to their own `Location` (1-1000).
 - Groups overlap, so each file uses only its group's own slots: weather 1-7, repeaters 234-304, frs 305-326,
-  gmrs 327-344 (repeater pairs), murs 345-349.
-- `weather.csv`, `frs.csv` and `murs.csv` are the standard US lists and are the same everywhere. `repeaters.csv` (ham)
-  and `gmrs.csv` (GMRS repeaters, with their tones) are local to the Dallas area. This radio is not certified for FRS,
-  GMRS or MURS: those lists are for listening unless you know your licence and the rules allow it; the radio's TX BANDS
-  and TX INHIBIT settings decide what it will transmit on.
+  gmrs 327-344, murs 345-349, simplex 351-380, satellites 381-410.
+- `weather.csv`, `frs.csv`, `murs.csv` and `simplex.csv` (national calling frequencies and the 2 m simplex channels) are
+  the same everywhere in the US. `repeaters.csv` (ham) and `gmrs.csv` (GMRS repeaters, with their tones) are local to
+  the Dallas area. `satellites.csv` holds the FM satellites a handheld can work, from AMSAT's FM satellite summary
+  (2026-10-31): check AMSAT's status page before a pass, because satellites come and go. Each cross-band satellite has
+  five channels, AOS to LOS, stepping the 70 cm frequency for Doppler; `Duplex` is `split` and `Offset` is the uplink.
+- This radio is not certified for FRS, GMRS or MURS: those lists are for listening unless you know your licence and the
+  rules allow it; the radio's TX BANDS and TX INHIBIT settings decide what it will transmit on.
 - `Detail` (location or description, at most 16 ASCII characters) goes into a second file, `OUT.extras`, which the main
   screen shows beside the channel number in memory mode. Install it with `channel_extras.py PORT build-out/channels.extras`.
 - Required columns: `Name`, `Frequency`; the rest of the CHIRP columns are optional (see the docstring for the rules).

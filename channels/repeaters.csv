@@ -31,5 +31,3 @@ Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPola
 30,WD5U,145.490000,-,0.600000,TSQL,85.4,85.4,023,NN,FM,5.00,,10.0W,Rosston,"WD5U - Rosston, 145.490"
 31,NGU425,440.425000,+,5.000000,TSQL,110.9,110.9,023,NN,FM,5.00,,10.0W,Rosston,"W5NGU - Rosston, 440.425"
 32,N6LXX,443.737500,+,5.000000,TSQL,141.3,141.3,023,NN,FM,5.00,,10.0W,Rosston,"N6LXX - Rosston, 443.7375"
-33,VHF52,146.520000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,2m calling,146.520 - 2m national FM calling (simplex)
-34,UHF446,446.000000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,70cm calling,446.000 - 70cm national FM calling (simplex)

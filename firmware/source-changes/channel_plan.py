@@ -27,8 +27,8 @@ a message and write nothing. (CUSTOM RANGE has no slots of its own and cannot be
 
 Record rules are mirrored from firmware/UV-5RM_Channel_Uploader.html (the upstream uploader); [U:x] = its function x.
   layout        32 bytes, 0xFF filled; RX freq BCD LE in 10 Hz units at 0; TX at 4                       [U:encode, bcdBytes, to10Hz]
-  receive-only  Duplex "off": TX bytes stay 0xFF. Duplex "+"/"-": TX = RX +/- Offset. Anything else ("" or CHIRP "split"):
-                TX = RX (simplex; split is NOT honoured, a warning says so)                              [U:encode]
+  receive-only  Duplex "off": TX bytes stay 0xFF. Duplex "+"/"-": TX = RX +/- Offset. Anything else: TX = RX   [U:encode]
+                Extra here: Duplex "split" transmits on the frequency in Offset (CHIRP's convention), for satellites.
   tones         Tone=Tone: rx code 0, tx code = round(rToneFreq*10). TSQL: both = round(cToneFreq*10) (tenths of Hz).
                 DTCS: code = index in the 105-entry DCS_CODES list (1-based) + 105 when polarity is R; DtcsPolarity "ab":
                 a applies to TX (DtcsCode), b to RX (RxDtcsCode, default DtcsCode). Any other Tone value (Cross, DTCS-R,
@@ -201,10 +201,15 @@ def encode(row):
         if not (0 < off <= 100):                                    # [U:validate]
             raise PlanError(f"offset '{g('Offset')}' must be above 0 and at most 100 MHz")
         tx = rx + to10hz(g("Offset", "0")) if duplex == "+" else rx - to10hz(g("Offset", "0"))
+    elif duplex == "split":
+        # CHIRP's convention: Offset holds the transmit frequency itself (cross-band satellites: listen on 70 cm,
+        # transmit on 2 m). Not in the upstream uploader; the channel record has always had a separate TX field.
+        txmhz = num(g("Offset", "0"), "split TX frequency")
+        if not ((16 <= txmhz <= 560) or (740 <= txmhz <= 1120)):
+            raise PlanError(f"split TX frequency {g('Offset')} MHz is outside 16-560 and 740-1120 MHz")
+        tx = to10hz(g("Offset", "0"))
     elif duplex != "off":
         tx = rx
-        if duplex == "split":
-            warns.append("split duplex not supported: simplex")
     if max(rx, tx or 0) > 99999999 or (tx is not None and tx <= 0):
         raise PlanError("a frequency of 1000 MHz or more (or a TX below 0) does not fit the 8-digit BCD field")
     rxc = txc = 0

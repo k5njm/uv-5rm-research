@@ -968,41 +968,16 @@ fn dismiss_toast(api: &Api, state: &mut State) {
     }
 }
 
-/// "GROUP (08/13): REPEATERS"; without the position when that is too long for the row; then the name cut with "...".
+/// "GROUP 1: REPEATERS": the number is the digit that selects the group from the BAND menu.
 fn group_title(api: &Api, out: &mut [u8; TITLE_LEN]) {
-    let (group, count) = unsafe {
-        let st = &*core::ptr::addr_of!(STATE);
-        (st.group, st.group_count)
-    };
-    let mut name = [0u8; GROUP_NAME_MAX];
-    let n = (api.group_name)(group, name.as_mut_ptr(), GROUP_NAME_MAX as u16) as usize;
-    let name = &name[..n.min(GROUP_NAME_MAX)];
+    let group = shown_group();
     *out = [0; TITLE_LEN];
-    let mut i = 0;
-    let mut put = |bytes: &[u8], i: &mut usize| {
-        for &b in bytes {
-            if *i < TITLE_LEN {
-                out[*i] = b;
-                *i += 1;
-            }
-        }
-    };
-    let two = |v: u8| [b'0' + (v / 10) % 10, b'0' + v % 10];
-    if 15 + name.len() <= TITLE_LEN {
-        put(b"GROUP (", &mut i);
-        put(&two(group + 1), &mut i);
-        put(b"/", &mut i);
-        put(&two(count), &mut i);
-        put(b"): ", &mut i);
-        put(name, &mut i);
-    } else if 7 + name.len() <= TITLE_LEN {
-        put(b"GROUP: ", &mut i);
-        put(name, &mut i);
-    } else {
-        put(b"GROUP: ", &mut i);
-        put(&name[..TITLE_LEN - 10], &mut i);
-        put(b"...", &mut i);
-    }
+    out[..6].copy_from_slice(b"GROUP ");
+    let mut i = 6 + (api.fmt_u32)(group as u32, out[6..].as_mut_ptr()) as usize;
+    out[i] = b':';
+    out[i + 1] = b' ';
+    i += 2;
+    (api.group_name)(group, out[i..].as_mut_ptr(), (TITLE_LEN - i) as u16);
 }
 
 #[cfg_attr(target_os = "none", no_mangle)]

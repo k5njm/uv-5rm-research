@@ -12,18 +12,22 @@ pub(crate) struct ChanMode {
 /// Every slot: printed numbers 1..=1000.
 pub(crate) const ALL: &[(u16, u16)] = &[(1, 1000)];
 
-pub(crate) const MODES: [ChanMode; 13] = [
+/// In order of use to a ham. The index is the group's number: BAND then that digit selects it (0 = ALL; groups past 9
+/// have no digit). Slot ranges are the upstream channel plan's, plus 351-380 and 381-410 for the two new groups.
+pub(crate) const MODES: [ChanMode; 15] = [
     ChanMode { name: "ALL", short: "ALL", ranges: ALL },
+    ChanMode { name: "REPEATERS", short: "RPT", ranges: &[(234, 304), (327, 344)] },
+    ChanMode { name: "SIMPLEX", short: "SMPLX", ranges: &[(351, 380)] },
+    ChanMode { name: "GMRS", short: "GMRS", ranges: &[(305, 344)] },
+    ChanMode { name: "FRS", short: "FRS", ranges: &[(305, 326)] },
+    ChanMode { name: "MURS", short: "MURS", ranges: &[(345, 349)] },
+    ChanMode { name: "SATELLITES", short: "SAT", ranges: &[(381, 410)] },
     ChanMode { name: "WEATHER", short: "WX", ranges: &[(1, 7)] },
+    ChanMode { name: "AIR TRAFFIC", short: "AIR", ranges: &[(168, 233)] },
+    ChanMode { name: "RAILROAD", short: "RAIL", ranges: &[(158, 167)] },
     ChanMode { name: "POLICE FIRE EMS", short: "PD/FD", ranges: &[(14, 105)] },
     ChanMode { name: "FED & GOV", short: "FED", ranges: &[(106, 146)] },
     ChanMode { name: "UTILITIES", short: "UTIL", ranges: &[(147, 157)] },
-    ChanMode { name: "RAILROAD", short: "RAIL", ranges: &[(158, 167)] },
-    ChanMode { name: "AIR TRAFFIC", short: "AIR", ranges: &[(168, 233)] },
-    ChanMode { name: "REPEATERS", short: "RPT", ranges: &[(234, 304), (327, 344)] },
-    ChanMode { name: "FRS", short: "FRS", ranges: &[(305, 326)] },
-    ChanMode { name: "GMRS", short: "GMRS", ranges: &[(305, 344)] },
-    ChanMode { name: "MURS", short: "MURS", ranges: &[(345, 349)] },
     ChanMode { name: "FRS GMRS MURS", short: "F/G/M", ranges: &[(305, 349)] },
     // Channel list stays open here; the scan itself sweeps the typed range.
     ChanMode { name: "CUSTOM RANGE", short: "RANGE", ranges: ALL },
@@ -107,12 +111,15 @@ mod tests {
 
     #[test]
     fn position_in_a_group_counts_from_one_across_its_ranges() {
-        assert_eq!(group_pos(7, 233), Some(1)); // REPEATERS: printed 234 is its first channel
-        assert_eq!(group_pos(7, 303), Some(71)); // printed 304, last of the first range
-        assert_eq!(group_pos(7, 326), Some(72)); // printed 327, first of the second range
-        assert_eq!(group_pos(7, 0), None);
+        assert_eq!(MODES[1].name, "REPEATERS");
+        assert_eq!(group_pos(1, 233), Some(1)); // REPEATERS: printed 234 is its first channel
+        assert_eq!(group_pos(1, 303), Some(71)); // printed 304, last of the first range
+        assert_eq!(group_pos(1, 326), Some(72)); // printed 327, first of the second range
+        assert_eq!(group_pos(1, 0), None);
         assert_eq!(group_pos(0, 233), Some(234)); // ALL: the printed number
-        assert_eq!(group_pos(1, 0), Some(1)); // WEATHER
+        assert_eq!(group_pos(7, 0), Some(1)); // WEATHER
+        assert_eq!(group_pos(2, 350), Some(1)); // SIMPLEX starts at printed 351
+        assert_eq!(group_pos(6, 380), Some(1)); // SATELLITES starts at printed 381
     }
 
     #[test]
@@ -125,7 +132,7 @@ mod tests {
             }
             assert_eq!(group_slot(mode, 0), None);
         }
-        assert_eq!(group_slot(7, 90), None); // REPEATERS has 89 slots
+        assert_eq!(group_slot(1, 90), None); // REPEATERS has 89 slots
     }
 
     #[test]

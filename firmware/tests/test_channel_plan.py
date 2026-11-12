@@ -108,8 +108,19 @@ class Encoding(unittest.TestCase):
     def test_warnings(self):
         self.assertTrue(any("transmit plan" in w for w in cp.decode(self.enc(freq="162.4"))["warns"]))
         self.assertEqual(cp.decode(self.enc(freq="146.52"))["warns"], [])
-        self.assertTrue(cp.encode(row(duplex="split"))[1])
         self.assertTrue(cp.encode(row(tone="Cross"))[1])
+
+    def test_split_transmits_on_the_offset_frequency(self):
+        """A satellite: listen on 437.800, transmit on 145.990 with a 67.0 Hz tone (CHIRP's split convention)."""
+        rec, warns = cp.encode(row("ISS", "437.800", duplex="split", off="145.990", tone="Tone", r="67.0"))
+        d = cp.decode(rec)
+        self.assertEqual(rec[0:4], bytes.fromhex("00007843"))            # 43780000 x 10 Hz, BCD, little-endian
+        self.assertEqual(rec[4:8], bytes.fromhex("00905914"))            # 14599000 x 10 Hz
+        self.assertEqual(int.from_bytes(rec[10:12], "little"), 670)      # TX tone 67.0 Hz
+        self.assertEqual(int.from_bytes(rec[8:10], "little"), 0)         # no RX tone
+        self.assertEqual(d["name"], "ISS")
+        with self.assertRaises(cp.PlanError):
+            cp.encode(row(duplex="split", off="0"))
 
     def test_encode_errors(self):
         bad = [row(name="THIRTEEN CHARS"), row(name="café"), row(freq="abc"), row(freq=""), row(freq="5"), row(freq="600"),
@@ -136,7 +147,9 @@ class Groups(unittest.TestCase):
         self.assertEqual(g["ALL"][2], [(1, 1000)])
         self.assertEqual(g["CUSTOM RANGE"][2], [(1, 1000)])
         self.assertEqual(g["FED & GOV"][1], "FED")
-        self.assertEqual(len(g), 13)
+        self.assertEqual(g["SIMPLEX"][2], [(351, 380)])
+        self.assertEqual(g["SATELLITES"][1:], ("SAT", [(381, 410)]))
+        self.assertEqual(len(g), 15)
 
     def test_unparseable_table_fails_clearly(self):
         with tempfile.TemporaryDirectory() as d:

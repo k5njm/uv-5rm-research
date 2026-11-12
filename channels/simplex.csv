@@ -1,0 +1,13 @@
+Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,Mode,TStep,Skip,Power,Detail,Comment
+1,2M CALL,146.520000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,2m calling,"National 2 m FM simplex calling frequency: make contact, then move off it"
+2,2M 146.55,146.550000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,2m simplex,2 m FM simplex 146.550 (ARRL band plan 146.40-146.58 and 147.42-147.57; check your local plan)
+3,2M 146.58,146.580000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,2m simplex,2 m FM simplex 146.580 (ARRL band plan 146.40-146.58 and 147.42-147.57; check your local plan)
+4,2M 147.42,147.420000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,2m simplex,2 m FM simplex 147.420 (ARRL band plan 146.40-146.58 and 147.42-147.57; check your local plan)
+5,2M 147.45,147.450000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,2m simplex,2 m FM simplex 147.450 (ARRL band plan 146.40-146.58 and 147.42-147.57; check your local plan)
+6,2M 147.48,147.480000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,2m simplex,2 m FM simplex 147.480 (ARRL band plan 146.40-146.58 and 147.42-147.57; check your local plan)
+7,2M 147.51,147.510000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,2m simplex,2 m FM simplex 147.510 (ARRL band plan 146.40-146.58 and 147.42-147.57; check your local plan)
+8,2M 147.54,147.540000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,2m simplex,2 m FM simplex 147.540 (ARRL band plan 146.40-146.58 and 147.42-147.57; check your local plan)
+9,2M 147.57,147.570000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,2m simplex,2 m FM simplex 147.570 (ARRL band plan 146.40-146.58 and 147.42-147.57; check your local plan)
+10,1.25M CALL,223.500000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,1.25m calling,National 1.25 m FM simplex calling frequency
+11,70CM CALL,446.000000,,0.000000,,88.5,88.5,023,NN,FM,5.00,,5.0W,70cm calling,National 70 cm FM simplex calling frequency
+12,APRS,144.390000,off,0.000000,,88.5,88.5,023,NN,FM,5.00,S,5.0W,APRS data,North American APRS frequency (1200 baud packet). Receive only here: not a voice channel
