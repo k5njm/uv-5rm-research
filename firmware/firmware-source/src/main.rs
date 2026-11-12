@@ -7,6 +7,8 @@ mod board;
 mod cps;
 mod device;
 mod drivers;
+mod fault;
+mod fault_text;
 mod flash_map;
 mod hal;
 mod ui;
@@ -14,7 +16,6 @@ mod ui;
 use at32f421_pac as pac;
 use core::fmt::Write;
 use cortex_m_rt::entry;
-use panic_halt as _;
 
 use device::radio::{
     AniConfig, ChannelConfig, Modulation, Power, Radio, SubAudio,

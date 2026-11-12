@@ -649,9 +649,14 @@ leave.
 A bring-up tool: does the radio chip's FSK modem hear anything, and what do its registers say? It only receives and is for
 people debugging the radio, not for ordinary use. Its source says the crystal, the sync words and whether the modem hears a
 real signal at all are all unverified on this radio. It starts on 404.800 MHz at 4800 baud with the RS41 radiosonde's
-frame header as the sync word.
+frame header as the sync word, a 4-byte sync match, and frames of 316 bytes after the sync (158 words). The counters
+show SYN (syncs), WRD (words), FRM (whole frames) and CUT (frames that stopped early). Where the register document
+leaves a choice open, the options row lets you switch, and a capture records the choice. Test steps are in
+[SONDE-APP.md](SONDE-APP.md).
 
 ![FSK PROBE with the modem on and a quiet channel.](img/fskprobe.png)
+
+![FSK PROBE with every option changed from its default; the S item is selected.](img/fskprobe-options.png)
 
 | Key | Action |
 |---|---|
@@ -660,12 +665,14 @@ frame header as the sync word.
 | `1` to `4` | Baud rate: 450, 1200, 2400, 4800. |
 | `5` to `9` | Sync word: 7E7E, 2DD4, AAAA, RS41 header (`8`), RS41 header in the other bit order (`9`). |
 | `#` | Start a capture, or stop the one running. |
+| `AB` | Pick which option (the settings row near the bottom; the chosen one is yellow) `0` changes. |
+| `0` | Change that option: LEN (bytes the chip is told to count: 316, 256 or 2048), TH (words per interrupt, 1 or 4), INV (invert received data), BW (receive bandwidth 2.4K or 1.2K), S (sync length 4 or 2 bytes). The modem is reconfigured at once. |
 | `UP` / `DOWN` | Pick the register shown at the bottom. |
 | `EXIT` | Turns the modem off (ending any capture) and leaves. |
 
 **Capture.** `#` records every word the modem delivers, with the time, sync flag and signal strength, so a decoder can be
 designed from real data. The screen shows `ERASING` for a moment, then `REC` with a count, and `SAVED` with the total
-after `#`, `MENU` or `EXIT` ends it. The frequency, baud rate and sync word cannot be changed while it runs. It holds
+after `#`, `MENU` or `EXIT` ends it. The frequency, baud rate, sync word and options cannot be changed while it runs. It holds
 16,352 records (about 55 seconds of continuous 4800 baud data), then shows `REC FULL` and records no more; it cannot
 write outside its own 128 KB of the radio's flash (0x1B0000 to 0x1D0000). Each new capture replaces the last. To copy
 one to the computer, leave the app (the radio must be on its main screen) and run:
