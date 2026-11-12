@@ -831,6 +831,107 @@ fn help_into(item: SettingItem, v: i32, out: &mut [u8]) -> usize {
     write_str(out, s)
 }
 
+// defaults
+
+/// The value every setting has in a new settings record (what a factory reset produces), in the item's own terms
+/// (`current_value`). The first group is the core's `Settings::DEFAULT`; a host test (`defaults_match_the_core`) reads
+/// the core's source and fails when this table and that one disagree. The RAM-only items (they belong to the VFO,
+/// not to the record) take the VFO's start-up values. None: the item has no value to restore.
+fn default_of(item: SettingItem) -> Option<i32> {
+    use SettingItem::*;
+    Some(match item {
+        #[cfg(feature = "g_radio")]
+        Sql => 3,
+        #[cfg(feature = "g_radio")]
+        Tot => 8,
+        #[cfg(feature = "g_radio")]
+        Tdr | Save | BusyLock | Scrm | Rit | Sftd | Offse | Wn => 0,
+        #[cfg(feature = "g_radio")]
+        TxForbid => 1,
+        #[cfg(feature = "g_radio")]
+        ScanMd | TxPr => 1,
+        #[cfg(feature = "g_radio")]
+        ChDisp => 2,
+        #[cfg(feature = "g_radio")]
+        Step => 3,
+        #[cfg(feature = "g_radio")]
+        RxCts | TxCts => -1,
+
+        #[cfg(feature = "g_audio")]
+        Beep | Tail | VoxLv => 1,
+        #[cfg(feature = "g_audio")]
+        Vox | Rptrl | Roge => 0,
+        #[cfg(feature = "g_audio")]
+        VoxDly => 5,
+        #[cfg(feature = "g_audio")]
+        Rtone => 2,
+
+        #[cfg(feature = "g_disp")]
+        Abr => 2,
+        #[cfg(feature = "g_disp")]
+        AutoLk => 0,
+
+        #[cfg(feature = "g_keys")]
+        Side1Short => 5,
+        #[cfg(feature = "g_keys")]
+        Side2Short => 8,
+        #[cfg(feature = "g_keys")]
+        BandShort => 6,
+        #[cfg(feature = "g_keys")]
+        Side1Long | Side2Long | BandLong | VmLong => 0,
+
+        #[cfg(feature = "g_ani")]
+        AniTx => 0,
+        #[cfg(feature = "g_ani")]
+        AniCall => -1,
+
+        #[cfg(feature = "g_system")]
+        FLock => 1,
+        #[cfg(feature = "g_system")]
+        Lat | Lon => COORD_NOT_SET,
+        #[cfg(feature = "g_system")]
+        BattCal => 2537,
+        #[cfg(feature = "g_system")]
+        BootMode => 2,
+        #[cfg(feature = "g_system")]
+        BootSnd => 1,
+
+        #[allow(unreachable_patterns)]
+        _ => return None,
+    })
+}
+
+/// May `#` put `item` (now at `cur`) back to its default? Never when that would loosen a transmit restriction:
+/// TX INHIBIT's default is ON (the strictest), so it always may; TX BANDS' default (FCC HAM) allows more than most
+/// choices, so it is restored only from a choice that already allows everything FCC HAM does (FCC HAM itself, or
+/// ALL), and otherwise has to be chosen with UP and DOWN like any other change.
+fn default_allowed(item: SettingItem, cur: i32) -> bool {
+    match item {
+        SettingItem::FLock => cur == 1 || cur == 9,
+        _ => true,
+    }
+}
+
+/// `#` while a value is being changed: the item goes back to its default (shown at once, like any change; MENU keeps
+/// it, EXIT puts the old value back).
+fn back_to_default(api: &Api, st: &mut ItemsState, item: SettingItem) {
+    let Some(d) = default_of(item) else {
+        return;
+    };
+    if !default_allowed(item, current_value(api, st, item)) {
+        st.note = 1;
+        return;
+    }
+    apply(api, st, item, d);
+    if !item.is_scalar() {
+        st.defaulted = true;
+        st.offset_input.clear();
+        st.battery_input.clear();
+        st.lat_input.clear();
+        st.lon_input.clear();
+    }
+}
+
 // state
 
 pub struct ItemsState {
@@ -847,6 +948,10 @@ pub struct ItemsState {
     lon_input: DigitInput<7>,
     lat_neg: bool,
     lon_neg: bool,
+    /// `#` put the value being changed back to its default (a typed field then behaves like any other row)
+    defaulted: bool,
+    /// a line for the strip instead of the keys, until the next key: 0 none, 1 default refused
+    note: u8,
 }
 
 impl ItemsState {
@@ -865,6 +970,8 @@ impl ItemsState {
             lon_input: DigitInput::new(),
             lat_neg: false,
             lon_neg: false,
+            defaulted: false,
+            note: 0,
         }
     }
 
@@ -999,19 +1106,26 @@ fn dispatch_groups(api: &Api, kind: u8, id: u8, index: usize) -> Phase {
 
 fn dispatch_items(api: &Api, kind: u8, id: u8, mut st: ItemsState) -> Phase {
     let item = st.item();
+    st.note = 0;
 
+    if st.editing && kind == KIND_SINGLE && id == KEY_POUND {
+        back_to_default(api, &mut st, item);
+        return Phase::Items(st);
+    }
+
+    // after `#` a typed field has its value and no digits to wait for: it takes MENU and EXIT like a stepped one
     #[cfg(feature = "g_radio")]
-    if st.editing && item == SettingItem::Offse {
+    if st.editing && !st.defaulted && item == SettingItem::Offse {
         dispatch_offset_input(api, kind, id, &mut st);
         return Phase::Items(st);
     }
     #[cfg(feature = "g_system")]
-    if st.editing && item == SettingItem::BattCal {
+    if st.editing && !st.defaulted && item == SettingItem::BattCal {
         dispatch_battery_input(api, kind, id, &mut st);
         return Phase::Items(st);
     }
     #[cfg(feature = "g_system")]
-    if st.editing && matches!(item, SettingItem::Lat | SettingItem::Lon) {
+    if st.editing && !st.defaulted && matches!(item, SettingItem::Lat | SettingItem::Lon) {
         dispatch_coord_input(api, kind, id, item == SettingItem::Lat, &mut st);
         return Phase::Items(st);
     }
@@ -1058,6 +1172,8 @@ fn dispatch_items_scalar(
         }
         KEY_MENU if kind == KIND_SINGLE => {
             if !st.editing {
+                st.defaulted = false;
+                st.snapshot = current_value(api, st, item);
                 match item {
                     #[cfg(feature = "g_radio")]
                     SettingItem::Offse => st.offset_input.clear(),
@@ -1075,7 +1191,7 @@ fn dispatch_items_scalar(
                         let v = st.settings.obs_lon;
                         st.lon_neg = v != COORD_NOT_SET && v < 0;
                     }
-                    _ => st.snapshot = current_value(api, st, item),
+                    _ => {}
                 }
                 st.editing = true;
             } else if item == SettingItem::Reset {
@@ -1652,7 +1768,7 @@ fn value_text_for(
     let item = st.group.items()[gi];
     let editing_this = st.is_editing(gi);
 
-    if editing_this {
+    if editing_this && !st.defaulted {
         #[cfg(feature = "g_radio")]
         if item == Offse {
             return st.offset_input.write_display_into(3, out);
@@ -2022,6 +2138,7 @@ fn draw(api: &Api) -> AppResult {
                     rows[i].has_value = n > 0;
                     // a typed field shows a text cursor after what has been typed (and so the "changing" colour)
                     if st.is_editing(gi)
+                        && !st.defaulted
                         && matches!(
                             item,
                             SettingItem::Offse | SettingItem::BattCal | SettingItem::Lat | SettingItem::Lon
@@ -2029,7 +2146,7 @@ fn draw(api: &Api) -> AppResult {
                     {
                         rows[i].cursor = n.min(17) as i16;
                     }
-                    if st.is_editing(gi) && matches!(item, SettingItem::Reset) {
+                    if st.is_editing(gi) && (matches!(item, SettingItem::Reset) || st.defaulted) {
                         rows[i].cursor = bf5rh_abi::ROW_ARMED;
                     }
                 }
@@ -2055,12 +2172,13 @@ fn draw(api: &Api) -> AppResult {
     let mut help_buf = [0u8; 26];
     let hint: &[u8] = match &state.phase {
         Phase::Items(st) if st.editing => match st.item() {
+            _ if st.note == 1 => b"Choose TX BANDS by hand",
             SettingItem::Reset => b"HOLD # reset  EXIT cancel",
             SettingItem::Info | SettingItem::ChipId => b"UP/DN page    EXIT back",
-            SettingItem::Lat => b"0-9  * N/S  MENU ok",
-            SettingItem::Lon => b"0-9  * E/W  MENU ok",
-            SettingItem::Offse | SettingItem::BattCal => b"0-9 type MENU ok EXIT del",
-            _ => b"UP/DN MENU save EXIT undo",
+            SettingItem::Lat if !st.defaulted => b"0-9 * N/S # clear MENU ok",
+            SettingItem::Lon if !st.defaulted => b"0-9 * E/W # clear MENU ok",
+            SettingItem::Offse | SettingItem::BattCal if !st.defaulted => b"0-9 # default  MENU ok",
+            _ => b"#default MENU ok EXIT undo",
         },
         Phase::Items(st) => {
             let item = st.item();
@@ -2121,5 +2239,144 @@ mod tests {
             }
         }
         assert!(seen > 0 || !have_group(0) && !have_group(1) && !have_group(5));
+    }
+
+    /// The core's source, read when the test is built: the one other place the defaults are written down.
+    const CORE_FLASH_MAP: &str = include_str!("../../src/flash_map.rs");
+    const CORE_APP_MOD: &str = include_str!("../../src/app/mod.rs");
+    const CORE_MAIN: &str = include_str!("../../src/main.rs");
+
+    /// `field: value,` lines of `Settings::DEFAULT` as numbers (booleans are 0/1, COORD_NOT_SET is i32::MAX; array
+    /// fields are left out).
+    fn core_defaults() -> Vec<(String, i64)> {
+        let start = CORE_FLASH_MAP.find("pub const DEFAULT: Settings = Settings {").expect("Settings::DEFAULT");
+        let body = &CORE_FLASH_MAP[start..];
+        let end = body.find("\n    };").expect("end of Settings::DEFAULT");
+        let mut out = Vec::new();
+        for line in body[..end].lines().skip(1) {
+            let line = line.split("//").next().unwrap().trim().trim_end_matches(',');
+            let Some((name, value)) = line.split_once(": ") else { continue };
+            let v = match value.trim() {
+                "true" => 1,
+                "false" => 0,
+                "COORD_NOT_SET" => i32::MAX as i64,
+                n => match n.parse::<i64>() {
+                    Ok(v) => v,
+                    Err(_) => continue, // an array or a call
+                },
+            };
+            out.push((name.trim().to_string(), v));
+        }
+        out
+    }
+
+    /// The `Settings` field behind an item (None: not a field of the record).
+    fn core_field(item: SettingItem) -> Option<&'static str> {
+        use SettingItem::*;
+        Some(match item {
+            Sql => "sql_level",
+            Tot => "tot_level",
+            Tdr => "dual_standby",
+            Save => "save_level",
+            BusyLock => "busy_lock",
+            TxForbid => "tx_forbid",
+            Scrm => "scramble_level",
+            ScanMd => "scan_mode",
+            Rit => "rit_offset",
+            ChDisp => "channel_display_mode",
+            Beep => "beeps_switch",
+            Vox => "vox_switch",
+            VoxLv => "vox_level",
+            VoxDly => "vox_delay",
+            Rtone => "rtone",
+            Tail => "tail_elimination",
+            Rptrl => "rptrl",
+            Roge => "roger_tone",
+            Abr => "backlight_time",
+            AutoLk => "key_auto_lock",
+            Side1Short => "side1_short",
+            Side1Long => "side1_long",
+            Side2Short => "side2_short",
+            Side2Long => "side2_long",
+            BandShort => "band_short",
+            BandLong => "band_long",
+            AniTx => "ani_tx",
+            FLock => "band_lock",
+            Lat => "obs_lat",
+            Lon => "obs_lon",
+            BattCal => "battery_cal_raw",
+            BootMode => "boot_display_mode",
+            BootSnd => "boot_sound_enabled",
+            _ => return None,
+        })
+    }
+
+    /// The app's table of defaults and the core's `Settings::DEFAULT` say the same thing for every setting the
+    /// segment shows.
+    #[test]
+    fn defaults_match_the_core() {
+        let core = core_defaults();
+        assert!(core.len() >= 30, "parsed only {} fields of Settings::DEFAULT", core.len());
+        for g in SETTINGS_GROUPS {
+            for &item in g.items() {
+                if let Some(field) = core_field(item) {
+                    let want = core.iter().find(|(n, _)| n == field).unwrap_or_else(|| panic!("no core field {field}")).1;
+                    assert_eq!(default_of(item), Some(want as i32), "{} (core field {field})", item.label());
+                }
+            }
+        }
+    }
+
+    /// The items kept in the VFO rather than the record take the VFO's start-up values (step, bandwidth, power).
+    #[test]
+    fn vfo_defaults_match_the_core() {
+        let step: i32 = CORE_APP_MOD
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("const DEFAULT_STEP_INDEX: u8 = "))
+            .expect("DEFAULT_STEP_INDEX")
+            .trim_end_matches(';')
+            .parse()
+            .unwrap();
+        assert!(CORE_MAIN.contains("const WIDE_BAND: bool = true;"));
+        assert!(CORE_MAIN.contains("power: Power::Low,"));
+        for g in SETTINGS_GROUPS {
+            for &item in g.items() {
+                match item {
+                    SettingItem::Step => assert_eq!(default_of(item), Some(step)),
+                    SettingItem::Wn => assert_eq!(default_of(item), Some(0)), // WIDE
+                    SettingItem::TxPr => assert_eq!(default_of(item), Some(1)), // LOW
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// Every item that holds a value has a default; the three that only show something do not.
+    #[test]
+    fn only_display_items_have_no_default() {
+        for g in SETTINGS_GROUPS {
+            for &item in g.items() {
+                let shows_only = matches!(item, SettingItem::Info | SettingItem::ChipId | SettingItem::Reset);
+                assert_eq!(default_of(item).is_none(), shows_only, "{}", item.label());
+            }
+        }
+    }
+
+    /// `#` never loosens a transmit restriction: TX INHIBIT goes to ON from anywhere; TX BANDS is restored only
+    /// from FCC HAM or ALL (which allow everything FCC HAM does), never from a narrower choice (CE HAM, GB HAM,
+    /// PMR446, GMRS/FRS, CA HAM) nor from NONE (no transmitting at all) nor from the two 137-174 choices, which
+    /// lack some FCC HAM bands.
+    #[test]
+    fn default_never_loosens_a_transmit_restriction() {
+        for cur in 0..=1 {
+            assert!(default_allowed(SettingItem::TxForbid, cur));
+        }
+        for cur in 0..=9 {
+            assert_eq!(default_allowed(SettingItem::FLock, cur), cur == 1 || cur == 9, "TX BANDS {cur}");
+        }
+        #[cfg(feature = "g_radio")]
+        assert_eq!(default_of(SettingItem::TxForbid), Some(1), "TX INHIBIT defaults to ON");
+        #[cfg(feature = "g_system")]
+        assert_eq!(default_of(SettingItem::FLock), Some(1), "TX BANDS defaults to FCC HAM");
     }
 }

@@ -190,7 +190,10 @@ SETTINGS is app 1. It has six groups. Use `UP` and `DOWN` and `MENU` to open one
 1. Move to an item with `UP` and `DOWN`.
 2. Press `MENU`. The row turns amber and `^` and `v` appear around the value.
 3. `UP` and `DOWN` change the value. Pressing `0` sets it to its lowest choice (off, none, or the first in the list).
-4. Press `MENU` to **keep** the change, or `EXIT` to **undo** it and put the old value back.
+   Pressing `#` puts it **back to its default**, the value a new settings record has, so you do not need to know what
+   it was (the strip says `#default`).
+4. Press `MENU` to **keep** the change, or `EXIT` to **undo** it and put the old value back. `#` is a change like any
+   other: it is not saved until you press `MENU`.
 
 A list longer than the screen has a small grey mark on its right edge showing how far down you are.
 
@@ -199,7 +202,7 @@ example `Higher mutes weak signals` under SQUELCH). A few lines follow the value
 chosen step costs, under TX INHIBIT whether the radio can transmit, under TX BANDS which frequencies the chosen choice
 allows, and under a key setting what the assigned function does. (The keys are the same on every list: `MENU` changes the
 selected setting, `EXIT` goes back.) While a value is being changed the strip shows the keys instead:
-`UP/DN MENU save EXIT undo`. For numbers you type it reads `0-9 type MENU ok EXIT del` (latitude and
+`#default MENU ok EXIT undo`. For numbers you type it reads `0-9 type MENU ok EXIT del` (latitude and
 longitude: `0-9  * N/S  MENU ok` and `0-9  * E/W  MENU ok`), and for VERSION and RF CHIP ID `UP/DN page    EXIT back`.
 
 ![Changing AUTO KEYLOCK: the row is amber, the value has arrows, and the bottom strip reads UP/DN MENU save EXIT undo.](img/settings-editing.png)
@@ -209,6 +212,12 @@ longitude: `0-9  * N/S  MENU ok` and `0-9  * E/W  MENU ok`), and for VERSION and
 Notes:
 
 * The new value takes effect as soon as you change it, before you press `MENU`; `EXIT` restores the old value.
+* `#` works on every item that holds a value, including the numbers you type (RPT OFFSET, BATTERY CAL, LATITUDE and
+  LONGITUDE, where it means "no position"; the strip says `# clear`). It does nothing on VERSION, RF CHIP ID and RESET ALL.
+  **It never loosens a transmit restriction.** TX INHIBIT goes to ON. TX BANDS goes back to FCC HAM only when it is on FCC HAM
+  or ALL; from any narrower choice (CE HAM, GB HAM, PMR446, GMRS/FRS, CA HAM), from NONE and from the two 400-xxx choices the
+  strip says `Choose TX BANDS by hand` and nothing changes: pick it with `UP` and `DOWN`, as before. BATTERY CAL goes back
+  to the nominal 2537, which discards a calibration you made with a voltmeter.
 * Items that are numbers you type (RPT OFFSET, BATTERY CAL, LATITUDE, LONGITUDE): press `MENU`, type the digits, press `MENU`
   to accept. `EXIT` deletes the last digit, and leaves the item when nothing is typed. In LATITUDE and LONGITUDE, `*`
   switches between N and S, or E and W. Type latitude as four decimals after two integer digits (`407100` is 40.7100 N) and

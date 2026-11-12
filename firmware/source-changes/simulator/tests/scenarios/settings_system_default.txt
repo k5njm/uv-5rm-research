@@ -1,0 +1,45 @@
+# Settings, SYSTEM: # puts a value back to its default. It never loosens a transmit restriction: TX BANDS goes back
+# to FCC HAM only from FCC HAM or ALL; from any narrower choice (here CE HAM, the simulator's all-zero record) it says
+# to choose by hand, and nothing changes.
+# MODEL CAVEAT: all-zero settings record in the simulator: TX BANDS starts at CE HAM.
+handoff 5 1
+app settings
+key menu                  # change TX BANDS (CE HAM)
+key pound
+shot txbands_default_refused   # strip: Choose TX BANDS by hand; the value is unchanged
+key up                    # a key press clears the note
+shot txbands_after_note
+key exit
+key menu
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up                    # ALL
+key menu
+shot txbands_all_saved
+key menu
+key pound                 # from ALL the default (FCC HAM) is allowed: it narrows
+shot txbands_default_from_all
+key exit                  # undo: ALL again
+shot txbands_undone
+# LATITUDE: the default is "no position"
+key down
+key menu
+shot lat_typing
+key pound
+shot lat_default_shown
+key menu
+shot lat_default_saved
+# a number kept in the record: BATTERY CAL
+key down
+key down
+key menu
+key pound
+shot battcal_default_shown
+key exit
+shot battcal_default_undone

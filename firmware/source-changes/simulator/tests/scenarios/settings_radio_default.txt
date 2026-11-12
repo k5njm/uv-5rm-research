@@ -1,0 +1,40 @@
+# Settings, RADIO: # while a value is being changed puts it back to its default without knowing what that was. The
+# change shows at once, MENU keeps it, EXIT puts the old value back. TX INHIBIT goes to ON, its default.
+# MODEL CAVEAT: all-zero settings record in the simulator, so every value starts away from its default.
+handoff 0 1
+app settings
+key menu                  # change SQUELCH (0)
+shot sql_editing
+key pound                 # back to default (3)
+shot sql_default_shown
+key menu                  # keep it
+shot sql_default_saved
+key down
+key down                  # TX TIMEOUT (OFF)
+key menu
+key pound
+shot tot_default_shown    # 120 SEC
+key exit                  # not wanted after all
+shot tot_default_undone
+key down
+key down
+key down
+key down                  # TX INHIBIT (OFF here)
+key menu
+key pound                 # default is ON
+shot txinhibit_default_shown
+key menu
+shot txinhibit_default_saved
+# a typed field: RPT OFFSET. # sets it to its default (0.0000) without typing; EXIT undoes it
+key down
+key down
+key down
+key down
+key down
+key down                  # RPT OFFSET
+key menu
+shot offset_typing
+key pound
+shot offset_default_shown
+key menu
+shot offset_default_saved

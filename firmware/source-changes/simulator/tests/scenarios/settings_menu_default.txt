@@ -1,0 +1,26 @@
+# Settings, menu segment: # puts DISPLAY and AUDIO values back to their defaults. The key settings default to what a
+# new record holds (SIDE2 SHORT: LIGHT).
+# MODEL CAVEAT: all-zero settings record in the simulator.
+handoff 2 1
+app settings
+key menu                  # BACKLIGHT (ALWAYS ON)
+key pound
+shot backlight_default_shown   # 10 SEC
+key menu
+shot backlight_default_saved
+key down
+key menu                  # AUTO KEYLOCK (OFF): default is OFF, so # changes nothing
+key up
+key pound
+shot autolock_default_shown
+key exit
+key exit                  # to the groups
+key down                  # KEYS
+key menu
+key down
+key down                  # SIDE2 SHORT (NONE)
+key menu
+key pound
+shot side2_short_default_shown
+key menu
+shot side2_short_default_saved
