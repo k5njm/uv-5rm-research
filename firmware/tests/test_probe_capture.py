@@ -4,7 +4,8 @@
 
 The capture layout here is written by hand from the comment in apps/fskprobe/src/logic.rs, not by the app; the
 simulator scenario fskprobe_capture and the FSK PROBE checks in the simulator suite check the app's side of the same
-layout. Both header versions are read: "FSKCAP1" (the first probe) and "FSKCAP2" (options and registers recorded).
+layout. All header versions are read: "FSKCAP1" (the first probe), "FSKCAP2" (options and registers recorded) and
+"FSKCAP3" (adds the RX mode, bandwidth setting, preset and frame kind). The AX.25 decoder itself is tested in test_ax25.py.
 UNVERIFIED against real hardware.
 """
 import os, shutil, struct, subprocess, sys, tempfile, unittest
@@ -28,6 +29,11 @@ def header(t0=1000):
 def header2(t0=1000, opts=0x10, per_irq=1, regs=(0x3002, 0x0309, 0x1008, 0x5625, 0x3B20, 0x0201, 0x00E0), frame_words=158):
     return (b"FSKCAP2\0" + struct.pack("<IHHHHIB", 404_800_000, 4800, 0x086D, 0x5388, 0xC195, t0, REC)
             + struct.pack("<BBB7HH", 2, opts, per_irq, *regs, frame_words)).ljust(PAGE, b"\xff")
+
+
+def header3(t0=1000, bw=0, mode=1, preset=1, kind=1, opts=0x10, regs=(0x3002, 0x1309, 0x1008, 0x5625, 0xFF00, 0x0201, 0x00E0), frame_words=128):
+    return (b"FSKCAP3\0" + struct.pack("<IHHHHIB", 144_390_000, 1200, 0xFEFE, 0xFEFE, 12389, t0, REC)
+            + struct.pack("<BBB7HH", 3, opts, 1, *regs, frame_words) + bytes([bw, mode, preset, kind])).ljust(PAGE, b"\xff")
 
 
 def rec(t, word, flags, rssi=70):
@@ -168,12 +174,48 @@ class Box(unittest.TestCase):
         self.assertIn("sync to end: median 119.7 ms", p.stdout)
         self.assertIn("first words: FCB7", p.stdout)
 
+    def test_a_version_3_aprs_capture_is_decoded_as_ax25(self):
+        import test_ax25 as ax
+        words = ax.capture(ax.on_air_bits(ax.MESSAGE), ("lo", "msb"), drop=13, noise_words=8)
+        recs = rec(1030, 0, 1 | 8) + b"".join(rec(1063 + 133 * i, w, 2 | (32 if i == len(words) - 1 else 0)) for i, w in enumerate(words))
+        self.radio_with(header3() + recs)
+        p = self.run_tool("fake", self.out)
+        self.assertIn("preset APRS; RX mode FFSK 1200/2400 (REG_58 bits 12:10 = 100), bandwidth FSK 2.4K / FFSK 1200/2400 "
+                      "(bits 3:1 = 100, setting auto); chip told 256 bytes; frame kind APRS", p.stdout)
+        self.assertIn("frames tried: 1 (best reading); FCS passed: 1", p.stdout)
+        self.assertIn("PASS capture frame 1 at +0.00 s (low byte first, MSB first, NRZI undone): " + ax.MONITOR, p.stdout)
+        self.assert_only_read_the_capture()
+
+    def test_an_aprs_capture_of_noise_prints_the_diagnostics(self):
+        import random
+        rng = random.Random(9)
+        recs = rec(1030, 0, 1) + b"".join(rec(1063 + 133 * i, rng.getrandbits(16), 2) for i in range(128))
+        self.radio_with(header3() + recs)
+        p = self.run_tool("fake", self.out)
+        self.assertIn("FCS passed: 0", p.stdout)
+        self.assertIn("why no frame passed", p.stdout)
+        self.assertIn("run lengths of identical raw bits", p.stdout)
+
+    def test_an_rs41_capture_is_not_decoded_as_ax25_unless_asked(self):
+        self.radio_with(header2() + rec(1030, 0, 1) + rec(1063, 0x1234, 2))
+        p = self.run_tool("fake", self.out)
+        self.assertNotIn("AX.25 decode", p.stdout, "an RS41 (4800 baud) capture is not decoded as AX.25 by default")
+        p = self.run_tool("--decode", self.out)
+        self.assertNotIn("AX.25 decode", p.stdout)
+        p = self.run_tool("--decode", self.out, "--ax25")
+        self.assertIn("AX.25 decode", p.stdout)
+
     def test_an_unknown_header_version_is_refused(self):
         bad = bytearray(header2())
         bad[25] = 9
         self.radio_with(bytes(bad))
         p = self.run_tool("fake", self.out, ok=False)
         self.assertIn("header version 9", p.stderr + p.stdout)
+        bad = bytearray(header3())
+        bad[25] = 2                                         # a version 3 magic with the version 2 byte
+        self.radio_with(bytes(bad))
+        p = self.run_tool("fake", os.path.join(self.box, "other.bin"), ok=False)
+        self.assertIn("header version 2", p.stderr + p.stdout)
 
 
 if __name__ == "__main__":

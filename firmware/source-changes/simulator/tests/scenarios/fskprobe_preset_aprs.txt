@@ -1,0 +1,28 @@
+# FSK PROBE's APRS preset: one key (0; the option cursor starts on PRE) sets 144.390 MHz, 1200 baud, FFSK 1200/2400,
+# the flag sync FEFE FEFE and a 256-byte window together; a second press goes back to the RS41 setup.
+# The air carries real AX.25 flags and a UI frame as the derivation in apps/fskprobe/src/logic.rs says the modem should
+# deliver them (made-up callsigns; whether the chip does is the open question). Receive only.
+master 404800000
+signal 144390000 90 -1 always
+app fskprobe
+shot rs41
+key 0
+shot aprs
+key menu
+expect rfreg 58 1309
+expect rfreg 72 3065
+expect rfreg 5A FEFE
+expect rfreg 5B FEFE
+expect rfreg 5D FF00
+expect rfreg 59 1008
+airmode ffsk1224
+air FEFE FEFE FEFE FEFE FEFE FEFE FEFE FEFE ACD4 1393 A956 7B51 1451 BBD4 DE44 24F3 CBB4 A92E 0C2F 4BDB 9134 2E56 A02A EE56 5191 7951 5151 067B DEAE 51F1 7951 5151 C60C C8B0 4FEF AF56 E828 37E7 3A4F 8051 8880 CC0D 74A3 CD1F FE40 C45D 1B06 2CA6 4A1B 8178 0577 28BF 0632 82A4 93EA 006C 0234 D690 03FF 75F1 4D79 DAC6 24D5 56C7 B06F 87CD C694 3D2C EB9C 2219 9374 17A9 BB5B 6CD8 662E 90E3 5CAF 796F BB77 BD50 23AC 4979 A3F6 1172 48FE BD83 5757 8644 09B4 7198 7F3B 1C97 CFF6 D5B6 6975 273E E54F 216E C1DA 587B 6F16 0B31 ABB3 8C5A 3D33 BABB EC2B ED95 8DF2 8015 346E 1D98 8AAB F808 7334 1A56 CB22 B4FC 74E2 6DDB 32D2 21BD ACF0 F474 35AE 2B74 BBA9 AD16
+wait 2.5
+shot heard
+key 0
+shot rs41_again
+expect rfreg 58 0309
+expect rfreg 72 C195
+expect rfreg 5A 086D
+expect rfreg 5D 3B20
+expect rfrefused 0

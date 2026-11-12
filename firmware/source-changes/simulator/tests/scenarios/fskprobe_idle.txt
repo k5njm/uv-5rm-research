@@ -6,7 +6,7 @@ key menu                  # modem on
 wait 1
 shot on_quiet
 key 3                     # 2400 baud
-key 6                     # sync 2DD4
+key 6                     # sync AAAA
 shot baud_sync_changed
 key down                  # next register in the peek list
 key down
@@ -15,4 +15,8 @@ key star                  # next frequency
 shot next_frequency
 key menu                  # modem off
 shot off_again
+key up
+key up
+key up                    # up past the first entry wraps to the last, REG 6E (the AF tone the chip measures)
+shot peek_af_tone
 expect rfrefused 0

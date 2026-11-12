@@ -49,6 +49,7 @@ const R_THRESH: u8 = 0x5E;
 const R_FIFO: u8 = 0x5F;
 const R_GAIN: u8 = 0x70;
 const R_BAUD: u8 = 0x72;
+const R_AF_FREQ: u8 = 0x6E; // read only: the AF tone the chip measures, Freq = Nout * 25390.625 / Rout (FD p11)
 
 const IRQ_SYNC: u16 = 1 << 1;
 const IRQ_RX_DONE: u16 = 1 << 13;
@@ -68,25 +69,64 @@ const CTRL_SYNC4: u16 = 1 << 3; // 0 = 2 sync bytes (REG_5A), 1 = 4 sync bytes (
 
 /// Registers the peek view cycles through. Reading is unrestricted; this is just the interesting set. Never REG_5F: a
 /// read of it takes a word out of the FIFO. REG_0B, 0x70 are at the end so the older entries keep their position.
-const PEEK: [u8; 16] = [
-    0x02, 0x0C, 0x2B, 0x30, 0x3F, 0x40, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x72, 0x0B, 0x70,
+const PEEK: [u8; 17] = [
+    0x02, 0x0C, 0x2B, 0x30, 0x3F, 0x40, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x72, 0x0B, 0x70, 0x6E,
 ];
 
 /// Frequencies in Hz: APRS, 2 m calling, 70 cm calling, Horus 70 cm.
 /// 404.800 is the Fort Worth NWS radiosonde frequency (the owner's local launch site); the others are test signals.
 const FREQS: [u32; 5] = [404_800_000, 144_390_000, 146_520_000, 446_000_000, 434_714_000];
 const BAUDS: [u16; 4] = [450, 1200, 2400, 4800];
-/// Sync word presets, as the two 16-bit halves written to the chip (keys 5-9). The last two are the first four bytes
-/// of the RS41 radiosonde frame header: on the air the bits are 00001000 01101101 01010011 10001000, which is 0x086D
-/// 0x5388 if the chip shifts each byte most-significant bit first and 0x10B6 0xCA11 if least-significant first.
-/// Which one the chip uses is one of the things this app is for.
-const SYNCS: [(u16, u16); 5] = [
-    (0x7E7E, 0x7E7E),
-    (0x2DD4, 0x2DD4),
+/// Sync word presets, as the two 16-bit halves written to the chip (keys 5-9). Sync byte 0 is the high byte of the
+/// first half and is the first byte on the air.
+///
+/// RS41 (indices 7, 8): the first four bytes of the frame header, on the air 00001000 01101101 01010011 10001000, which
+/// is 0x086D 0x5388 if the chip shifts each byte most-significant bit first and 0x10B6 0xCA11 if least-significant first.
+///
+/// APRS (indices 0-3): AX.25 flags, derived here because the preset is only as good as this derivation.
+///   A flag is 0x7E = 01111110, sent least-significant bit first: 0,1,1,1,1,1,1,0 (six 1s between two 0s).
+///   Bell 202 sends NRZI: a 0 bit changes the tone, a 1 bit keeps it. Take the tone before the flag as `a`
+///   (mark or space). Bit 0 (a 0) flips it to !a, bits 1-6 (the 1s) keep !a, bit 7 (a 0) flips it back to `a`.
+///   So one flag is seven bit times of !a then one of `a`, and it ends on `a`, which is where the next flag starts: every
+///   flag in a preamble is the same, the pattern repeats with period 8 bits and there is no second phase after the first
+///   flag. The two cases are the two tone assignments (a = 0 or a = 1 for the demodulator's output bit):
+///     a = 0: raw bits 1111 1110 repeating  -> as bytes, time order = bit order MSB first: 0xFE per byte
+///     a = 1: raw bits 0000 0001 repeating  -> 0x01 per byte
+///   If the chip fills each byte least-significant bit first instead (UNVERIFIED), the same time-ordered bits read
+///   0x7F (1111111 then 0: bit 0 first, bit 7 last) and 0x80.
+///   Because the pattern is periodic, any of its eight rotations also matches somewhere in a preamble; the chip fires on
+///   the first alignment it finds and then delivers the stream byte-aligned to that point. The host decoder works on
+///   the bit stream, so which rotation fired does not matter. The presets use the unrotated pattern.
+///   Words: sync bytes 0 and 1 are REG_5A, 2 and 3 are REG_5B: FEFE FEFE (32 bits), FEFE (16 bits, S2).
+///   Cycled by key 5: FEFE, 0101, 7F7F, 8080 (each repeated in both halves). A 32-bit match on random bits is 2^-32 per
+///   bit position (1200 a second: one false sync in about 41 days); a 16-bit match is 2^-16: one in about 55 s of
+///   uncorrelated noise (FM discriminator noise is correlated, so more often). A pause of real flags matches either.
+/// AFSK alternating preamble (indices 4, 5): 0xAA / 0x55 bytes sent NRZ (a modem that preambles with zeros, which NRZI
+/// turns into an alternating tone: 0101...); key 6. Index 6 is the plain flag byte 0x7E7E as if the demodulator had
+/// already undone NRZI (it should not have), key 7.
+const SYNCS: [(u16, u16); 9] = [
+    (0xFEFE, 0xFEFE),
+    (0x0101, 0x0101),
+    (0x7F7F, 0x7F7F),
+    (0x8080, 0x8080),
     (0xAAAA, 0xAAAA),
+    (0x5555, 0x5555),
+    (0x7E7E, 0x7E7E),
     (0x086D, 0x5388),
     (0x10B6, 0xCA11),
 ];
+const SYNC_RS41: usize = 7;
+const SYNC_APRS: usize = 0;
+
+/// The sync index key 5..9 selects, given the current one: key 5 steps through the four flag patterns, key 6 through
+/// the two alternating ones, keys 7, 8, 9 are single presets.
+fn sync_for_key(cur: usize, key: u8) -> usize {
+    match key {
+        5 => if cur < 3 { cur + 1 } else { 0 },
+        6 => if cur == 4 { 5 } else { 4 },
+        _ => key as usize - 1,
+    }
+}
 
 /// REG_72 (TONE2/FSK frequency control word) = baud * 10.32444 for a 13/26 MHz crystal, * 10.48576 for 12.8/19.2/25.6/38.4 MHz
 /// (datasheet). TEXT writes 4646 for 450 baud, which is exactly 450 * 10.32444, so a 13/26 MHz crystal is assumed.
@@ -97,7 +137,8 @@ const BAUD_REG_PER_BAUD_1E5: u64 = 1_032_444;
 // Where the sources leave two readings open, the owner picks (key AB selects an item, key 0 changes it) and the
 // capture header records the choice. Defaults are the reading that best fits the sources.
 //
-//   LEN   how long the chip is told a packet is (REG_5D): FRAME = the RS41 frame minus the sync bytes (11-bit field,
+//   LEN   how long the chip is told a packet is (REG_5D): FRAME = the RS41 frame minus the sync bytes, or the APRS preset's
+//         256-byte window (11-bit field,
 //         UNVERIFIED that the chip implements the top 3 bits), 256 = the largest an 8-bit field can say, 2048 = the
 //         largest the 11-bit field can say. In every mode the app counts words itself and ends the frame at
 //         `frame_words`, so a chip that stops early (256) or never stops (2048) still gives whole frames.
@@ -106,25 +147,48 @@ const BAUD_REG_PER_BAUD_1E5: u64 = 1_032_444;
 //         chip's default of 4). Taking fewer than the FIFO holds loses nothing but time; taking more reads empties.
 //   INV   REG_59 bit 10, invert received data. RS41 polarity against this chip is unknown. REG_0B bits 7:6 (negative
 //         and positive sync found) are recorded with every sync, which says which polarity the chip matched.
-//   BW    REG_58 bits 3:1 RX bandwidth: 000 "FSK 1.2K", 100 "FSK 2.4K" (the widest the document lists). 4800 baud
-//         needs the wider one on paper; UNVERIFIED either way.
+//   BW    REG_58 bits 3:1 RX bandwidth. The document gives 000 "FSK 1.2K", 100 "FSK 2.4K and FFSK 1200/2400",
+//         001 "FFSK 1200/1800" (010 NOAA SAME is not offered). AUTO picks the one the document pairs with the MODE;
+//         the others are the neighbours to try. 4800 baud needs the wider one on paper; UNVERIFIED either way.
 //   SYNC  REG_59 bit 3, 4 or 2 sync bytes.
+//   MODE  REG_58 bits 12:10, the receive mode: 000 FSK (1.2K, 2.4K or NOAA SAME by bandwidth), 100 FFSK 1200/2400,
+//         111 FFSK 1200/1800 (FD p10). Bell 202 (APRS) is 1200 baud with tones 1200 and 2200 Hz: nothing in the
+//         document is exactly that. 1200/2400 shares the mark tone and is 200 Hz off on the space tone, so it is the
+//         first thing to try; 1200/1800 is 400 Hz off. Whether either delivers bits from a real Bell 202 signal is
+//         the open question this app is for.
+//   PRE   a preset: sets frequency, baud, mode, bandwidth, sync, length and threshold together (RS41 or APRS).
+//         APRS = 144.390 MHz, 1200 baud, FFSK 1200/2400, sync FEFE FEFE, 256 bytes after the sync (the largest the
+//         verified 8-bit length field can say; 1.71 s at 1200 baud, 128 words).
 const RS41_FRAME: u16 = 320;
+/// Bytes the APRS preset captures after the sync: the rest of the preamble (TXDELAY 100-500 ms is 15-75 flag bytes
+/// at 1200 baud; the sync fires on its first clean 32 bits) and a frame of up to about 200 bytes. A longer APRS frame
+/// is cut off, a shorter one is followed by noise (the chip keeps clocking until its count runs out).
+const APRS_FRAME: u16 = 256;
 const LEN_FRAME: u8 = 0;
 const LEN_256: u8 = 1;
 const LEN_MAX: u8 = 2;
-const N_ITEMS: u8 = 5;
+const N_ITEMS: u8 = 7;
+const ITEM_PRE: u8 = 0;
+const MODE_NAMES: [&[u8]; 3] = [b"FSK", b"F1224", b"F1218"];
+/// REG_58 bits 12:10 for each MODE.
+const MODE_BITS: [u16; 3] = [0b000, 0b100, 0b111];
+const PRESET_NAMES: [&[u8]; 3] = [b"RS41", b"APRS", b"CUST"];
 
 #[derive(Clone, Copy, PartialEq)]
 struct Opts {
     len: u8,
     thr4: bool,
     inv: bool,
-    wide: bool,
+    /// 0 = automatic for the mode, 1 = 1.2K (000), 2 = 2.4K (100), 3 = FFSK 1200/1800 (001).
+    bw: u8,
     sync2: bool,
+    mode: u8,
+    /// The frame is the APRS window (`APRS_FRAME` bytes after the sync) instead of the RS41's.
+    aprs: bool,
 }
 
-const OPTS_DEFAULT: Opts = Opts { len: LEN_FRAME, thr4: false, inv: false, wide: true, sync2: false };
+const OPTS_DEFAULT: Opts = Opts { len: LEN_FRAME, thr4: false, inv: false, bw: 0, sync2: false, mode: 0, aprs: false };
+const OPTS_APRS: Opts = Opts { mode: 1, aprs: true, ..OPTS_DEFAULT };
 
 impl Opts {
     fn sync_bytes(&self) -> u16 {
@@ -132,7 +196,7 @@ impl Opts {
     }
     /// Bytes after the sync that make up one frame (the chip does not deliver the sync bytes themselves).
     fn frame_bytes(&self) -> u16 {
-        RS41_FRAME - self.sync_bytes()
+        if self.aprs { APRS_FRAME } else { RS41_FRAME - self.sync_bytes() }
     }
     fn frame_words(&self) -> u16 {
         self.frame_bytes() / 2
@@ -152,8 +216,17 @@ impl Opts {
     fn ctrl(&self) -> u16 {
         (if self.sync2 { 0 } else { CTRL_SYNC4 }) | if self.inv { CTRL_INVERT_RX } else { 0 }
     }
+    /// REG_58 bits 3:1 as written.
+    fn bw_bits(&self) -> u16 {
+        match self.bw {
+            1 => 0b000,
+            2 => 0b100,
+            3 => 0b001,
+            _ => if self.mode == 2 { 0b001 } else { 0b100 },
+        }
+    }
     fn fsk(&self) -> u16 {
-        0x0301 | if self.wide { 0b100 << 1 } else { 0 }
+        0x0301 | MODE_BITS[self.mode as usize] << 10 | self.bw_bits() << 1
     }
     fn thresh(&self) -> u16 {
         (64 << 3) | self.words_per_irq() as u16
@@ -161,16 +234,18 @@ impl Opts {
     fn size(&self) -> u16 {
         len_field(self.chip_bytes())
     }
-    /// The value the capture header records: len in bits 1:0, then thr4, inv, wide, sync2.
+    /// The value the capture header records: len in bits 1:0, then thr4, inv, "bandwidth is 2.4K" (as in header version
+    /// 2), sync2. Mode, bandwidth setting, preset and frame kind are separate header bytes from version 3.
     fn bits(&self) -> u8 {
-        self.len | (self.thr4 as u8) << 2 | (self.inv as u8) << 3 | (self.wide as u8) << 4 | (self.sync2 as u8) << 5
+        self.len | (self.thr4 as u8) << 2 | (self.inv as u8) << 3 | ((self.bw_bits() == 0b100) as u8) << 4 | (self.sync2 as u8) << 5
     }
     fn step(&mut self, item: u8) {
         match item {
-            0 => self.len = (self.len + 1) % 3,
-            1 => self.thr4 = !self.thr4,
-            2 => self.inv = !self.inv,
-            3 => self.wide = !self.wide,
+            1 => self.mode = (self.mode + 1) % 3,
+            2 => self.len = (self.len + 1) % 3,
+            3 => self.thr4 = !self.thr4,
+            4 => self.inv = !self.inv,
+            5 => self.bw = (self.bw + 1) % 4,
             _ => self.sync2 = !self.sync2,
         }
     }
@@ -192,6 +267,13 @@ fn tail_words(o: &Opts, in_frame: bool, got: u16) -> u8 {
     (o.chip_bytes() / 2).saturating_sub(got).min(8) as u8
 }
 
+/// REG_6E: bits 15:9 Nout, 8:0 Rout, tone = Nout * 25390.625 / Rout Hz (13/26 MHz crystal; FD p11). A crude discriminator:
+/// 1200 or 2200 Hz in the demodulated audio shows here if the register follows the document. 0 when Rout is 0.
+fn af_hz(v: u16) -> u32 {
+    let (n, r) = ((v >> 9) as u32, (v & 0x1FF) as u32);
+    if r == 0 { 0 } else { n * 25_390_625 / r / 1000 }
+}
+
 /// Word time in 100 us units: 16 bits at `baud`.
 fn word_100us(baud: u16) -> u32 {
     160_000 / baud.max(1) as u32
@@ -207,11 +289,13 @@ fn silence_100us(baud: u16) -> u32 {
 // download. The range is 0x1B0000-0x1D0000: past the app slots and the satellite table, with 64 KB of unused flash
 // between its end and the channel extras table at 0x1E0000. Nothing else uses it.
 //
-//   page 0            header, version 2: "FSKCAP2\0", frequency Hz u32, baud u16, sync halves 2 x u16, baud
+//   page 0            header, version 3: "FSKCAP3\0", frequency Hz u32, baud u16, sync halves 2 x u16, baud
 //                     register u16, start time u32 (100 us units), record size u8 (bytes 0-24, as version 1),
-//                     then: header version u8 (2), options u8 (Opts::bits), words per interrupt u8, and the values
+//                     then: header version u8 (3), options u8 (Opts::bits), words per interrupt u8, and the values
 //                     the app wrote to REG_3F, 58, 59 (receive running), 5C, 5D, 5E, 70 (7 x u16), frame words u16;
-//                     the rest erased. Version 1 ("FSKCAP1\0") stops after the record size.
+//                     then (version 3) bandwidth setting u8, mode u8, preset u8 (0 RS41, 1 APRS, 2 custom), frame
+//                     kind u8 (0 RS41, 1 APRS); the rest erased. Version 2 ("FSKCAP2\0") stops after the frame
+//                     words, version 1 ("FSKCAP1\0") after the record size.
 //   pages 1..CAP_PAGES  records, 8 bytes each, little-endian: time u32 (100 us units), FIFO word u16, flags u8
 //                     (FLAG_*; bit 7 is always 0, so an erased 0xFF marks the end), RSSI raw u8
 //
@@ -226,8 +310,8 @@ const PAGE: usize = 256;
 const REC: usize = 8;
 const CAP_PAGES: u16 = (CAP_BYTES / PAGE as u32) as u16;
 pub const CAP_RECORDS: u32 = (CAP_PAGES as u32 - 1) * (PAGE / REC) as u32;
-const CAP_MAGIC: &[u8; 8] = b"FSKCAP2\0";
-const HEADER_VERSION: u8 = 2;
+const CAP_MAGIC: &[u8; 8] = b"FSKCAP3\0";
+const HEADER_VERSION: u8 = 3;
 
 const FLAG_SYNC: u8 = 1;
 const FLAG_WORD: u8 = 2;
@@ -343,6 +427,10 @@ fn header(s: &State, now: u32) -> [u8; PAGE] {
         h[28 + 2 * i..30 + 2 * i].copy_from_slice(&r.to_le_bytes());
     }
     h[42..44].copy_from_slice(&s.opts.frame_words().to_le_bytes());
+    h[44] = s.opts.bw;
+    h[45] = s.opts.mode;
+    h[46] = s.preset;
+    h[47] = s.opts.aprs as u8;
     h
 }
 
@@ -411,6 +499,8 @@ struct State {
     opts: Opts,
     /// Which option key 0 changes (AB moves it).
     item: u8,
+    /// 0 RS41, 1 APRS, 2 custom (something was changed by hand after the last preset).
+    preset: u8,
     /// A sync was seen and the frame it started is not finished: `fwords` words have come since.
     in_frame: bool,
     fwords: u16,
@@ -452,7 +542,7 @@ pub fn entry(api: &Api, ev: AppEvent) -> AppResult {
 const STATE_DEFAULT: State = State {
     freq: 0, // radiosonde frequency
     baud: 3, // 4800: the RS41's speed
-    sync: 3, // RS41 header, most-significant bit first
+    sync: SYNC_RS41, // RS41 header, most-significant bit first
     running: false,
     peek: 0,
     syncs: 0,
@@ -466,7 +556,8 @@ const STATE_DEFAULT: State = State {
     saved: 0,
     rec: Recorder::NEW,
     opts: OPTS_DEFAULT,
-    item: 0,
+    item: ITEM_PRE,
+    preset: 0,
     in_frame: false,
     fwords: 0,
     frames: 0,
@@ -543,6 +634,26 @@ fn modem_off(api: &Api, s: &mut State) {
     stop_capture(api, s);
 }
 
+/// The RS41 (0) or APRS (1) test setup: frequency, baud, sync and every option at once.
+fn apply_preset(s: &mut State, p: u8) {
+    s.preset = p;
+    if p == 0 {
+        (s.freq, s.baud, s.sync, s.opts) = (0, 3, SYNC_RS41, OPTS_DEFAULT);
+    } else {
+        (s.freq, s.baud, s.sync, s.opts) = (1, 1, SYNC_APRS, OPTS_APRS);
+    }
+}
+
+/// Applies a changed frequency or preset: retunes, and restarts the modem if it was listening.
+fn retune(api: &Api, s: &mut State) {
+    let was = s.running;
+    modem_off(api, s);
+    tune(api, s);
+    if was {
+        modem_on(api, s);
+    }
+}
+
 fn baud_reg(baud: u16) -> u16 {
     ((baud as u64 * BAUD_REG_PER_BAUD_1E5 + 50_000) / 100_000) as u16
 }
@@ -572,30 +683,33 @@ fn key(api: &Api, id: u8, kind: u8) -> AppResult {
         }
         KEY_STAR => {
             s.freq = (s.freq + 1) % FREQS.len();
-            let was = s.running;
-            modem_off(api, s);
-            tune(api, s);
-            if was {
-                modem_on(api, s);
-            }
+            s.preset = 2;
+            retune(api, s);
         }
         KEY_UP => s.peek = (s.peek + PEEK.len() - 1) % PEEK.len(),
         KEY_DOWN => s.peek = (s.peek + 1) % PEEK.len(),
         KEY_AB => s.item = (s.item + 1) % N_ITEMS,
+        0 if s.item == ITEM_PRE => {
+            apply_preset(s, if s.preset == 0 { 1 } else { 0 });
+            retune(api, s);
+        }
         0 => {
             s.opts.step(s.item);
+            s.preset = 2;
             if s.running {
                 modem_config(api, s);
             }
         }
         1..=4 => {
+            s.preset = 2;
             s.baud = (id - 1) as usize;
             if s.running {
                 w(api, R_BAUD, baud_reg(BAUDS[s.baud]));
             }
         }
         5..=9 => {
-            s.sync = (id - 5) as usize;
+            s.preset = 2;
+            s.sync = sync_for_key(s.sync, id);
             if s.running {
                 w(api, R_SYNC1, SYNCS[s.sync].0);
                 w(api, R_SYNC2, SYNCS[s.sync].1);
@@ -820,35 +934,49 @@ fn draw(api: &Api, s: &mut State) {
     n = put(&mut b, n, b"REG ");
     n = put_hex2(&mut b, n, reg);
     n = put(&mut b, n, b" = ");
-    n = put_hex(&mut b, n, (api.rf_reg_read)(reg));
-    n = put(&mut b, n, b"  UP/DN");
+    let v = (api.rf_reg_read)(reg);
+    n = put_hex(&mut b, n, v);
+    if reg == R_AF_FREQ {
+        n = put(&mut b, n, b" ");
+        n = put_u(&mut b, n, af_hz(v));
+        n = put(&mut b, n, b"Hz");
+    } else {
+        n = put(&mut b, n, b"  UP/DN");
+    }
     line(api, 8, &b[..n], WHITE);
 
-    opts_line(api, 9, s);
-    line(api, 10, b"1-4 baud 5-9 sync * freq", GRAY);
-    line(api, 11, b"MENU run # rec AB/0 option", GRAY);
+    opts_line(api, 9, s, 0, 4);
+    opts_line(api, 10, s, 4, N_ITEMS);
+    line(api, 11, b"MENU run # rec AB/0 opt", GRAY);
 }
 
-/// The five options on one row, the one key 0 will change in yellow.
-fn opts_line(api: &Api, row: i16, s: &State) {
+/// Options `from..to` on one row, the one key 0 will change in yellow.
+fn opts_line(api: &Api, row: i16, s: &State, from: u8, to: u8) {
     let y = row * LINE_H + 2;
     (api.fill_rect)(0, y, SCREEN_W, LINE_H as u16, BLACK);
     let o = &s.opts;
     let mut x = 2u16;
-    for item in 0..N_ITEMS {
+    for item in from..to {
         let mut b = [0u8; 12];
         let mut n = 0;
         n = match item {
-            0 => {
+            0 => put(&mut b, n, PRESET_NAMES[s.preset as usize]),
+            1 => put(&mut b, n, MODE_NAMES[o.mode as usize]),
+            2 => {
                 let n = put(&mut b, n, b"LEN");
                 put_u(&mut b, n, o.chip_bytes() as u32)
             }
-            1 => {
+            3 => {
                 let n = put(&mut b, n, b"TH");
                 put_u(&mut b, n, o.words_per_irq() as u32)
             }
-            2 => put(&mut b, n, if o.inv { b"INV+" } else { b"INV-" }),
-            3 => put(&mut b, n, if o.wide { b"BW2.4" } else { b"BW1.2" }),
+            4 => put(&mut b, n, if o.inv { b"INV+" } else { b"INV-" }),
+            5 => put(&mut b, n, match o.bw {
+                0 => b"BWAUTO",
+                1 => b"BW1.2 ",
+                2 => b"BW2.4 ",
+                _ => b"BW1218",
+            }),
             _ => {
                 let n = put(&mut b, n, b"S");
                 put_u(&mut b, n, o.sync_bytes() as u32)
@@ -925,6 +1053,11 @@ fn put_freq(b: &mut [u8], n: usize, hz: u32) -> usize {
 pub fn debug_counts() -> (u16, u16, u16, u16) {
     let s = st();
     (s.syncs, s.words, s.frames, s.cut)
+}
+
+#[cfg(not(target_os = "none"))]
+pub fn debug_preset() -> u8 {
+    st().preset
 }
 
 #[cfg(not(target_os = "none"))]
@@ -1025,7 +1158,7 @@ mod tests {
         assert_eq!(o.ctrl() | CTRL_RX_EN, 0x1008, "the value TEXT leaves receive running with");
         for len in 0..3 {
             for bits in 0..16u8 {
-                let o = Opts { len, thr4: bits & 1 != 0, inv: bits & 2 != 0, wide: bits & 4 != 0, sync2: bits & 8 != 0 };
+                let o = Opts { len, thr4: bits & 1 != 0, inv: bits & 2 != 0, bw: (bits >> 2) & 3, sync2: bits & 8 != 0, ..OPTS_DEFAULT };
                 let running = o.ctrl() | CTRL_RX_EN;
                 assert_eq!(running & (CTRL_CLEAR | (1 << 13) | (1 << 11) | (1 << 9)), 0, "no clear, scramble or TX bit");
                 assert_eq!(running & CTRL_SYNC4 != 0, !o.sync2);
@@ -1062,7 +1195,7 @@ mod tests {
         assert_eq!(o.size(), 0x3B20);
         assert_eq!(o.thresh(), (64 << 3) | 1, "TX threshold at its default of 64, RX at one word, as TEXT");
         assert_eq!(o.fsk(), 0x0301 | 0x0008, "TEXT's value with the 2.4K receive bandwidth");
-        let narrow = Opts { wide: false, ..o };
+        let narrow = Opts { bw: 1, ..o };
         assert_eq!(narrow.fsk(), 0x0301, "exactly TEXT's and the first capture's value");
         let two = Opts { sync2: true, ..o };
         assert_eq!((two.frame_bytes(), two.frame_words()), (318, 159));
@@ -1071,7 +1204,7 @@ mod tests {
         assert_eq!(Opts { thr4: true, ..o }.thresh() & 7, 4);
         assert_eq!(Opts { thr4: true, ..o }.words_per_irq(), 4);
         // Every item steps through its values and comes back.
-        for item in 0..N_ITEMS {
+        for item in 1..N_ITEMS {
             let mut x = o;
             let mut seen = 0;
             loop {
@@ -1080,18 +1213,120 @@ mod tests {
                 if x == o {
                     break;
                 }
-                assert!(seen < 4);
+                assert!(seen < 5);
             }
-            assert_eq!(seen, if item == 0 { 3 } else { 2 });
+            assert_eq!(seen, match item { 1 | 2 => 3, 5 => 4, _ => 2 }, "item {item}");
         }
-        // The header's options byte tells every setting apart.
+        // The header's options byte tells every setting apart (mode and the bandwidth setting have their own bytes).
         let mut all = std::collections::HashSet::new();
         for len in 0..3 {
             for bits in 0..16u8 {
-                let o = Opts { len, thr4: bits & 1 != 0, inv: bits & 2 != 0, wide: bits & 4 != 0, sync2: bits & 8 != 0 };
+                let o = Opts { len, thr4: bits & 1 != 0, inv: bits & 2 != 0, bw: 1 + (bits >> 2) % 2, sync2: bits & 8 != 0, ..OPTS_DEFAULT };
                 assert!(all.insert(o.bits()));
             }
         }
+    }
+
+    #[test]
+    fn rx_mode_and_bandwidth_follow_the_register_document() {
+        // FD p10: REG_58 12:10 = 000 FSK 1.2K/2.4K/NOAA, 100 FFSK 1200/2400, 111 FFSK 1200/1800;
+        // 3:1 = 000 FSK 1.2K, 100 FSK 2.4K and FFSK 1200/2400, 001 FFSK 1200/1800.
+        let fsk = OPTS_DEFAULT;
+        assert_eq!(fsk.fsk(), 0x0309);
+        let f24 = Opts { mode: 1, ..fsk };
+        assert_eq!(f24.fsk(), 0x0301 | 0b100 << 10 | 0b100 << 1, "FFSK 1200/2400 with its own 2.4K bandwidth");
+        let f18 = Opts { mode: 2, ..fsk };
+        assert_eq!(f18.fsk(), 0x0301 | 0b111 << 10 | 0b001 << 1, "FFSK 1200/1800 with its own bandwidth");
+        // The neighbouring bandwidths can still be forced.
+        assert_eq!(Opts { bw: 1, ..f24 }.fsk() >> 1 & 7, 0b000);
+        assert_eq!(Opts { bw: 3, ..f24 }.fsk() >> 1 & 7, 0b001);
+        assert_eq!(Opts { bw: 2, ..f18 }.fsk() >> 1 & 7, 0b100);
+        for mode in 0..3u8 {
+            for bw in 0..4u8 {
+                let v = Opts { mode, bw, ..fsk }.fsk();
+                assert_eq!(v & 0x0301, 0x0301, "enable and the gain bits stay as TEXT has them");
+                assert_eq!(v >> 10 & 7, MODE_BITS[mode as usize]);
+                assert_eq!(v & 0xE0F0, 0, "TX mode, preamble type and the reserved bits stay 0 (receive only)");
+                assert_eq!(v >> 4 & 3, 0);
+            }
+        }
+    }
+
+    #[test]
+    fn presets_set_every_setting_at_once() {
+        let mut s = STATE_DEFAULT;
+        assert_eq!((s.preset, s.item), (0, ITEM_PRE), "starts as RS41 with the cursor on PRE, so 0 is the one-key switch");
+        apply_preset(&mut s, 1);
+        assert_eq!((FREQS[s.freq], BAUDS[s.baud], s.sync, s.preset), (144_390_000, 1200, SYNC_APRS, 1));
+        assert_eq!(SYNCS[s.sync], (0xFEFE, 0xFEFE));
+        assert!(s.opts == OPTS_APRS);
+        assert_eq!((s.opts.fsk(), s.opts.ctrl(), s.opts.size()), (0x1309, CTRL_SYNC4, 0xFF00));
+        assert_eq!((s.opts.frame_bytes(), s.opts.frame_words(), s.opts.thresh() & 7), (256, 128, 1));
+        apply_preset(&mut s, 0);
+        assert_eq!((FREQS[s.freq], BAUDS[s.baud], s.sync, s.preset), (404_800_000, 4800, SYNC_RS41, 0));
+        assert_eq!(SYNCS[s.sync], (0x086D, 0x5388));
+        assert!(s.opts == OPTS_DEFAULT);
+        assert!(STATE_DEFAULT.opts == OPTS_DEFAULT);
+        assert_eq!((FREQS[STATE_DEFAULT.freq], BAUDS[STATE_DEFAULT.baud], STATE_DEFAULT.sync), (404_800_000, 4800, SYNC_RS41));
+    }
+
+    #[test]
+    fn sync_keys_step_through_the_derived_flag_patterns() {
+        // key 5: FEFE, 0101, 7F7F, 8080, then round; key 6: AAAA, 5555; 7: 7E7E; 8, 9: RS41 MSB and LSB first.
+        let mut cur = SYNC_RS41;
+        let mut seen = Vec::new();
+        for _ in 0..5 {
+            cur = sync_for_key(cur, 5);
+            seen.push(SYNCS[cur].0);
+        }
+        assert_eq!(seen, [0xFEFE, 0x0101, 0x7F7F, 0x8080, 0xFEFE]);
+        assert_eq!((SYNCS[sync_for_key(0, 6)].0, SYNCS[sync_for_key(4, 6)].0), (0xAAAA, 0x5555));
+        assert_eq!(SYNCS[sync_for_key(0, 7)], (0x7E7E, 0x7E7E));
+        assert_eq!(SYNCS[sync_for_key(0, 8)], (0x086D, 0x5388));
+        assert_eq!(SYNCS[sync_for_key(0, 9)], (0x10B6, 0xCA11));
+    }
+
+    #[test]
+    fn flag_sync_words_are_what_nrzi_makes_of_repeated_flags() {
+        // Derivation in the comment on SYNCS, checked here by doing it: 0x7E sent least-significant bit first, NRZI coded
+        // (a 0 changes the level, a 1 keeps it), flags back to back, from either starting level.
+        for start in [0u8, 1] {
+            let mut level = start;
+            let mut raw = Vec::new();
+            for _ in 0..8 {
+                for k in 0..8 {
+                    if (0x7Eu8 >> k) & 1 == 0 {
+                        level ^= 1;
+                    }
+                    raw.push(level);
+                }
+                assert_eq!(level, start, "a flag ends on the level it began with");
+            }
+            for f in 1..8 {
+                assert_eq!(&raw[..8], &raw[8 * f..8 * f + 8], "every flag is the same: period 8, no second phase");
+            }
+            // Bytes made of the first eight raw bits, first bit in time as the most- or least-significant bit.
+            let msb = raw[..8].iter().fold(0u8, |a, &b| a << 1 | b);
+            let lsb = raw[..8].iter().enumerate().fold(0u8, |a, (i, &b)| a | b << i);
+            let (m, l) = if start == 0 { (0xFE, 0x7F) } else { (0x01, 0x80) };
+            assert_eq!((msb, lsb), (m, l));
+            // A 32-bit window of the preamble in both orders is a preset (as 16-bit halves).
+            let half = |b: u8| ((b as u16) << 8) | b as u16;
+            assert!(SYNCS[..4].contains(&(half(msb), half(msb))));
+            assert!(SYNCS[..4].contains(&(half(lsb), half(lsb))));
+        }
+        assert_eq!(SYNCS[0], (0xFEFE, 0xFEFE));
+        assert_eq!(SYNCS[1], (!0xFEFE, !0xFEFE));
+        assert_eq!(SYNCS[2], (0x7F7F, 0x7F7F));
+        assert_eq!(SYNCS[3], (!0x7F7F, !0x7F7F));
+    }
+
+    #[test]
+    fn af_tone_readout() {
+        assert_eq!(af_hz(0), 0);
+        // Nout 1, Rout 21: 25390.625 / 21 = 1209 Hz
+        assert_eq!(af_hz(1 << 9 | 21), 1209);
+        assert_eq!(af_hz(127 << 9 | 1), 3_224_609);
     }
 
     #[test]
@@ -1121,29 +1356,31 @@ mod tests {
     #[test]
     fn header_records_the_configuration() {
         let mut st = STATE_DEFAULT;
-        st.opts = Opts { len: LEN_256, thr4: true, inv: true, wide: false, sync2: true };
+        st.opts = Opts { len: LEN_256, thr4: true, inv: true, bw: 1, sync2: true, mode: 2, aprs: true };
+        st.preset = 2;
         let h = header(&st, 0x1234_5678);
-        assert_eq!(&h[..8], b"FSKCAP2\0");
+        assert_eq!(&h[..8], b"FSKCAP3\0");
         assert_eq!(&h[8..12], &404_800_000u32.to_le_bytes());
         assert_eq!(&h[12..14], &4800u16.to_le_bytes());
         assert_eq!(&h[14..18], &[0x6D, 0x08, 0x88, 0x53]);
         assert_eq!(&h[18..20], &49557u16.to_le_bytes());
         assert_eq!(&h[20..24], &0x1234_5678u32.to_le_bytes());
         assert_eq!(h[24], 8);
-        assert_eq!(h[25], 2, "header version");
+        assert_eq!(h[25], 3, "header version");
         assert_eq!(h[26], st.opts.bits());
         assert_eq!(h[26], 1 | 1 << 2 | 1 << 3 | 1 << 5);
         assert_eq!(h[27], 4, "words per interrupt");
         let reg = |i: usize| u16::from_le_bytes([h[28 + 2 * i], h[29 + 2 * i]]);
         assert_eq!(reg(0), 0x3002, "REG_3F");
-        assert_eq!(reg(1), 0x0301, "REG_58");
+        assert_eq!(reg(1), 0x0301 | 0b111 << 10, "REG_58: FFSK 1200/1800 receive with the 1.2K bandwidth forced");
         assert_eq!(reg(2), CTRL_INVERT_RX | CTRL_RX_EN, "REG_59 as receive runs");
         assert_eq!(reg(3), 0x5625, "REG_5C");
         assert_eq!(reg(4), 0xFF00, "REG_5D");
         assert_eq!(reg(5), (64 << 3) | 4, "REG_5E");
         assert_eq!(reg(6), 0x00E0, "REG_70");
-        assert_eq!(u16::from_le_bytes([h[42], h[43]]), 159, "frame words");
-        assert!(h[44..].iter().all(|&b| b == 0xFF), "the rest stays erased");
+        assert_eq!(u16::from_le_bytes([h[42], h[43]]), 128, "frame words: the APRS window");
+        assert_eq!(h[44..48], [1, 2, 2, 1], "bandwidth setting, mode, preset (custom), frame kind");
+        assert!(h[48..].iter().all(|&b| b == 0xFF), "the rest stays erased");
     }
 
     #[test]

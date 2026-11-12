@@ -1930,7 +1930,9 @@ fn test_search_qt() {
 // the counted bytes have been delivered and the receiver then waits for the next sync; that the almost-full flag is
 // raised when a word arrives and the FIFO then holds at least the threshold (not re-raised for words already
 // there); the FIFO returning 0 when read empty; that words only reach the FIFO after a sync; overflow past 8 words drops the
-// newest; and the pacing: events are taken as the app polls, not by the clock, with the time a word takes on the air
+// newest; the RX mode (REG_58 bits 12:10, FD p10) when a scenario or test sets `hears`: a signal of one tone pair is only
+// heard with the matching mode, and any other mode hears nothing (a GUESS, and kinder than the truth if the chip
+// half-hears a neighbouring pair; the chip may deliver partial or inverted bits instead of nothing); and the pacing: events are taken as the app polls, not by the clock, with the time a word takes on the air
 // (REG_72) added per word. The sync match does not look at the sync registers or REG_59 bit 3 at all: the scenario or
 // test decides what the air carries.
 
@@ -1971,6 +1973,8 @@ struct Chip {
     /// GUESS switch: after the length counter runs out the chip keeps putting words in the FIFO (the other reading of
     /// TEXT's "it goes on decoding noise as words") instead of waiting for the next sync.
     stream_past_done: bool,
+    /// The REG_58 bits 12:10 value the signal on the air needs (`airmode`), or any mode when None.
+    hears: Option<u16>,
 }
 
 static mut CHIP: Option<Chip> = None;
@@ -2008,6 +2012,7 @@ fn chip_reset() {
             overflow: 0,
             max_fifo: 0,
             stream_past_done: false,
+            hears: None,
         });
     }
 }
@@ -2095,6 +2100,9 @@ pub(crate) fn sim_rf_read(addr: u8) -> u16 {
             // The modem only hears anything with RX on. A poll takes the air forward to the next interrupt.
             while c.pending == 0 && c.regs[0x59] & 0x1000 != 0 {
                 match c.script.pop_front() {
+                    Some(AirEvent::Sync | AirEvent::SyncInverted) if c.hears.is_some_and(|m| c.regs[0x58] >> 10 & 7 != m) => {
+                        // Wrong RX mode for this signal: no sync, and its words go nowhere (`in_frame` stays false).
+                    }
                     Some(ev @ (AirEvent::Sync | AirEvent::SyncInverted)) => {
                         c.in_frame = true;
                         c.since_sync = 0;
@@ -2884,6 +2892,13 @@ fn probe_open() {
     fskprobe::entry(&API, AppEvent::Draw);
 }
 
+/// Moves FSK PROBE's option cursor to `item` (it starts on 0, the preset).
+fn probe_item(app: Entry, item: u8) {
+    for _ in 0..item {
+        press(app, 17);
+    }
+}
+
 fn probe_air(words: usize) {
     let c = chip();
     c.script.push_back(AirEvent::Sync);
@@ -2917,7 +2932,7 @@ fn test_fskprobe() {
     println!("FSK PROBE: threshold 4 takes four words per interrupt and the tail on done");
     probe_open();
     press(app, 12);
-    press(app, 17);
+    probe_item(app, 3);
     check(chip().regs[0x5E] & 7 == 1, "AB only moves the cursor");
     press(app, 0);
     check(chip().regs[0x5E] & 7 == 4, "0 on the TH item sets the almost-full threshold to 4 on the running modem");
@@ -2929,6 +2944,7 @@ fn test_fskprobe() {
     println!("FSK PROBE: the chip counts 256 bytes and stops, then the app has only 128 words");
     probe_open();
     press(app, 12);
+    probe_item(app, 2);
     press(app, 0);
     check(chip().regs[0x5D] == 0xFF00, "LEN 256 writes the largest an 8-bit field can say");
     probe_air(158);
@@ -2942,6 +2958,7 @@ fn test_fskprobe() {
     probe_open();
     chip().stream_past_done = true;
     press(app, 12);
+    probe_item(app, 2);
     press(app, 0);
     probe_air(158);
     run_ms(app, 1500);
@@ -2950,6 +2967,7 @@ fn test_fskprobe() {
     println!("FSK PROBE: LEN 2048, the app ends the frame itself");
     probe_open();
     press(app, 12);
+    probe_item(app, 2);
     press(app, 0);
     press(app, 0);
     check(chip().regs[0x5D] == 0xFFE0, "LEN 2048");
@@ -2958,21 +2976,99 @@ fn test_fskprobe() {
     check(fskprobe::debug_counts() == (1, 158, 1, 0) && chip().regs[0x59] == 0x1008, "whole frame by count, re-armed");
 
     println!("FSK PROBE: the options, one by one");
-    for item in 1u8..=4 {
+    for item in 1u8..=6 {
         probe_open();
         press(app, 12);
-        for _ in 0..item {
-            press(app, 17);
-        }
+        probe_item(app, item);
         press(app, 0);
         let c = chip();
         match item {
-            1 => check(c.regs[0x5E] & 7 == 4, "TH 4"),
-            2 => check(c.regs[0x59] == 0x1408, "INV+ sets bit 10"),
-            3 => check(c.regs[0x58] == 0x0301, "BW 1.2 is exactly the first capture's and TEXT's value"),
+            1 => check(c.regs[0x58] == 0x1309, "MODE F1224: RX mode 100 in bits 12:10, the 2.4K bandwidth the document pairs with it"),
+            2 => check(c.regs[0x5D] == 0xFF00, "LEN 256"),
+            3 => check(c.regs[0x5E] & 7 == 4, "TH 4"),
+            4 => check(c.regs[0x59] == 0x1408, "INV+ sets bit 10"),
+            5 => check(c.regs[0x58] == 0x0301, "BW 1.2 is exactly the first capture's and TEXT's value"),
             _ => check(c.regs[0x59] == 0x1000, "S2 clears bit 3: a 2-byte sync"),
         }
+        check(fskprobe::debug_preset() == 2, "a hand change makes the preset CUST");
     }
+
+    println!("FSK PROBE: the APRS preset sets everything with one key");
+    probe_open();
+    check(fskprobe::debug_preset() == 0, "starts as the RS41 preset, the option cursor on PRE");
+    press(app, 0);
+    check(fskprobe::debug_preset() == 1 && sim().cfg_rx == 144_390_000, "0 on PRE: APRS, tuned to 144.390 MHz");
+    press(app, 12);
+    let c = chip();
+    check(c.regs[0x58] == 0x1309 && c.regs[0x72] == 12389, "FFSK 1200/2400 with its bandwidth, 1200 baud");
+    check(c.regs[0x5A] == 0xFEFE && c.regs[0x5B] == 0xFEFE && c.regs[0x59] == 0x1008, "four sync bytes of the flag pattern, receive on");
+    check(c.regs[0x5D] == 0xFF00 && c.regs[0x5E] == (64 << 3) | 1, "256 bytes after the sync, one word per interrupt");
+    chip().hears = Some(0b100);
+    probe_air(128);
+    run_ms(app, 2500);
+    check(fskprobe::debug_counts() == (1, 128, 1, 0), "a 128-word window is one whole frame, ended by the app's count and the chip's done");
+    check(chip().overflow == 0 && chip().regs[0x59] == 0x1008, "none lost, listening again");
+
+    println!("FSK PROBE: the MODE item changes REG_58, and a signal of the other tone pair is not heard");
+    press(app, 17);
+    press(app, 0);
+    check(chip().regs[0x58] == 0x1F03, "F1218: RX mode 111 and the 1200/1800 bandwidth (001)");
+    check(fskprobe::debug_preset() == 2, "a changed setting is CUST");
+    probe_air(128);
+    run_ms(app, 2500);
+    check(fskprobe::debug_counts() == (1, 128, 1, 0), "an FFSK 1200/2400 signal is not heard in 1200/1800 mode (a guess in the model)");
+    chip().hears = Some(0b111);
+    probe_air(128);
+    run_ms(app, 2500);
+    check(fskprobe::debug_counts() == (2, 256, 2, 0), "and is heard when the mode matches");
+    press(app, 0);
+    check(chip().regs[0x58] == 0x0309, "MODE steps on to plain FSK");
+    press(app, 5);
+    check(chip().regs[0x5A] == 0x0101 && chip().regs[0x5B] == 0x0101, "key 5 steps to the inverted flag pattern");
+    press(app, 5);
+    press(app, 5);
+    check(chip().regs[0x5A] == 0x8080, "7F7F then 8080");
+    press(app, 5);
+    check(chip().regs[0x5A] == 0xFEFE, "and round to FEFE");
+    press(app, 6);
+    check(chip().regs[0x5A] == 0xAAAA, "key 6: the alternating preamble");
+    press(app, 6);
+    check(chip().regs[0x5A] == 0x5555, "and its inverse");
+    press(app, 9);
+    check(chip().regs[0x5A] == 0x10B6 && chip().regs[0x5B] == 0xCA11, "key 9 is still the RS41 header, least-significant bit first");
+
+    println!("FSK PROBE: BW can be forced to the neighbours");
+    for (n, want) in [(1, 0x0301 | 0b100 << 10 | 0b000 << 1), (2, 0x0301 | 0b100 << 10 | 0b100 << 1), (3, 0x0301 | 0b100 << 10 | 0b001 << 1)] {
+        probe_open();
+        press(app, 0);
+        press(app, 12);
+        probe_item(app, 5);
+        for _ in 0..n {
+            press(app, 0);
+        }
+        check(chip().regs[0x58] == want, "BW 1.2K, 2.4K, 1200/1800 on FFSK 1200/2400");
+    }
+
+    println!("FSK PROBE: the preset key brings RS41 back");
+    probe_open();
+    press(app, 12);
+    press(app, 0);
+    press(app, 0);
+    check(fskprobe::debug_preset() == 0 && sim().cfg_rx == 404_800_000, "0, 0: APRS and back to RS41 on 404.800");
+    check(chip().regs[0x58] == 0x0309 && chip().regs[0x72] == 49557 && chip().regs[0x5A] == 0x086D && chip().regs[0x5D] == 0x3B20 && chip().regs[0x59] == 0x1008, "all of it, with the modem running throughout");
+
+    println!("FSK PROBE: the capture header records the APRS preset");
+    probe_open();
+    press(app, 0);
+    press(app, 11);
+    run(app, 1);
+    check(&nor()[0x1B_0000..0x1B_0008] == b"FSKCAP3\0" && nor()[0x1B_0019] == 3, "version 3");
+    check(nor()[0x1B_0008..0x1B_000C] == 144_390_000u32.to_le_bytes() && nor()[0x1B_000C..0x1B_000E] == 1200u16.to_le_bytes(), "144.390 MHz, 1200 baud");
+    check(nor()[0x1B_000E..0x1B_0012] == [0xFE, 0xFE, 0xFE, 0xFE], "sync FEFE FEFE");
+    check(nor()[0x1B_002C..0x1B_0030] == [0, 1, 1, 1], "bandwidth auto, mode F1224, preset APRS, APRS frame");
+    check(nor()[0x1B_002A..0x1B_002C] == 128u16.to_le_bytes(), "128 frame words");
+    check(nor()[0x1B_001C..0x1B_001E] == 0x3002u16.to_le_bytes() && nor()[0x1B_001E..0x1B_0020] == 0x1309u16.to_le_bytes(), "REG_3F and REG_58 as written");
+    press(app, 11);
 
     println!("FSK PROBE: the first capture's setup, replayed on the model");
     chip_reset();
@@ -2997,13 +3093,13 @@ fn test_fskprobe() {
 
     println!("FSK PROBE: capture header and flags");
     probe_open();
-    press(app, 17);
-    press(app, 17);
+    probe_item(app, 4);
     press(app, 0);
     press(app, 11);
     run(app, 1);
-    check(&nor()[0x1B_0000..0x1B_0008] == b"FSKCAP2\0", "capture header is version 2");
-    check(nor()[0x1B_0019] == 2 && nor()[0x1B_001A] == 0x18, "header: version 2, options INV on and 2.4K bandwidth");
+    check(&nor()[0x1B_0000..0x1B_0008] == b"FSKCAP3\0", "capture header is version 3");
+    check(nor()[0x1B_0019] == 3 && nor()[0x1B_001A] == 0x18, "header: version 3, options INV on and 2.4K bandwidth");
+    check(nor()[0x1B_002C..0x1B_0030] == [0, 0, 2, 0] && nor()[0x1B_0030] == 0xFF, "header: bandwidth auto, mode FSK, preset custom, RS41 frame, then erased");
     chip().script.push_back(AirEvent::SyncInverted);
     for i in 0..158u16 {
         chip().script.push_back(AirEvent::Word(0x2000 + i));

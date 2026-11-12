@@ -104,12 +104,23 @@ calibration copy you already hold. If it differs, **stop**: do not transmit.
 
 ## Part 6: FSK PROBE (receive only; steps in [SONDE-APP.md](SONDE-APP.md))
 
-- [ ] **30.** `MENU`, `8` opens FSK PROBE on 404.800 MHz at 4800 baud, options `LEN316 TH1 INV- BW2.4 S4`. `MENU` turns the modem on; `DOWN` seven times from REG 02 to REG 59, which should read `1008` (the value the app writes), and four more to REG 5D, `3B20`. A
+- [ ] **30.** `MENU`, `8` opens FSK PROBE on 404.800 MHz at 4800 baud, the option rows `RS41 FSK LEN316 TH1` and `INV- BWAUTO S4`. `MENU` turns the modem on; `DOWN` seven times from REG 02 to REG 59, which should read `1008` (the value the app writes), and four more to REG 5D, `3B20`. A
   different read-back is a finding. (AUDIT 44)
 - [ ] **31.** Press `#`. `ERASING` shows (it counts sectors up to 32): write down how long it lasts, and that the keys come back. Then `REC` counts up. Wait 30 seconds, press `#`: `MODEM ON  SAVED n`. Leave
   the app with `EXIT`. (AUDIT 40, 44)
 - [ ] **32.** On the computer: `python3 firmware/source-changes/probe_capture.py PORT noise-a.bin` prints a summary and writes a `.csv` (the radio must be on its main screen, not in an app). Then follow steps (a) in
   SONDE-APP.md (S4 against S2) to settle the sync-width question, and (b) at a radiosonde launch (about 11:00 and 23:00 UTC, from SONDE-APP.md; not checked here). (AUDIT 44)
+
+## Part 6b: FSK PROBE on APRS, 144.390 MHz (receive only; the whole procedure, commands and result table are in [APRS-TEST.md](APRS-TEST.md))
+
+Nothing in this part has been seen on a radio. It is the stand-in for the radiosonde test (steps 30 to 32) until a launch can be watched.
+
+- [ ] **32a.** On the Mac, before touching the radio: `brew install librtlsdr direwolf`, save `sdr.conf` and run the `rtl_fm ... | direwolf ... | tee aprs-reference.txt` line from APRS-TEST.md. Wait until it prints decoded packets with timestamps.
+- [ ] **32b.** FSK PROBE (`MENU`, `8`), press `0` once: `144.390`, `1200 baud`, `SYNC FEFE`, and the option rows `APRS F1224 LEN256 TH1` and `INV- BWAUTO S4`. `MENU`: modem on. Write down `SYN` and `WRD` after two minutes against the number of packets the reference decoded, and what REG 6E reads
+  (`UP` from REG 02: the tone in Hz) while a packet is on the air. Press `0` on the preset item again and it returns to `RS41`, 404.800 MHz, 4800 baud.
+- [ ] **32c.** Back on `APRS`: press `#`, write the Mac's clock to the second, wait 3 minutes, press `#`, `EXIT`, and run `python3 firmware/source-changes/probe_capture.py PORT aprs-a.bin`. It prints the summary and then `AX.25 decode`: either `PASS` lines with the packet text and a time after the start, or
+  `why no frame passed` with the bit statistics. Match every `PASS` to a line of `aprs-reference.txt` by time. Note the three timing lines: time between words (13.3 ms expected), most words read in one interrupt, frames ended by count or by the chip's done flag.
+- [ ] **32d.** Repeat 32c for `F1218` and for plain `FSK` (`A/B`, then `0` steps the mode), and once more on `F1224` with `S2` (five `A/B` from `MODE`). Read the result row for each in APRS-TEST.md's table and write the next step it names. A capture that finds nothing is still a result: record `SYN`, `WRD` and the table.
 
 ## Part 7: extras, if installed (receive only)
 

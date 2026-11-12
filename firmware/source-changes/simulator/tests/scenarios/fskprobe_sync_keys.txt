@@ -1,0 +1,28 @@
+# FSK PROBE sync keys: 5 steps through the four flag patterns (FEFE, 0101, 7F7F, 8080), 6 through the alternating pair,
+# 7 is 7E7E and 8/9 are the RS41 header most- and least-significant bit first. The modem is rewritten while it runs.
+master 144390000
+app fskprobe
+key menu
+key 5                     # from the RS41 sync to the first flag pattern
+expect rfreg 5A FEFE
+key 5
+shot flags_inverted
+expect rfreg 5A 0101
+key 5
+key 5
+expect rfreg 5A 8080
+key 5
+expect rfreg 5A FEFE
+key 6
+expect rfreg 5A AAAA
+key 6
+expect rfreg 5A 5555
+key 7
+expect rfreg 5A 7E7E
+key 9
+shot rs41_lsb
+expect rfreg 5A 10B6
+expect rfreg 5B CA11
+key 8
+expect rfreg 5A 086D
+expect rfrefused 0
