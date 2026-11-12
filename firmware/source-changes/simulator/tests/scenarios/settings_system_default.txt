@@ -38,6 +38,7 @@ shot lat_default_saved
 # a number kept in the record: BATTERY CAL
 key down
 key down
+key down
 key menu
 key pound
 shot battcal_default_shown

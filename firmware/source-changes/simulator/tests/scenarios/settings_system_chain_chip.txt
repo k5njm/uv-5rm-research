@@ -1,0 +1,10 @@
+# Settings, SYSTEM: MENU on RF CHIP ID hands over to the about view, starting on its RF CHIP row (5), to come back to
+# SYSTEM row 8.
+# MODEL CAVEAT: all-zero settings record in the simulator.
+handoff 5 1
+app settings
+key up                    # wraps to the last row, RESET ALL
+key up                    # RF CHIP ID
+shot chip_id_row
+key menu
+expect handoff A5 05 02 08

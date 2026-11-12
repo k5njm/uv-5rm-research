@@ -21,6 +21,8 @@ shot txbands_all_help
 key down
 key down                  # LATITUDE is the second row; this lands on LONGITUDE
 shot lon_help
+key down                  # GRID LOCATOR
+shot grid_help
 key down                  # BATTERY CAL
 shot battcal_help
 key down

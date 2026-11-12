@@ -1,0 +1,19 @@
+# Settings, SYSTEM: RF CHIP ID opens the about view on its own row, and GRID LOCATOR shows the locator of the stored
+# position. The unit tests cover the conversion; this checks what the row shows and the handoff for the locator entry.
+# A stored position (32.9792 N, 97.1250 W): the row reads EM12kx.
+setting 32 125
+setting 33 82
+setting 34 50
+setting 35 0
+setting 36 140
+setting 37 204
+setting 38 107
+setting 39 255
+handoff 5 1
+app settings
+key down
+key down
+key down                  # GRID LOCATOR
+shot grid_row
+key menu
+expect handoff A5 00 03 03

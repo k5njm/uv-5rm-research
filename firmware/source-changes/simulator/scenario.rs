@@ -14,7 +14,10 @@
 //!                       master/signal/chan may appear before or after `app`; they are applied after the reset
 //!   air HEX [HEX...]   the simulated FSK modem hears a sync, then these 16-bit words (hex), one per poll
 //!                       (a package of several segments, like `chanmgr`, runs as in the firmware: `Chain` switches segment)
-//!   handoff GROUP ACTION  preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items)
+//!   expect handoff HEX...  the handoff buffer, as hex bytes (what a settings segment passed on with Chain)
+//!   expect setting OFFSET V...  bytes of the settings record from OFFSET, decimal
+//!   handoff GROUP ACTION [ROW]  preload the segment-switch buffer (settings app: GROUP index, ACTION 0=groups 1=items
+//!                       2=about 3=grid locator, ROW the list row to come back to)
 //!   handoff fm DECI        preload it as the core does for a broadcast frequency typed on the main screen (tenths of MHz)
 //!   fmstation DECI NAME [DETAIL...]   one station in the FM app's flash table (`_` in NAME is a space, `-` is no name);
 //!                       before or after `app`. The simulated tuner hears 90.1 94.5 98.1 101.1 104.5 MHz
@@ -410,10 +413,14 @@ impl Run<'_> {
                 Ok(d) => unsafe { HANDOFF = d.to_le_bytes().to_vec() }, // as the core does for a typed broadcast frequency
                 _ => self.check(false, "handoff fm needs tenths of a MHz"),
             },
-            ["handoff", group, action] => match (group.parse::<u8>(), action.parse::<u8>()) {
-                (Ok(g), Ok(a)) => unsafe { HANDOFF = vec![0xA5, g, a] }, // start a later settings segment as Chain would
-                _ => self.check(false, "handoff needs GROUP ACTION numbers"),
-            },
+            ["handoff", group, action] | ["handoff", group, action, _] => {
+                let row = t.get(3).map_or(Some(0), |r| r.parse::<u8>().ok());
+                match (group.parse::<u8>(), action.parse::<u8>(), row) {
+                    // start a later settings segment as Chain would: group (or the row a view starts on), action, row to return to
+                    (Ok(g), Ok(a), Some(r)) => unsafe { HANDOFF = vec![0xA5, g, a, r] },
+                    _ => self.check(false, "handoff needs GROUP ACTION [ROW] numbers"),
+                }
+            }
             // one byte of the settings record (offsets as in `Settings` in flash_map.rs), to start from a record that is
             // not the simulator's all-zero one
             ["setting", off, val] => match (off.parse::<usize>(), val.parse::<u8>()) {
@@ -460,6 +467,19 @@ impl Run<'_> {
             ["expect", "reset"] => {
                 let n = crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst);
                 self.check(n > 0, "the app asked for a factory reset")
+            }
+            // what the app left for the next segment (settings app): the bytes of the handoff buffer, in hex
+            ["expect", "handoff", bytes @ ..] => {
+                let want = bytes.iter().map(|b| u8::from_str_radix(b, 16)).collect::<Result<Vec<_>, _>>();
+                let got = unsafe { HANDOFF.clone() };
+                self.check(want.as_ref().ok() == Some(&got), &format!("handoff buffer is {} (got {:02X?})", bytes.join(" "), got));
+            }
+            // bytes of the settings record, from OFFSET, in decimal
+            ["expect", "setting", off, vals @ ..] => {
+                let off = off.parse::<usize>().unwrap_or(usize::MAX);
+                let want = vals.iter().map(|v| v.parse::<u8>()).collect::<Result<Vec<_>, _>>();
+                let got = unsafe { SETTINGS.get(off..off + vals.len()).map(|g| g.to_vec()) };
+                self.check(got.is_some() && want.as_ref().ok() == got.as_ref(), &format!("settings bytes {off}.. are {} (got {got:?})", vals.join(" ")));
             }
             ["expect", "noreset"] => {
                 let n = crate::FACTORY_CALLS.load(std::sync::atomic::Ordering::SeqCst);

@@ -48,6 +48,17 @@ pub const GROUP_SEG: [u8; 7] = [
     SEG_PRESETS, // Presets
 ];
 
+/// Does this segment show any group of settings to edit? (Segment PRESETS only lists presets and shows two views, so the
+/// code that steps, types and restores values is dead there and the linker drops it.)
+const EDITS_SETTINGS: bool = cfg!(any(
+    feature = "g_radio",
+    feature = "g_audio",
+    feature = "g_disp",
+    feature = "g_keys",
+    feature = "g_ani",
+    feature = "g_system"
+));
+
 /// `true` when this segment compiled the items of group `gi`.
 const fn have_group(gi: usize) -> bool {
     match gi {
@@ -77,19 +88,35 @@ pub const fn assert_seg_features() {
 const HANDOFF_MAGIC: u8 = 0xA5;
 const ACT_GROUPS: u8 = 0;
 const ACT_ITEMS: u8 = 1;
+/// segment PRESETS shows the about view (byte 1: the row to start on)
+const ACT_ABOUT: u8 = 2;
+/// segment PRESETS takes a grid locator
+const ACT_GRID: u8 = 3;
+/// SYSTEM's place in the group list: the views of segment PRESETS come back to it
+const SYSTEM_GROUP: usize = 5;
 
-fn handoff_put(api: &Api, group: usize, action: u8) {
-    let buf = [HANDOFF_MAGIC, group as u8, action];
-    let _ = (api.handoff_write)(buf.as_ptr(), buf.len() as u16);
+/// The handoff buffer: magic, a group (for the views: the row they start on), an action (`ACT_*`) and the row of the
+/// list to come back to (absent in older three-byte buffers: 0).
+fn handoff_encode(group: usize, action: u8, row: u8) -> [u8; 4] {
+    [HANDOFF_MAGIC, group as u8, action, row]
 }
 
-fn handoff_take(api: &Api) -> Option<(usize, u8)> {
-    let mut buf = [0u8; 3];
-    let n = (api.handoff_read)(buf.as_mut_ptr(), buf.len() as u16);
+fn handoff_decode(buf: &[u8; 4], n: usize) -> Option<(usize, u8, u8)> {
     if n < 3 || buf[0] != HANDOFF_MAGIC || buf[1] as usize >= GROUP_SEG.len() {
         return None;
     }
-    Some((buf[1] as usize, buf[2]))
+    Some((buf[1] as usize, buf[2], if n >= 4 { buf[3] } else { 0 }))
+}
+
+fn handoff_put(api: &Api, group: usize, action: u8, row: u8) {
+    let buf = handoff_encode(group, action, row);
+    let _ = (api.handoff_write)(buf.as_ptr(), buf.len() as u16);
+}
+
+fn handoff_take(api: &Api) -> Option<(usize, u8, u8)> {
+    let mut buf = [0u8; 4];
+    let n = (api.handoff_read)(buf.as_mut_ptr(), buf.len() as u16);
+    handoff_decode(&buf, n as usize)
 }
 
 // misc
@@ -423,6 +450,7 @@ pub enum SettingItem {
     FLock,
     Lat,
     Lon,
+    Grid,
     Info,
     ChipId,
     Reset,
@@ -491,7 +519,7 @@ impl SettingsGroup {
             SettingsGroup::Ani => &[AniTx, AniCall],
             #[cfg(feature = "g_system")]
             SettingsGroup::System => &[
-                FLock, Lat, Lon, BattCal, BootMode, BootSnd, Info, ChipId,
+                FLock, Lat, Lon, Grid, BattCal, BootMode, BootSnd, Info, ChipId,
                 Reset,
             ],
             #[cfg(feature = "g_presets")]
@@ -590,6 +618,8 @@ impl SettingItem {
             #[cfg(feature = "g_system")]
             Lon => "LONGITUDE",
             #[cfg(feature = "g_system")]
+            Grid => "GRID LOCATOR",
+            #[cfg(feature = "g_system")]
             BattCal => "BATTERY CAL",
             #[cfg(feature = "g_system")]
             BootMode => "BOOT SCREEN",
@@ -625,6 +655,7 @@ impl SettingItem {
                 | SettingItem::BattCal
                 | SettingItem::Lat
                 | SettingItem::Lon
+                | SettingItem::Grid
                 | SettingItem::Info
                 | SettingItem::ChipId
                 | SettingItem::Reset
@@ -840,6 +871,8 @@ fn help_into(item: SettingItem, v: i32, out: &mut [u8]) -> usize {
         #[cfg(feature = "g_system")]
         Lat | Lon => "For HAM TOOLS grid locator",
         #[cfg(feature = "g_system")]
+        Grid => "Sets LATITUDE + LONGITUDE",
+        #[cfg(feature = "g_system")]
         BattCal => "Type true battery volts",
         #[cfg(feature = "g_system")]
         BootMode => "Logo shown at power-on",
@@ -997,10 +1030,10 @@ pub struct ItemsState {
 }
 
 impl ItemsState {
-    fn new(api: &Api, group: SettingsGroup) -> ItemsState {
+    fn new(api: &Api, group: SettingsGroup, index: usize) -> ItemsState {
         ItemsState {
             group,
-            index: 0,
+            index: index.min(group.items().len().saturating_sub(1)),
             editing: false,
             snapshot: 0,
             settings: read_settings(api),
@@ -1044,6 +1077,12 @@ enum Phase {
         index: usize,
     },
     Items(ItemsState),
+    /// segment PRESETS: the about view (cursor row, and the SYSTEM row to come back to)
+    #[cfg(feature = "g_presets")]
+    About { cur: u8, back: u8 },
+    /// segment PRESETS: entry of a grid locator
+    #[cfg(feature = "g_presets")]
+    Grid(GridState),
     /// hand off to segment `.0`; `key` turns this into `AppResult::Chain`
     Chain(u8),
     Exit,
@@ -1076,14 +1115,18 @@ pub extern "C" fn app_entry(api: &Api, ev: AppEvent) -> AppResult {
 fn enter(api: &Api) -> AppResult {
     let phase = match handoff_take(api) {
         None => Phase::Groups { index: 0 },
-        Some((gi, ACT_GROUPS)) => Phase::Groups { index: gi },
-        Some((gi, _)) => {
+        Some((gi, ACT_GROUPS, _)) => Phase::Groups { index: gi },
+        #[cfg(feature = "g_presets")]
+        Some((cur, ACT_ABOUT, back)) => Phase::About { cur: cur as u8, back },
+        #[cfg(feature = "g_presets")]
+        Some((_, ACT_GRID, back)) => Phase::Grid(GridState::new(back)),
+        Some((gi, _, row)) => {
             let group = SETTINGS_GROUPS[gi];
             if group.items().is_empty() {
-                handoff_put(api, gi, ACT_GROUPS);
+                handoff_put(api, gi, ACT_GROUPS, 0);
                 return AppResult::Chain(SEG_MENU);
             }
-            Phase::Items(ItemsState::new(api, group))
+            Phase::Items(ItemsState::new(api, group, row as usize))
         }
     };
     unsafe {
@@ -1094,14 +1137,21 @@ fn enter(api: &Api) -> AppResult {
 
 fn key(api: &Api, kind: u8, id: u8) -> AppResult {
     unsafe {
+        // the screens change their state where it is (an ItemsState is a couple of hundred bytes: moving it in and out
+        // of every handler costs more code than the handlers); a handler that leaves the screen returns the next one
         let state = &mut *core::ptr::addr_of_mut!(STATE);
-        let phase =
-            core::mem::replace(&mut state.phase, Phase::Groups { index: 0 });
-        state.phase = match phase {
+        let next = match &mut state.phase {
             Phase::Groups { index } => dispatch_groups(api, kind, id, index),
             Phase::Items(st) => dispatch_items(api, kind, id, st),
-            other => other,
+            #[cfg(feature = "g_presets")]
+            Phase::About { cur, back } => dispatch_about(api, kind, id, cur, *back),
+            #[cfg(feature = "g_presets")]
+            Phase::Grid(g) => dispatch_grid(api, kind, id, g),
+            _ => None,
         };
+        if let Some(phase) = next {
+            state.phase = phase;
+        }
         match state.phase {
             Phase::Exit => return AppResult::Exit,
             Phase::Chain(seg) => return AppResult::Chain(seg),
@@ -1114,9 +1164,9 @@ fn key(api: &Api, kind: u8, id: u8) -> AppResult {
 fn open_group(api: &Api, gi: usize) -> Phase {
     let seg = GROUP_SEG[gi];
     if seg == MY_SEG {
-        Phase::Items(ItemsState::new(api, SETTINGS_GROUPS[gi]))
+        Phase::Items(ItemsState::new(api, SETTINGS_GROUPS[gi], 0))
     } else {
-        handoff_put(api, gi, ACT_ITEMS);
+        handoff_put(api, gi, ACT_ITEMS, 0);
         Phase::Chain(seg)
     }
 }
@@ -1125,87 +1175,75 @@ fn back_to_groups(api: &Api, gi: usize) -> Phase {
     if MY_SEG == SEG_MENU {
         Phase::Groups { index: gi }
     } else {
-        handoff_put(api, gi, ACT_GROUPS);
+        handoff_put(api, gi, ACT_GROUPS, 0);
         Phase::Chain(SEG_MENU)
     }
 }
 
-fn dispatch_groups(api: &Api, kind: u8, id: u8, index: usize) -> Phase {
+fn dispatch_groups(api: &Api, kind: u8, id: u8, index: &mut usize) -> Option<Phase> {
     if kind != KIND_SINGLE && kind != KIND_REPEAT {
-        return Phase::Groups { index };
+        return None;
     }
     let len = SETTINGS_GROUPS.len();
     match id {
-        KEY_UP => Phase::Groups {
-            index: (index + len - 1) % len,
-        },
-        KEY_DOWN => Phase::Groups {
-            index: (index + 1) % len,
-        },
-        KEY_MENU if kind == KIND_SINGLE => open_group(api, index),
-        KEY_EXIT if kind == KIND_SINGLE => Phase::Exit,
-        _ => Phase::Groups { index },
+        KEY_UP => *index = (*index + len - 1) % len,
+        KEY_DOWN => *index = (*index + 1) % len,
+        KEY_MENU if kind == KIND_SINGLE => return Some(open_group(api, *index)),
+        KEY_EXIT if kind == KIND_SINGLE => return Some(Phase::Exit),
+        _ => {}
     }
+    None
 }
 
-fn dispatch_items(api: &Api, kind: u8, id: u8, mut st: ItemsState) -> Phase {
+fn dispatch_items(api: &Api, kind: u8, id: u8, st: &mut ItemsState) -> Option<Phase> {
     let item = st.item();
     st.note = 0;
 
-    // VERSION and RF CHIP ID open the about view (read only): UP and DOWN move its cursor, EXIT leaves
+    // VERSION and RF CHIP ID open the about view, GRID LOCATOR the locator entry: both are in segment PRESETS, which is
+    // handed the row to come back to
     #[cfg(feature = "g_system")]
-    if st.view != 0 {
-        if kind == KIND_SINGLE || kind == KIND_REPEAT {
-            match id {
-                KEY_UP => st.pidx = (st.pidx + ABOUT_ROWS - 1) % ABOUT_ROWS,
-                KEY_DOWN => st.pidx = (st.pidx + 1) % ABOUT_ROWS,
-                KEY_EXIT | KEY_MENU if kind == KIND_SINGLE => st.view = 0,
-                _ => {}
-            }
-        }
-        return Phase::Items(st);
-    }
-    #[cfg(feature = "g_system")]
-    if !st.editing && kind == KIND_SINGLE && id == KEY_MENU && matches!(item, SettingItem::Info | SettingItem::ChipId) {
-        st.view = 1;
-        st.pidx = if item == SettingItem::ChipId { ABOUT_CHIP_ROW } else { 0 };
-        return Phase::Items(st);
+    if !st.editing && kind == KIND_SINGLE && id == KEY_MENU && matches!(item, SettingItem::Info | SettingItem::ChipId | SettingItem::Grid) {
+        let (action, row) = match item {
+            SettingItem::Grid => (ACT_GRID, 0),
+            SettingItem::ChipId => (ACT_ABOUT, ABOUT_CHIP_ROW),
+            _ => (ACT_ABOUT, 0),
+        };
+        handoff_put(api, row, action, st.index as u8);
+        return Some(Phase::Chain(SEG_PRESETS));
     }
 
     #[cfg(feature = "g_presets")]
     if st.group == SettingsGroup::Presets {
-        return match dispatch_presets(api, kind, id, &mut st) {
-            Some(phase) => phase,
-            None => Phase::Items(st),
-        };
+        return dispatch_presets(api, kind, id, st);
+    }
+
+    if !EDITS_SETTINGS {
+        return None;
     }
 
     if st.editing && kind == KIND_SINGLE && id == KEY_POUND {
-        back_to_default(api, &mut st, item);
-        return Phase::Items(st);
+        back_to_default(api, st, item);
+        return None;
     }
 
     // after `#` a typed field has its value and no digits to wait for: it takes MENU and EXIT like a stepped one
     #[cfg(feature = "g_radio")]
     if st.editing && !st.defaulted && item == SettingItem::Offse {
-        dispatch_offset_input(api, kind, id, &mut st);
-        return Phase::Items(st);
+        dispatch_offset_input(api, kind, id, st);
+        return None;
     }
     #[cfg(feature = "g_system")]
     if st.editing && !st.defaulted && item == SettingItem::BattCal {
-        dispatch_battery_input(api, kind, id, &mut st);
-        return Phase::Items(st);
+        dispatch_battery_input(api, kind, id, st);
+        return None;
     }
     #[cfg(feature = "g_system")]
     if st.editing && !st.defaulted && matches!(item, SettingItem::Lat | SettingItem::Lon) {
-        dispatch_coord_input(api, kind, id, item == SettingItem::Lat, &mut st);
-        return Phase::Items(st);
+        dispatch_coord_input(api, kind, id, item == SettingItem::Lat, st);
+        return None;
     }
 
-    if let Some(phase) = dispatch_items_scalar(api, kind, id, item, &mut st) {
-        return phase;
-    }
-    Phase::Items(st)
+    dispatch_items_scalar(api, kind, id, item, st)
 }
 
 fn dispatch_items_scalar(
@@ -1689,16 +1727,59 @@ fn draw_preview(api: &Api, st: &ItemsState) {
     );
 }
 
-// about (SYSTEM > VERSION): what this firmware and radio are, read only
+// coordinates and grid locators
 
-#[cfg(feature = "g_system")]
+/// A coordinate (1e-5 degrees) as the list shows it: `40.7100N`; `----` when no position has been entered.
+#[inline(never)]
+fn coord_into(out: &mut [u8], v: i32, is_lat: bool) -> usize {
+    if v == COORD_NOT_SET {
+        return write_str(out, "----");
+    }
+    let av = v.unsigned_abs();
+    let mut w = Out::new(out);
+    w.u32(av / 100_000, 1);
+    w.byte(b'.');
+    w.u32((av % 100_000) / 10, 4);
+    w.byte(match (is_lat, v < 0) {
+        (true, false) => b'N',
+        (true, true) => b'S',
+        (false, false) => b'E',
+        (false, true) => b'W',
+    });
+    w.len
+}
+
+/// The six-character Maidenhead locator of a position (1e-5 degrees), field and square letters upper case and the
+/// sub-square letters lower case (`EM12kx`); None when no position has been entered.
+fn locator_of(lat: i32, lon: i32) -> Option<[u8; 6]> {
+    if lat == COORD_NOT_SET || lon == COORD_NOT_SET {
+        return None;
+    }
+    // 0 at the south pole and at 180 W; +90 and +180 are folded into the last square
+    // (32-bit arithmetic only: the 64-bit divide costs a kilobyte on this chip)
+    let lon = (lon + 18_000_000).clamp(0, 35_999_999);
+    let lat = (lat + 9_000_000).clamp(0, 17_999_999);
+    let (fx, rx) = (lon / 2_000_000, lon % 2_000_000); // fields are 20 x 10 degrees
+    let (fy, ry) = (lat / 1_000_000, lat % 1_000_000);
+    Some([
+        b'A' + fx as u8,
+        b'A' + fy as u8,
+        b'0' + (rx / 200_000) as u8, // squares are 2 x 1 degrees
+        b'0' + (ry / 100_000) as u8,
+        b'a' + ((rx % 200_000) * 12 / 100_000) as u8, // sub-squares are 5 x 2.5 minutes
+        b'a' + ((ry % 100_000) * 24 / 100_000) as u8,
+    ])
+}
+
+// about (SYSTEM > VERSION): what this firmware and radio are, read only. Shown by segment PRESETS (SYSTEM has no room).
+
 const ABOUT_NAME: &str = "UV-5RM OPEN FW";
-#[cfg(feature = "g_system")]
 const ABOUT_ROWS: usize = 7;
-#[cfg(feature = "g_system")]
+/// the row of the about view that shows the RF chip id (RF CHIP ID opens the view there)
 const ABOUT_CHIP_ROW: usize = 5;
 
 /// `0x` and `digits` hex digits of `v`.
+#[inline(never)]
 fn hex_into(out: &mut [u8], v: u32, digits: usize) -> usize {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     out[0] = b'0';
@@ -1711,7 +1792,7 @@ fn hex_into(out: &mut [u8], v: u32, digits: usize) -> usize {
 
 /// Row `i` of the about view. BUILD cannot say which commit this is: the core stamps its git commit into the image
 /// and draws it on the boot screen, but gives apps no way to read it.
-#[cfg(feature = "g_system")]
+#[cfg(feature = "g_presets")]
 fn about_row(api: &Api, i: usize, label: &mut [u8; 16], value: &mut [u8; 18]) {
     let (l, v): (&str, &str) = match i {
         0 => ("FIRMWARE", ABOUT_NAME),
@@ -1733,8 +1814,8 @@ fn about_row(api: &Api, i: usize, label: &mut [u8; 16], value: &mut [u8; 18]) {
     }
 }
 
-#[cfg(feature = "g_system")]
-fn draw_about(api: &Api, st: &ItemsState) {
+#[cfg(feature = "g_presets")]
+fn draw_about(api: &Api, cur: u8) {
     unsafe {
         let rows = &mut *core::ptr::addr_of_mut!(ROWS);
         for i in 0..VISIBLE_ROWS {
@@ -1755,8 +1836,285 @@ fn draw_about(api: &Api, st: &ItemsState) {
         core::ptr::addr_of!(ROWS) as *const ListRow,
         VISIBLE_ROWS as u16,
         0,
-        st.pidx as u16,
+        cur as u16,
         ABOUT_ROWS as u16,
+        false,
+    );
+}
+
+/// Back to the SYSTEM list, on the row it was left from.
+#[cfg(feature = "g_presets")]
+fn leave_view(api: &Api, back: u8) -> Phase {
+    handoff_put(api, SYSTEM_GROUP, ACT_ITEMS, back);
+    Phase::Chain(SEG_SYSTEM)
+}
+
+#[cfg(feature = "g_presets")]
+fn dispatch_about(api: &Api, kind: u8, id: u8, cur: &mut u8, back: u8) -> Option<Phase> {
+    if kind == KIND_SINGLE || kind == KIND_REPEAT {
+        match id {
+            KEY_UP => *cur = ((*cur as usize + ABOUT_ROWS - 1) % ABOUT_ROWS) as u8,
+            KEY_DOWN => *cur = ((*cur as usize + 1) % ABOUT_ROWS) as u8,
+            KEY_EXIT | KEY_MENU if kind == KIND_SINGLE => return Some(leave_view(api, back)),
+            _ => {}
+        }
+    }
+    None
+}
+
+// grid locator entry (SYSTEM > GRID LOCATOR). Shown by segment PRESETS.
+//
+// Six characters, `EM12kx`: two letters A-R (field), two digits (square), two letters A-X (sub-square). Letters are
+// typed on the keypad the way a phone does: 2 is ABC, 3 is DEF, ..., 9 is WXYZ; the same key again steps through its
+// letters, a different key (or #) accepts the letter. A key offers only the letters the place takes. Four characters
+// (the square) are accepted too.
+
+/// The letters of keys 2 to 9 are ABC, DEF, GHI, JKL, MNO, PQRS, TUV, WXYZ: the first letter of each and how many it has.
+#[cfg(feature = "g_presets")]
+const KEY_FIRST: [u8; 8] = *b"ADGJMPTW";
+#[cfg(feature = "g_presets")]
+const KEY_COUNT: [u8; 8] = [3, 3, 3, 3, 3, 4, 3, 4];
+
+#[cfg(feature = "g_presets")]
+#[derive(Clone, Copy)]
+pub struct Loc {
+    /// accepted characters, then the letter being chosen (upper case; shown lower case in the last two places)
+    chars: [u8; 6],
+    len: usize,
+    /// the key whose letter is being chosen (0: none) and how many times past its first letter
+    key: u8,
+    tap: u8,
+}
+
+#[cfg(feature = "g_presets")]
+impl Loc {
+    const fn new() -> Loc {
+        Loc { chars: [0; 6], len: 0, key: 0, tap: 0 }
+    }
+
+    /// The last letter place `pos` takes: A-R for the two field letters, A-X for the two sub-square letters;
+    /// None for the two digits.
+    fn letter_max(pos: usize) -> Option<u8> {
+        match pos {
+            0 | 1 => Some(b'R'),
+            4 | 5 => Some(b'X'),
+            _ => None,
+        }
+    }
+
+    /// How many of key `k`'s letters place `pos` takes (the letters are consecutive, so it is arithmetic).
+    fn offered(pos: usize, k: u8) -> u8 {
+        let max = Loc::letter_max(pos).unwrap_or(0);
+        if !(2..=9).contains(&k) {
+            return 0;
+        }
+        let (first, count) = (KEY_FIRST[k as usize - 2], KEY_COUNT[k as usize - 2]);
+        if max < first {
+            0
+        } else {
+            count.min(max - first + 1)
+        }
+    }
+
+    /// The `n`th letter key `k` offers.
+    fn nth(k: u8, n: u8) -> u8 {
+        KEY_FIRST[k as usize - 2] + n
+    }
+
+    /// Does place `pos` take key `k` (0-9)?
+    fn takes(pos: usize, k: u8) -> bool {
+        pos < 6
+            && match Loc::letter_max(pos) {
+                Some(_) => Loc::offered(pos, k) > 0,
+                None => k <= 9,
+            }
+    }
+
+    /// Characters entered, counting the letter being chosen.
+    fn total(&self) -> usize {
+        self.len + (self.key != 0) as usize
+    }
+
+    /// A digit key was pressed (0-9). Keys the place does not take are ignored.
+    fn press(&mut self, k: u8) {
+        if self.key != 0 {
+            if k == self.key && Loc::takes(self.len, k) {
+                self.tap = (self.tap + 1) % Loc::offered(self.len, k);
+                self.chars[self.len] = Loc::nth(k, self.tap);
+                return;
+            }
+            if !Loc::takes(self.len + 1, k) {
+                return;
+            }
+            self.len += 1; // a different key accepts the letter
+            self.key = 0;
+        }
+        if !Loc::takes(self.len, k) {
+            return;
+        }
+        if Loc::letter_max(self.len).is_some() {
+            self.key = k;
+            self.tap = 0;
+            self.chars[self.len] = Loc::nth(k, 0);
+        } else {
+            self.chars[self.len] = b'0' + k;
+            self.len += 1;
+        }
+    }
+
+    /// `#`: accept the letter being chosen.
+    fn next(&mut self) {
+        if self.key != 0 {
+            self.len += 1;
+            self.key = 0;
+        }
+    }
+
+    /// EXIT: drop the letter being chosen, or else the last character. False when there was nothing to drop.
+    fn back(&mut self) -> bool {
+        if self.key != 0 {
+            self.key = 0;
+            true
+        } else if self.len > 0 {
+            self.len -= 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Four or six characters make a locator (the letter being chosen counts).
+    fn complete(&self) -> bool {
+        matches!(self.total(), 4 | 6)
+    }
+
+    /// The characters as shown: `EM12--`, sub-square letters in lower case.
+    fn text(&self, out: &mut [u8; 6]) {
+        for i in 0..6 {
+            let c = if i < self.total() { self.chars[i] } else { b'-' };
+            out[i] = if i >= 4 && c.is_ascii_uppercase() { c | 0x20 } else { c };
+        }
+    }
+
+    /// The centre of the square (four characters) or sub-square (six) entered, as (latitude, longitude) in 1e-5
+    /// degrees. None when the entry is not complete.
+    fn center(&self) -> Option<(i32, i32)> {
+        if !self.complete() {
+            return None;
+        }
+        let c = &self.chars;
+        let d = |i: usize, a: u8| (c[i] - a) as i32;
+        // seconds of arc from 180 W and from 90 S
+        let mut lon = d(0, b'A') * 20 * 3600 + d(2, b'0') * 2 * 3600 - 180 * 3600;
+        let mut lat = d(1, b'A') * 10 * 3600 + d(3, b'0') * 3600 - 90 * 3600;
+        if self.total() == 6 {
+            lon += d(4, b'A') * 300 + 150;
+            lat += d(5, b'A') * 150 + 75;
+        } else {
+            lon += 3600;
+            lat += 1800;
+        }
+        // seconds of arc to 1e-5 degrees: * 100000 / 3600 = * 250 / 9, rounded
+        let e5 = |s: i32| (s * 250 + if s >= 0 { 4 } else { -4 }) / 9;
+        Some((e5(lat), e5(lon)))
+    }
+
+    /// What the keys do now, for the strip.
+    fn hint(&self, note: bool) -> &'static [u8] {
+        if note {
+            b"Need 4 or 6 characters"
+        } else if self.key != 0 {
+            b"Again=next letter  # ok"
+        } else if self.len == 6 {
+            b"MENU ok  EXIT del"
+        } else if Loc::letter_max(self.len).is_some() {
+            if self.len == 4 {
+                b"MENU ok  2-9 letter"
+            } else {
+                b"2-9 letter  EXIT del"
+            }
+        } else {
+            b"0-9 digit  EXIT del"
+        }
+    }
+}
+
+#[cfg(feature = "g_presets")]
+pub struct GridState {
+    loc: Loc,
+    /// the SYSTEM row to come back to
+    back: u8,
+    /// MENU was pressed on an entry that is not a locator
+    note: bool,
+}
+
+#[cfg(feature = "g_presets")]
+impl GridState {
+    fn new(back: u8) -> GridState {
+        GridState { loc: Loc::new(), back, note: false }
+    }
+}
+
+#[cfg(feature = "g_presets")]
+fn dispatch_grid(api: &Api, kind: u8, id: u8, g: &mut GridState) -> Option<Phase> {
+    if kind != KIND_SINGLE {
+        return None;
+    }
+    g.note = false;
+    match id {
+        0..=9 => g.loc.press(id),
+        KEY_POUND => g.loc.next(),
+        KEY_EXIT => {
+            if !g.loc.back() {
+                return Some(leave_view(api, g.back));
+            }
+        }
+        KEY_MENU => {
+            g.loc.next();
+            match g.loc.center() {
+                Some((lat, lon)) => {
+                    let mut s = read_settings(api);
+                    s.obs_lat = lat;
+                    s.obs_lon = lon;
+                    preview_settings(api, &s);
+                    commit_settings(api, &s);
+                    return Some(leave_view(api, g.back));
+                }
+                None => g.note = true,
+            }
+        }
+        _ => {}
+    }
+    None
+}
+
+#[cfg(feature = "g_presets")]
+fn draw_grid(api: &Api, g: &GridState) {
+    unsafe {
+        let rows = &mut *core::ptr::addr_of_mut!(ROWS);
+        for r in rows.iter_mut() {
+            *r = BLANK_ROW;
+        }
+        write_str(&mut rows[0].label, "LOCATOR");
+        let mut t = [0u8; 6];
+        g.loc.text(&mut t);
+        rows[0].value[..6].copy_from_slice(&t);
+        rows[0].has_value = true;
+        rows[0].cursor = g.loc.len as i16; // a typed field: amber, with the cursor on the place being filled
+
+    }
+    let hint = g.loc.hint(g.note);
+    (api.list_hint)(hint.as_ptr(), hint.len() as u16);
+    let mut title = [0u8; 26];
+    write_str(&mut title, "GRID LOCATOR");
+    (api.draw_list)(
+        title.as_ptr(),
+        26,
+        core::ptr::addr_of!(ROWS) as *const ListRow,
+        VISIBLE_ROWS as u16,
+        0,
+        0,
+        1,
         false,
     );
 }
@@ -2070,6 +2428,7 @@ fn apply(api: &Api, st: &mut ItemsState, item: SettingItem, v: i32) {
 
 // formatting
 
+#[inline(never)]
 fn write_str(out: &mut [u8], s: &str) -> usize {
     let n = s.len().min(out.len());
     let bytes = s.as_bytes();
@@ -2216,25 +2575,15 @@ fn value_text_for(
             w.len
         }
         #[cfg(feature = "g_system")]
-        Lat | Lon => {
-            let is_lat = item == Lat;
-            let v = current_value(api, st, item);
-            if v == COORD_NOT_SET {
-                return write_str(out, "----");
+        Lat | Lon => coord_into(out, current_value(api, st, item), item == Lat),
+        #[cfg(feature = "g_system")]
+        Grid => match locator_of(st.settings.obs_lat, st.settings.obs_lon) {
+            Some(t) => {
+                out[..6].copy_from_slice(&t);
+                6
             }
-            let av = v.unsigned_abs();
-            let mut w = Out::new(out);
-            w.u32(av / 100_000, 1);
-            w.byte(b'.');
-            w.u32((av % 100_000) / 10, 4);
-            w.byte(match (is_lat, v < 0) {
-                (true, false) => b'N',
-                (true, true) => b'S',
-                (false, false) => b'E',
-                (false, true) => b'W',
-            });
-            w.len
-        }
+            None => write_str(out, "----"),
+        },
         #[cfg(feature = "g_system")]
         FLock => {
             let idx = current_value(api, st, item).clamp(0, 9) as u8;
@@ -2467,12 +2816,18 @@ static mut ROWS: [ListRow; VISIBLE_ROWS] = [BLANK_ROW; VISIBLE_ROWS];
 fn draw(api: &Api) -> AppResult {
     let state = unsafe { &*core::ptr::addr_of!(STATE) };
 
-    #[cfg(feature = "g_system")]
-    if let Phase::Items(st) = &state.phase {
-        if st.view != 0 {
-            draw_about(api, st);
+    match &state.phase {
+        #[cfg(feature = "g_presets")]
+        Phase::About { cur, .. } => {
+            draw_about(api, *cur);
             return AppResult::Continue;
         }
+        #[cfg(feature = "g_presets")]
+        Phase::Grid(g) => {
+            draw_grid(api, g);
+            return AppResult::Continue;
+        }
+        _ => {}
     }
     #[cfg(feature = "g_presets")]
     if let Phase::Items(st) = &state.phase {
@@ -2517,7 +2872,7 @@ fn draw(api: &Api) -> AppResult {
                 Phase::Items(st) => {
                     let item = st.group.items()[gi];
                     write_str(&mut rows[i].label, item.label());
-                    let n = value_text_for(api, st, gi, &mut rows[i].value);
+                    let n = if EDITS_SETTINGS { value_text_for(api, st, gi, &mut rows[i].value) } else { 0 };
                     rows[i].has_value = n > 0;
                     // a typed field shows a text cursor after what has been typed (and so the "changing" colour)
                     if st.is_editing(gi)
@@ -2564,7 +2919,8 @@ fn draw(api: &Api) -> AppResult {
         },
         Phase::Items(st) => {
             let item = st.item();
-            let n = help_into(item, current_value(api, st, item), &mut help_buf);
+            let v = if EDITS_SETTINGS { current_value(api, st, item) } else { 0 };
+            let n = help_into(item, v, &mut help_buf);
             &help_buf[..n]
         }
         _ => b"MENU open    EXIT back",
@@ -2755,10 +3111,223 @@ mod tests {
                         | SettingItem::PresetScan
                         | SettingItem::PresetRepeater
                         | SettingItem::PresetDefaults
+                        | SettingItem::Grid
                 );
                 assert_eq!(default_of(item).is_none(), shows_only, "{}", item.label());
             }
         }
+    }
+
+    /// Maidenhead: known squares and sub-squares, as (locator, latitude, longitude) of their centres in degrees.
+    /// FN31pr is the ARRL's square in Newington CT (the sub-square spans 72.75 to 72.6667 W, 41.7083 to 41.75 N).
+    #[cfg(feature = "g_presets")]
+    const KNOWN: [(&str, f64, f64); 5] = [
+        ("EM12kx", 32.979167, -97.125),
+        ("FN31pr", 41.729167, -72.708333),
+        ("JJ00aa", 0.0208333, 0.0416667),
+        ("AA00aa", -89.9791667, -179.9583333),
+        ("RR99xx", 89.9791667, 179.9583333),
+    ];
+
+    #[cfg(feature = "g_presets")]
+    fn loc_from(text: &str) -> Loc {
+        let mut l = Loc::new();
+        for c in text.chars() {
+            if c.is_ascii_digit() {
+                l.press(c as u8 - b'0');
+            } else {
+                // type the letter on its key: the first press gives the key's first letter; more presses step on
+                let u = c.to_ascii_uppercase() as u8;
+                let i = (0..8usize).rev().find(|&i| KEY_FIRST[i] <= u).unwrap();
+                let (k, n) = (i as u8 + 2, (u - KEY_FIRST[i]) as usize);
+                l.press(k);
+                for _ in 0..n {
+                    l.press(k);
+                }
+                l.next();
+            }
+        }
+        l
+    }
+
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn locators_have_the_right_centres() {
+        for (text, lat, lon) in KNOWN {
+            let (la, lo) = loc_from(text).center().expect(text);
+            assert!((la as f64 / 1e5 - lat).abs() < 2e-5, "{text}: latitude {}", la as f64 / 1e5);
+            assert!((lo as f64 / 1e5 - lon).abs() < 2e-5, "{text}: longitude {}", lo as f64 / 1e5);
+            // and the locator of that point is the one typed
+            let back = locator_of(la, lo).unwrap();
+            assert_eq!(core::str::from_utf8(&back).unwrap(), text);
+        }
+    }
+
+    /// Every four-character square, with a spread of sub-squares: centre then locator is the identity.
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn locator_round_trips_through_its_centre() {
+        let mut n = 0;
+        for f1 in 0..18u8 {
+            for f2 in 0..18u8 {
+                for d1 in 0..10u8 {
+                    for d2 in 0..10u8 {
+                        for (s1, s2) in [(0u8, 0u8), (23, 23), (0, 23), (23, 0), (11, 12), (12, 11), ((f1 + d1) % 24, (f2 + d2) % 24)] {
+                            let t = [b'A' + f1, b'A' + f2, b'0' + d1, b'0' + d2, b'A' + s1, b'A' + s2];
+                            let l = Loc { chars: t, len: 6, key: 0, tap: 0 };
+                            let (la, lo) = l.center().unwrap();
+                            let mut want = t;
+                            want[4] |= 0x20;
+                            want[5] |= 0x20;
+                            assert_eq!(locator_of(la, lo), Some(want), "{}", core::str::from_utf8(&t).unwrap());
+                            n += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(n, 18 * 18 * 100 * 7);
+    }
+
+    /// The edges of the world fold into the last square; an unset position has no locator.
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn locator_of_edges() {
+        assert_eq!(locator_of(9_000_000, 18_000_000).map(|t| t[0]), Some(b'R'));
+        assert_eq!(locator_of(-9_000_000, -18_000_000), Some(*b"AA00aa"));
+        assert_eq!(locator_of(COORD_NOT_SET, 0), None);
+        assert_eq!(locator_of(0, COORD_NOT_SET), None);
+    }
+
+    /// A square of four characters is accepted and set to the middle of the square.
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn four_characters_are_a_square() {
+        let l = loc_from("EM12");
+        assert!(l.complete());
+        let (la, lo) = l.center().unwrap();
+        assert_eq!((la, lo), (3_250_000, -9_700_000));
+    }
+
+    /// Typing on the keypad: letters step on the same key; digits go straight in; bad keys are ignored.
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn keypad_entry() {
+        let mut t = [0u8; 6];
+        // E is key 3 pressed twice, M is key 6 pressed once
+        let mut l = Loc::new();
+        l.press(3);
+        l.press(3);
+        l.text(&mut t);
+        assert_eq!(&t, b"E-----");
+        l.press(6); // a different key accepts the E
+        l.text(&mut t);
+        assert_eq!(&t, b"EM----");
+        l.press(1);
+        l.press(2);
+        l.text(&mut t);
+        assert_eq!(&t, b"EM12--");
+        l.press(5); // K: key 5, once
+        l.press(5);
+        l.press(5);
+        l.press(5); // J, K, L, and back to J
+        l.text(&mut t);
+        assert_eq!(&t, b"EM12j-");
+        l.press(9); // accepts the J, then W
+        l.press(9); // X
+        l.press(9); // only W and X fit: back to W
+        l.text(&mut t);
+        assert_eq!(&t, b"EM12jw");
+        assert!(l.complete());
+        l.press(2); // the six places are full
+        l.text(&mut t);
+        assert_eq!(&t, b"EM12jw");
+
+        // EXIT drops the letter being chosen, then the last accepted character
+        assert!(l.back());
+        l.text(&mut t);
+        assert_eq!(&t, b"EM12j-");
+        assert!(l.back());
+        assert!(l.back());
+        l.text(&mut t);
+        assert_eq!(&t, b"EM1---");
+        let mut e = Loc::new();
+        assert!(!e.back());
+
+        // bad input: the places take only what fits them
+        let mut b = Loc::new();
+        b.press(0); // no letters on 0
+        b.press(1);
+        b.press(8); // T, U, V are past R
+        assert_eq!(b.total(), 0);
+        b.press(7); // P, Q, R, then back to P (S is past R)
+        b.press(7);
+        b.press(7);
+        b.press(7);
+        b.text(&mut t);
+        assert_eq!(&t, b"P-----");
+        b.press(1); // a digit cannot follow a field letter's place: the second letter place wants a letter
+        assert_eq!(b.total(), 1);
+        b.press(2); // A: accepts the P, starts the second letter
+        b.next();
+        b.press(1);
+        b.press(4);
+        assert_eq!(b.len, 4);
+        b.press(1); // the first sub-square place wants a letter
+        assert_eq!(b.len, 4);
+        b.press(8); // sub-square letter T is fine (A-X)
+        b.press(8);
+        b.press(8);
+        b.press(8); // T, U, V, T
+        b.text(&mut t);
+        assert_eq!(&t, b"PA14t-");
+        assert!(!b.complete()); // five characters are no locator
+    }
+
+    /// An entry that is not four or six characters is no locator.
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn short_and_odd_entries_are_refused() {
+        for text in ["", "E", "EM", "EM1", "EM12j"] {
+            let l = loc_from(text);
+            assert!(!l.complete(), "{text}");
+            assert!(l.center().is_none(), "{text}");
+        }
+        for text in ["EM12", "EM12jw"] {
+            assert!(loc_from(text).center().is_some(), "{text}");
+        }
+    }
+
+    /// Every hint fits the 26-character strip.
+    #[cfg(feature = "g_presets")]
+    #[test]
+    fn grid_hints_fit() {
+        for text in ["", "E", "EM", "EM1", "EM12", "EM12j", "EM12jw"] {
+            let l = loc_from(text);
+            for note in [false, true] {
+                assert!(l.hint(note).len() <= 26, "{text}");
+            }
+            let mut p = l;
+            p.press(5);
+            assert!(p.hint(false).len() <= 26);
+        }
+    }
+
+    /// The handoff buffer round-trips, and an old three-byte buffer reads as row 0.
+    #[test]
+    fn handoff_round_trips() {
+        for group in 0..GROUP_SEG.len() {
+            for action in [ACT_GROUPS, ACT_ITEMS, ACT_ABOUT, ACT_GRID] {
+                for row in [0u8, 3, 9, 255] {
+                    assert_eq!(handoff_decode(&handoff_encode(group, action, row), 4), Some((group, action, row)));
+                }
+            }
+        }
+        let old = [HANDOFF_MAGIC, 5, ACT_ITEMS, 77];
+        assert_eq!(handoff_decode(&old, 3), Some((5, ACT_ITEMS, 0)));
+        assert_eq!(handoff_decode(&old, 2), None);
+        assert_eq!(handoff_decode(&[0, 5, 1, 0], 4), None);
+        assert_eq!(handoff_decode(&[HANDOFF_MAGIC, GROUP_SEG.len() as u8, 1, 0], 4), None);
     }
 
     /// Where each preset-able setting lives in the 168-byte record.
