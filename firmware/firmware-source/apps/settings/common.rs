@@ -673,8 +673,8 @@ fn band_lock_label(v: u8) -> &'static str {
         5 => "PMR446",
         6 => "GMRS/FRS",
         7 => "CA HAM",
-        8 => "ALL LOCK",
-        9 => "UNLOCK",
+        8 => "NO TX",
+        9 => "ALL BANDS",
         _ => "CE HAM",
     }
 }
